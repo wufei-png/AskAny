@@ -58,7 +58,6 @@ class PreviousRelevantor:
 
 
 if __name__ == "__main__":
-
     # Get configuration from settings
     api_base = settings.openai_api_base
     api_key = settings.openai_api_key if settings.openai_api_key else None
