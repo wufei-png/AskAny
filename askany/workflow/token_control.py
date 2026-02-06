@@ -61,8 +61,11 @@ def truncate_nodes_by_tokens(
             flat_nodes.append(node)
         else:
             import logging
+
             logger = logging.getLogger(__name__)
-            logger.warning(f"Unexpected node type in truncate_nodes_by_tokens: {type(node)}, skipping")
+            logger.warning(
+                f"Unexpected node type in truncate_nodes_by_tokens: {type(node)}, skipping"
+            )
     nodes = flat_nodes
 
     truncated_nodes = []
@@ -73,10 +76,11 @@ def truncate_nodes_by_tokens(
         # Ensure node is NodeWithScore
         if not isinstance(node, NodeWithScore):
             import logging
+
             logger = logging.getLogger(__name__)
             logger.warning(f"Skipping invalid node type: {type(node)}")
             continue
-            
+
         content = (
             node.node.get_content()
             if hasattr(node.node, "get_content")

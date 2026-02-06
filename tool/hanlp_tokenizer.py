@@ -48,8 +48,7 @@ print(len(lists))
 for list in lists:
     print(list)
     print("-" * 10)
-    
-    
+
 
 lists = HanLP("中美当前的关系下，普通人如何投资美股？")
 print(len(lists))

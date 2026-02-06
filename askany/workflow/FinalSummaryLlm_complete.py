@@ -9,6 +9,7 @@ from llama_index.core.schema import NodeWithScore
 from openai import OpenAI
 from pydantic import BaseModel, Field
 from openai import OpenAI
+
 # Add project root to path to enable imports
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
@@ -49,7 +50,7 @@ def format_final_answer_input(query: str, nodes: List[NodeWithScore]) -> str:
             else node.node.text
         )
         context_parts.append(
-            f"### 参考文件路径: {file_path}\n内容:\n```\n{content[:settings.max_content_length]}...\n```\n---"
+            f"### 参考文件路径: {file_path}\n内容:\n```\n{content[: settings.max_content_length]}...\n```\n---"
         )
 
     full_prompt_content = (
@@ -128,7 +129,6 @@ def generate_final_answer_complete(
             settings.llm_max_tokens,
         )
 
-
     try:
         # 使用普通的 completion 接口，不使用 structured output
         logger.debug(f"Truncated messages: {truncated_messages}")
@@ -140,9 +140,12 @@ def generate_final_answer_complete(
         logger.debug(f"Completion: {completion}")
     except Exception as e:
         import logging
+
         logger = logging.getLogger(__name__)
         error_msg = str(e)
-        if "length limit" in error_msg.lower() or "LengthFinishReasonError" in str(type(e)):
+        if "length limit" in error_msg.lower() or "LengthFinishReasonError" in str(
+            type(e)
+        ):
             logger.error(
                 "LLM response hit token limit. This may indicate the model is generating "
                 "excessively long responses. Error: %s",
@@ -169,17 +172,20 @@ def generate_final_answer_complete(
     # 直接从 message.content 获取响应内容
     response_message = completion.choices[0].message
     summary_answer = response_message.content
-    
+
     # 尝试获取 reasoning 字段（如果存在）
     long_reasoning = getattr(response_message, "reasoning", None)
-    
+
     # 打印调试信息
     import logging
+
     logger = logging.getLogger(__name__)
-    logger.debug(f"Completion response - answer length: {len(summary_answer) if summary_answer else 0}")
+    logger.debug(
+        f"Completion response - answer length: {len(summary_answer) if summary_answer else 0}"
+    )
     if long_reasoning:
         logger.debug(f"Reasoning length: {len(long_reasoning)}")
-    
+
     return (
         summary_answer,
         long_reasoning,

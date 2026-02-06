@@ -13,13 +13,14 @@ from typing import Dict, List, Optional, Set
 # This allows the script to be run directly: python askany/ingest/keyword_extract.py
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from askany.config import settings  # noqa: E402
+
 # Set HanLP home directory to use local cache
 # This helps HanLP find local files without downloading
 # Priority: 1. settings.hanlp_home, 2. HANLP_HOME env var, 3. default ~/.hanlp
 if settings.hanlp_home:
-    os.environ['HANLP_HOME'] = settings.hanlp_home
-elif 'HANLP_HOME' not in os.environ:
-    os.environ['HANLP_HOME'] = str(Path.home() / '.hanlp')
+    os.environ["HANLP_HOME"] = settings.hanlp_home
+elif "HANLP_HOME" not in os.environ:
+    os.environ["HANLP_HOME"] = str(Path.home() / ".hanlp")
 
 import hanlp
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -30,6 +31,7 @@ from tool.keyword_utils import (
     load_keywords_from_txt,
 )
 from cachetools import LRUCache, cachedmethod
+
 logger = logging.getLogger(__name__)
 
 
@@ -120,23 +122,23 @@ class KeywordExtractorFromTFIDF:
                 )
                 self.tok = hanlp.load(hanlp.pretrained.tok.COARSE_ELECTRA_SMALL_ZH)
                 return
-            
+
             logger.info(f"Loading HanLP tokenizer from local path: {model_path}")
-            
+
             # If path is a zip file, extract it first
-            if model_path.suffix == '.zip':
+            if model_path.suffix == ".zip":
                 logger.info(f"HanLP tokenizer path is a zip file: {model_path}")
                 # Extract to a directory next to the zip file
                 extract_dir = model_path.parent / model_path.stem
-                
+
                 # Extract if directory doesn't exist or is empty
                 if not extract_dir.exists() or not any(extract_dir.iterdir()):
                     logger.info(f"Extracting HanLP tokenizer zip to: {extract_dir}")
                     extract_dir.mkdir(parents=True, exist_ok=True)
-                    with zipfile.ZipFile(model_path, 'r') as zip_ref:
+                    with zipfile.ZipFile(model_path, "r") as zip_ref:
                         zip_ref.extractall(extract_dir)
                     logger.info(f"HanLP tokenizer extracted successfully")
-                
+
                 # Find the actual model directory inside extracted files
                 # Usually it's a subdirectory with the same name as the zip (without .zip)
                 model_dir = extract_dir / model_path.stem
@@ -149,8 +151,10 @@ class KeywordExtractorFromTFIDF:
                     else:
                         # Use extract_dir itself if no subdirectory found
                         model_dir = extract_dir
-                
-                logger.info(f"Loading HanLP tokenizer from extracted directory: {model_dir}")
+
+                logger.info(
+                    f"Loading HanLP tokenizer from extracted directory: {model_dir}"
+                )
                 self.tok = hanlp.load(str(model_dir))
             else:
                 # Path is a directory, load directly
@@ -207,7 +211,9 @@ class KeywordExtractorFromTFIDF:
         # Load domain keywords from word_freq.txt for filtering
         self.domain_keywords: Dict[str, int] = {}
         if Path(custom_dict_path).exists():
-            self.domain_keywords = load_keywords_and_frequency_from_txt(custom_dict_path)
+            self.domain_keywords = load_keywords_and_frequency_from_txt(
+                custom_dict_path
+            )
             logger.info(
                 f"Loaded {len(self.domain_keywords)} domain keywords for filtering"
             )
@@ -343,7 +349,7 @@ class KeywordExtractorFromTFIDF:
             logger.error(f"Error persisting model: {e}")
             raise
 
-    def _tokenize_text(self, text: str,filter_stopwords: bool = True) -> List[str]:
+    def _tokenize_text(self, text: str, filter_stopwords: bool = True) -> List[str]:
         """Tokenize a text using HanLP pipeline.
 
         Args:
@@ -365,7 +371,12 @@ class KeywordExtractorFromTFIDF:
                         [
                             token
                             for token in sentence
-                            if token.strip() and (token not in self.stop_words if filter_stopwords else True)
+                            if token.strip()
+                            and (
+                                token not in self.stop_words
+                                if filter_stopwords
+                                else True
+                            )
                         ]
                     )
                 elif isinstance(sentence, str) and sentence.strip():
@@ -480,11 +491,11 @@ class KeywordExtractorFromTFIDF:
             f"TF-IDF model trained on {len(self.documents)} documents, "
             f"{len(self.feature_names)} features"
         )
-        
-    def tokenize_text(self, text: str,filter_stopwords: bool = False) -> List[str]:
+
+    def tokenize_text(self, text: str, filter_stopwords: bool = False) -> List[str]:
         """Tokenize text using HanLP pipeline."""
-        return self._tokenize_text(text,filter_stopwords)
-    
+        return self._tokenize_text(text, filter_stopwords)
+
     @cachedmethod(lambda self: self.cache_list)
     def extract_keywords(
         self,
@@ -602,16 +613,18 @@ class KeywordExtractorFromTFIDF:
 
         # Return top_k keywords
         return keyword_scores[:top_k]
+
     def get_frequency_in_freqfile(self, keyword: str) -> int:
         """Get frequency of a keyword in word_freq.txt.
-        
+
         Args:
             keyword: Keyword to get frequency for.
-        
+
         Returns:
             Frequency of the keyword in word_freq.txt. Returns 0 if keyword not found.
         """
         return self.domain_keywords.get(keyword, 0)
+
 
 if __name__ == "__main__":
     import logging
@@ -690,8 +703,8 @@ if __name__ == "__main__":
         """
 初始选择：你面前有三扇关闭的门 (门 1, 门 2, 门 3)，一扇后面是汽车，另外两扇后面是山羊。你随机选择一扇门（例如门 1），但先不打开。
 主持人操作：主持人知道汽车在哪。他会打开你没选的另外两扇门中（门 2 或门 3）的一扇，且这扇门后一定是山羊。
-关键抉择：主持人问你：“要不要换到剩下那扇未打开的门？”"""
-,"如何重启解析的多模态applet 服务?"
+关键抉择：主持人问你：“要不要换到剩下那扇未打开的门？”""",
+        "如何重启解析的多模态applet 服务?",
     ]
     # tokenize the test_queries
     for query in test_queries:

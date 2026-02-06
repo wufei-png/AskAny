@@ -193,11 +193,15 @@ class SummaryFromLlm:
         try:
             logger.info(f"Summarizing segment: {len(segment)} characters")
             response = self.llm.invoke(messages)
-            logger.info(f"Response received: {len(response.content) if hasattr(response, 'content') else 0} characters")
+            logger.info(
+                f"Response received: {len(response.content) if hasattr(response, 'content') else 0} characters"
+            )
         except Exception as e:
             error_msg = str(e)
             logger.error(f"Error summarizing segment: {error_msg}")
-            if "length limit" in error_msg.lower() or "LengthFinishReasonError" in str(type(e)):
+            if "length limit" in error_msg.lower() or "LengthFinishReasonError" in str(
+                type(e)
+            ):
                 logger.error(
                     "LLM response hit token limit. This may indicate the model is generating "
                     "excessively long responses. Error: %s",
@@ -217,7 +221,9 @@ class SummaryFromLlm:
                 raise
 
         # 直接从 response.content 获取响应内容
-        summary_text = response.content if hasattr(response, "content") else str(response)
+        summary_text = (
+            response.content if hasattr(response, "content") else str(response)
+        )
 
         # 获取 token usage（如果可用）
         token_usage = {}

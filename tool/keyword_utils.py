@@ -152,7 +152,7 @@ def load_keywords_from_txt(txt_file: str) -> Set[str]:
                     keyword = " ".join(parts[:-1])
                 else:
                     keyword = " ".join(parts)
-                
+
                 if keyword:
                     keywords.add(keyword)
 
@@ -163,36 +163,37 @@ def load_keywords_from_txt(txt_file: str) -> Set[str]:
         print(f"❌ Error loading keywords from {txt_file}: {e}")
         return keywords
 
+
 def load_keywords_and_frequency_from_txt(txt_file: str) -> Dict[str, int]:
     """Load keywords and frequencies from a txt file.
-    
+
     Handles multi-word keywords (e.g., "block scanner 2" -> keyword is "block scanner", frequency is 2).
     The frequency is always the last token on the line if it's numeric.
-    
+
     Args:
         txt_file: Path to the txt file containing keywords and frequencies.
-        
+
     Returns:
         Dictionary of keywords and frequencies.
     """
     keywords_and_frequency = {}
     txt_path = Path(txt_file)
-    
+
     if not txt_path.exists():
         print(f"⚠️  File not found: {txt_file}")
         return keywords_and_frequency
-    
+
     try:
         with open(txt_path, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
                     continue
-                
+
                 parts = line.split()
                 if not parts:
                     continue
-                
+
                 # If last part is numeric, it's the frequency; otherwise keyword has no frequency
                 if len(parts) > 1 and parts[-1].isdigit():
                     keyword = " ".join(parts[:-1])
@@ -201,16 +202,18 @@ def load_keywords_and_frequency_from_txt(txt_file: str) -> Dict[str, int]:
                     # No frequency provided, default to 0
                     keyword = " ".join(parts)
                     frequency = 0
-                
+
                 if keyword:
                     if keyword not in keywords_and_frequency:
                         keywords_and_frequency[keyword] = frequency
                     else:
                         keywords_and_frequency[keyword] += frequency
-        
-        print(f"✅ Loaded {len(keywords_and_frequency)} keywords and frequencies from {txt_file}")
+
+        print(
+            f"✅ Loaded {len(keywords_and_frequency)} keywords and frequencies from {txt_file}"
+        )
         return keywords_and_frequency
-    
+
     except Exception as e:
         print(f"❌ Error loading keywords from {txt_file}: {e}")
         return keywords_and_frequency

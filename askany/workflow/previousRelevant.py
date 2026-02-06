@@ -22,7 +22,10 @@ from askany.workflow.token_control import (
 
 class PreviousRelevantResponse(BaseModel):
     """RAG Workflow 最终输出的结构。"""
-    relevant_qa_indexes: List[int] = Field(description="历史qa中相关的qa对话的下标列表,如果没有相关的,返回空列表")
+
+    relevant_qa_indexes: List[int] = Field(
+        description="历史qa中相关的qa对话的下标列表,如果没有相关的,返回空列表"
+    )
 
 
 class PreviousRelevantor:
@@ -60,7 +63,6 @@ class PreviousRelevantor:
         # 这样可以避免 structured output 可能带来的问题（如换行符问题）
 
 
-
 if __name__ == "__main__":
     from llama_index.core.schema import Node, NodeWithScore
 
@@ -74,4 +76,3 @@ if __name__ == "__main__":
 
     # Create generator
     generator = PreviousRelevantor()
-

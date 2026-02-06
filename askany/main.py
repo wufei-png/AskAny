@@ -74,27 +74,28 @@ from askany.rag import create_query_router
 from askany.vllm.vllm import AutoRetryVLLM
 from askany.workflow.workflow_langgraph import AgentWorkflow
 from askany.workflow.workflow_filter import WorkflowFilter
+
 logger = getLogger(__name__)
 
 
 def limit_cpu_cores(num_cores: Optional[int] = None) -> None:
     """Limit CPU cores used by the process.
-    
+
     This function:
     1. Sets process CPU affinity (if supported)
     2. Sets environment variables for underlying libraries (OMP, MKL, etc.)
     3. Sets PyTorch thread count (if available)
-    
+
     Args:
         num_cores: Number of CPU cores to use (None = use all available)
     """
     if num_cores is None:
         num_cores = settings.cpu_cores
-    
+
     if num_cores is None:
         # No limit specified, use all cores
         return
-    
+
     # Get total available cores
     total_cores = multiprocessing.cpu_count()
     if num_cores > total_cores:
@@ -103,17 +104,20 @@ def limit_cpu_cores(num_cores: Optional[int] = None) -> None:
             f"Using {total_cores} cores."
         )
         num_cores = total_cores
-    
+
     if num_cores <= 0:
         logger.warning(f"Invalid num_cores={num_cores}, skipping CPU limit")
         return
-    
-    logger.info(f"Limiting CPU usage to {num_cores} core(s) out of {total_cores} available")
-    
+
+    logger.info(
+        f"Limiting CPU usage to {num_cores} core(s) out of {total_cores} available"
+    )
+
     # 1. Set process CPU affinity (Linux/Unix only)
     try:
         import os
-        if hasattr(os, 'sched_setaffinity'):
+
+        if hasattr(os, "sched_setaffinity"):
             # Get current process ID
             pid = os.getpid()
             # Create CPU set with cores 0 to num_cores-1
@@ -124,7 +128,7 @@ def limit_cpu_cores(num_cores: Optional[int] = None) -> None:
             logger.debug("os.sched_setaffinity not available on this platform")
     except Exception as e:
         logger.warning(f"Failed to set CPU affinity: {e}")
-    
+
     # 2. Set environment variables for underlying libraries
     # These affect libraries like NumPy, SciPy, OpenBLAS, MKL, etc.
     env_vars = {
@@ -135,11 +139,11 @@ def limit_cpu_cores(num_cores: Optional[int] = None) -> None:
         "VECLIB_MAXIMUM_THREADS": str(num_cores),  # macOS Accelerate
         "NUMBA_NUM_THREADS": str(num_cores),  # Numba
     }
-    
+
     for var_name, var_value in env_vars.items():
         os.environ[var_name] = var_value
         logger.debug(f"Set {var_name}={var_value}")
-    
+
     # 3. Set PyTorch thread count (if available)
     if TORCH_AVAILABLE:
         try:
@@ -147,7 +151,7 @@ def limit_cpu_cores(num_cores: Optional[int] = None) -> None:
             logger.info(f"Set PyTorch threads to {num_cores}")
         except Exception as e:
             logger.warning(f"Failed to set PyTorch threads: {e}")
-    
+
     logger.info(f"CPU core limit applied: {num_cores} core(s)")
 
 
@@ -170,11 +174,13 @@ def get_device() -> str:
 class SentenceTransformerEmbedding(BaseEmbedding):
     """Custom embedding class using sentence-transformers for BGE models."""
 
-    def __init__(self, model_name: str, device: str = "cpu", batch_size: int = 512, **kwargs):
+    def __init__(
+        self, model_name: str, device: str = "cpu", batch_size: int = 512, **kwargs
+    ):
         """Initialize SentenceTransformer embedding.
 
         Args:
-            model_name: HuggingFace model name (e.g., "BAAI/bge-large-zh-v1.5") or 
+            model_name: HuggingFace model name (e.g., "BAAI/bge-large-zh-v1.5") or
                        local path to model directory (e.g., "/path/to/bge-m3").
                        If local path is provided, model will be loaded offline.
             device: Device to use ("cpu" or "cuda")
@@ -191,9 +197,12 @@ class SentenceTransformerEmbedding(BaseEmbedding):
         local_files_only = kwargs.get("local_files_only", False)
         # Auto-detect: if model_name is an absolute path, use local_files_only
         import os
+
         if os.path.isabs(model_name) and os.path.exists(model_name):
             local_files_only = True
-        model = SentenceTransformer(model_name, device=device, local_files_only=local_files_only)
+        model = SentenceTransformer(
+            model_name, device=device, local_files_only=local_files_only
+        )
         object.__setattr__(self, "_sentence_transformer_model", model)
         object.__setattr__(self, "_model_name", model_name)
         object.__setattr__(self, "_batch_size", batch_size)
@@ -221,7 +230,10 @@ class SentenceTransformerEmbedding(BaseEmbedding):
         """Get multiple text embeddings with batch processing."""
         batch_size = self._batch_size
         embeddings = self._sentence_transformer_model.encode(
-            texts, normalize_embeddings=True, batch_size=batch_size, show_progress_bar=False
+            texts,
+            normalize_embeddings=True,
+            batch_size=batch_size,
+            show_progress_bar=False,
         )
         return embeddings.tolist()
 
@@ -386,7 +398,7 @@ def main():
         "--create-index",
         action="store_true",
         help="Create HNSW index for vector stores (docs and FAQ). "
-             "Use this after ingesting all documents for optimal performance.",
+        "Use this after ingesting all documents for optimal performance.",
     )
     parser.add_argument(
         "--cpu-cores",
@@ -396,11 +408,11 @@ def main():
     )
 
     args = parser.parse_args()
-    
+
     # Limit CPU cores if configured (should be done early, before loading models)
     # Command line argument takes precedence over config
     limit_cpu_cores(args.cpu_cores if args.cpu_cores is not None else None)
-    
+
     device = get_device()
     print(f"Using device: {device}")
     # Initialize LLM and embedding models once
@@ -413,38 +425,38 @@ def main():
 
     elif args.ingest:
         ingest_documents(embed_model, llm=llm)
-    
+
     elif args.create_index:
         # Create HNSW indexes for vector stores
         print("Creating HNSW indexes for vector stores...")
         vector_store_manager = VectorStoreManager(embed_model, llm=llm)
-        
+
         # Initialize indexes first
         try:
             vector_store_manager.initialize_faq_index()
             print("FAQ vector store initialized")
         except Exception as e:
             logger.warning(f"Could not initialize FAQ vector store: {e}")
-        
+
         try:
             vector_store_manager.initialize_docs_index()
             print("Docs vector store initialized")
         except Exception as e:
             logger.warning(f"Could not initialize docs vector store: {e}")
-        
+
         # Create indexes
         try:
             vector_store_manager.create_faq_hnsw_index()
             print("FAQ HNSW index created successfully")
         except Exception as e:
             logger.error(f"Failed to create FAQ HNSW index: {e}")
-        
+
         try:
             vector_store_manager.create_docs_hnsw_index()
             print("Docs HNSW index created successfully")
         except Exception as e:
             logger.error(f"Failed to create docs HNSW index: {e}")
-        
+
         print("Index creation completed!")
 
     elif args.query:
@@ -489,7 +501,7 @@ def main():
             get_global_keyword_extractor,
             set_global_keyword_extractor,
         )
-        
+
         # Initialize keyword extractor (shared)
         global_extractor = get_global_keyword_extractor()
         if global_extractor is None:
@@ -499,7 +511,7 @@ def main():
             set_global_keyword_extractor(keyword_extractor)
         else:
             keyword_extractor = global_extractor
-        
+
         # Initialize shared web search tool
         try:
             shared_web_search_tool = WebSearchTool()
@@ -507,12 +519,14 @@ def main():
         except ImportError:
             logger.warning("WebSearchTool not available, web search will be disabled")
             shared_web_search_tool = None
-        
+
         # Initialize shared local file search tool
-        base_path = settings.local_file_search_dir if settings.local_file_search_dir else None
+        base_path = (
+            settings.local_file_search_dir if settings.local_file_search_dir else None
+        )
         shared_local_file_search = LocalFileSearchTool(
             base_path=base_path,
-            keyword_extractor=keyword_extractor.GetKeywordExtractorFromTFIDF()
+            keyword_extractor=keyword_extractor.GetKeywordExtractorFromTFIDF(),
         )
         print("Shared LocalFileSearchTool initialized")
 
@@ -534,9 +548,10 @@ def main():
             reranker=agent_workflow.reranker,
         )
         print("AgentWorkflow (deep search) initialized")
-        
+
         # Create simple agent (min_langchain_agent) with shared tools
         from askany.workflow.min_langchain_agent import create_agent_with_tools
+
         simple_agent = create_agent_with_tools(
             router=router,
             web_search_tool=shared_web_search_tool,
@@ -545,7 +560,7 @@ def main():
             keyword_extractor=keyword_extractor,
         )
         print("Simple agent initialized")
-        
+
         # Start server with vector_store_manager for hot updates
         print(f"Starting API server on {settings.api_host}:{settings.api_port}")
         print(
@@ -555,7 +570,9 @@ def main():
             f"FAQ hot update endpoint: http://{settings.api_host}:{settings.api_port}/v1/update_faqs"
         )
         print("Model selection:")
-        print("  - Models with '-deepsearch' suffix: Use AgentWorkflow (complex workflow)")
+        print(
+            "  - Models with '-deepsearch' suffix: Use AgentWorkflow (complex workflow)"
+        )
         print("  - Other models: Use simple agent (fast workflow)")
         run_server(
             router,

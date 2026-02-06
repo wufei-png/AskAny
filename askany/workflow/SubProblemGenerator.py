@@ -8,6 +8,7 @@ from typing import List, Optional
 from openai import OpenAI
 from pydantic import BaseModel, Field
 import textwrap as tw
+
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
@@ -100,6 +101,7 @@ class SubProblemGenerator:
         print(f"SubProblemGenerator Response content: {response_content}")
         return response_content.parsed
 
+
 ## 这里的不要删除问题细节需要严格测试一下，确保不会删除问题中的细节。
 
 if __name__ == "__main__":
@@ -143,4 +145,3 @@ if __name__ == "__main__":
     print(f"Parallel groups: {result2.parallel_groups}")
     # print(f"Reasoning: {result2.reasoning}")
     print("-" * 80)
-    

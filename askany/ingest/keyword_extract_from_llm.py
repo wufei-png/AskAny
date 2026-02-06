@@ -8,16 +8,20 @@ from typing import List, Optional
 from openai import OpenAI
 from pydantic import BaseModel, Field
 import textwrap as tw
+
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from askany.config import settings  # noqa: E402
 import logging
+
 logger = logging.getLogger(__name__)
 from cachetools import LRUCache, cachedmethod
+
+
 class KeywordExtractionResult(BaseModel):
     """关键词提取结果结构"""
-    
+
     keywords: List[str] = Field(
         description="提取的关键词列表, 数量不超过指定的最大关键词数量。"
     )
@@ -66,7 +70,7 @@ class KeywordExtractorFromLLM:
         self.max_keywords = max_keywords
         self.min_question_length = 3
         self.cache = LRUCache(maxsize=1024)
-        
+
     @cachedmethod(lambda self: self.cache)
     def extract_keywords(self, question: str) -> List[str]:
         """从问题中提取关键词
@@ -85,7 +89,7 @@ class KeywordExtractorFromLLM:
         # 注意：虽然中文字符在显示宽度上通常占 2 个字符宽度（全角），但在 Python 字符串长度计算中仍为 1
         if len(question) < self.min_question_length:
             return [question]
-        
+
         # Format system prompt with template instructions (without question)
         system_prompt = self._format_system_prompt()
         # Format user message with question prefix
@@ -166,7 +170,7 @@ class KeywordExtractorFromLLM:
         """
         return f"问题：{question}"
 
-    def filter_keywords(self, keywords: List[str],query: str) -> List[str]:
+    def filter_keywords(self, keywords: List[str], query: str) -> List[str]:
         """过滤关键词，去掉太常见的词语，只保留比较长的关键词或者特定领域的词
 
         Args:
@@ -182,7 +186,7 @@ class KeywordExtractorFromLLM:
         system_prompt = self._format_filter_system_prompt()
         # print(f"System prompt: {system_prompt}")
         # Format user message with keywords
-        user_content = self._format_filter_user_message(keywords,query)
+        user_content = self._format_filter_user_message(keywords, query)
         # print(f"User content: {user_content}")
         # Call LLM with structured output
         completion = self.client.chat.completions.parse(
@@ -206,9 +210,7 @@ class KeywordExtractorFromLLM:
         # Parse response
         response_content = completion.choices[0].message
         if not response_content.parsed:
-            logger.error(
-                "Failed to parse keyword filter result from LLM response"
-            )
+            logger.error("Failed to parse keyword filter result from LLM response")
             return keywords
 
         return response_content.parsed.filtered_keywords
@@ -219,44 +221,44 @@ class KeywordExtractorFromLLM:
         Returns:
             格式化后的系统提示词字符串
         """
-        #TODO 关键词小库优化
-#         return tw.dedent(f"""\
-# 你是关键词过滤助手。
+        # TODO 关键词小库优化
+        #         return tw.dedent(f"""\
+        # 你是关键词过滤助手。
 
-# 你的任务是：  
-# 从用户问题提取出的关键词列表里，过滤掉对知识检索定位价值低的词，仅保留具备明确检索区分度的关键词。
+        # 你的任务是：
+        # 从用户问题提取出的关键词列表里，过滤掉对知识检索定位价值低的词，仅保留具备明确检索区分度的关键词。
 
-# 【过滤原则】  
-# - 保留词：  
-#     - 产品名、系统名、组件名、架构名、专有技术名词
-#     - 如果关键词是明确的技术 / 产品 / 组件 / 工具名词（如数据库、中间件、基础设施、平台），
-#     且与同一问题中的其他关键词存在直接技术或业务关系（如配置、部署、依赖、使用），
-#     一律保留，不得因为“常见”或“不在知识库”而过滤。
-# - 过滤词：  
-#     - 语义泛化、缺乏检索区分度的抽象词（如“操作”“方法”“方案”“问题”“使用”等）  
-#     - “常见词”仅指抽象泛指词，不包括具体的技术或基础设施名词。
+        # 【过滤原则】
+        # - 保留词：
+        #     - 产品名、系统名、组件名、架构名、专有技术名词
+        #     - 如果关键词是明确的技术 / 产品 / 组件 / 工具名词（如数据库、中间件、基础设施、平台），
+        #     且与同一问题中的其他关键词存在直接技术或业务关系（如配置、部署、依赖、使用），
+        #     一律保留，不得因为“常见”或“不在知识库”而过滤。
+        # - 过滤词：
+        #     - 语义泛化、缺乏检索区分度的抽象词（如“操作”“方法”“方案”“问题”“使用”等）
+        #     - “常见词”仅指抽象泛指词，不包括具体的技术或基础设施名词。
 
-# 【上下文关联规则】  
-# - 如果某个词本身较常见，但与其他关键词存在明确上下文或业务关联，
-#   且可能在同一技术文档中共同出现，则不要过滤。
+        # 【上下文关联规则】
+        # - 如果某个词本身较常见，但与其他关键词存在明确上下文或业务关联，
+        #   且可能在同一技术文档中共同出现，则不要过滤。
 
-# 示例说明  
+        # 示例说明
 
-# 示例 1：  
-# 问题：console 不显示验证码  
-# 原始关键词：["console", "验证码"]  
-# 说明：  
-# - console 是系统关键名词，必须保留；  
-# - 验证码是常见词，但与 console 存在直接功能关联，可能在同一文档中出现，因此不应过滤。  
+        # 示例 1：
+        # 问题：console 不显示验证码
+        # 原始关键词：["console", "验证码"]
+        # 说明：
+        # - console 是系统关键名词，必须保留；
+        # - 验证码是常见词，但与 console 存在直接功能关联，可能在同一文档中出现，因此不应过滤。
 
-# 示例 2：  
-# 问题：如何选择时空库架构？如一主一从，实际怎么操作？  
-# 原始关键词：["时空库", "一主一从", "架构", "操作"]  
-# 说明：  
-# - 时空库、一主一从 是核心业务与架构关键词，必须保留；  
-# - 架构 虽然较常见，但与 时空库 强相关，不过滤；  
-# - 操作 语义过于宽泛，与大量场景相关，应过滤掉。 
-# """)
+        # 示例 2：
+        # 问题：如何选择时空库架构？如一主一从，实际怎么操作？
+        # 原始关键词：["时空库", "一主一从", "架构", "操作"]
+        # 说明：
+        # - 时空库、一主一从 是核心业务与架构关键词，必须保留；
+        # - 架构 虽然较常见，但与 时空库 强相关，不过滤；
+        # - 操作 语义过于宽泛，与大量场景相关，应过滤掉。
+        # """)
 
         return tw.dedent(f"""\
 你是关键词过滤助手。
@@ -299,7 +301,7 @@ class KeywordExtractorFromLLM:
 - 操作 语义过于宽泛，与大量场景相关，应过滤掉。 
 """)
 
-    def _format_filter_user_message(self, keywords: List[str],query: str) -> str:
+    def _format_filter_user_message(self, keywords: List[str], query: str) -> str:
         """格式化过滤用户消息
 
         Args:

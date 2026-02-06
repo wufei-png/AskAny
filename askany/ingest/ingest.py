@@ -113,7 +113,7 @@ def ingest_documents(embed_model, llm=None):
         cache_dir = Path(settings.storage_dir) / "docs_cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
         cache_file = cache_dir / f"docs_nodes_{cache_hash}.pkl"
-        
+
         # Try to load from cache
         if cache_file.exists():
             try:
@@ -132,7 +132,7 @@ def ingest_documents(embed_model, llm=None):
                 docs_docs = None
         else:
             docs_docs = None
-        
+
         # Parse if cache doesn't exist or loading failed
         if docs_docs is None:
             markdown_parser = MarkdownParser(
@@ -141,7 +141,7 @@ def ingest_documents(embed_model, llm=None):
             markdown_nodes = markdown_parser.parse_directory(markdown_dir)
             print(f"Parsed {len(markdown_nodes)} Markdown nodes")
             docs_docs = markdown_nodes
-            
+
             # Save to cache
             try:
                 print(f"Saving docs nodes to cache: {cache_file}...")
@@ -155,7 +155,7 @@ def ingest_documents(embed_model, llm=None):
                 logger.warning(
                     f"[ingest_documents] Failed to save cache to {cache_file}: {e}"
                 )
-    
+
     # Initialize and add docs documents to separate docs vector store
     if docs_docs:
         print("Initializing docs vector store...")
@@ -169,7 +169,9 @@ def ingest_documents(embed_model, llm=None):
             # Use llm from Settings if available, otherwise use the passed llm
             keyword_llm = llm if llm else Settings.llm
             if keyword_llm:
-                vector_store_manager.create_docs_keyword_index(docs_docs, llm=keyword_llm)
+                vector_store_manager.create_docs_keyword_index(
+                    docs_docs, llm=keyword_llm
+                )
                 print(f"Created docs keyword index with {len(docs_docs)} nodes")
             else:
                 print(
@@ -177,7 +179,9 @@ def ingest_documents(embed_model, llm=None):
                     "Keyword index requires LLM for keyword extraction."
                 )
         else:
-            print("Skipping docs keyword index creation (using_docs_keyword_index=False)")
+            print(
+                "Skipping docs keyword index creation (using_docs_keyword_index=False)"
+            )
 
     print("Document ingestion completed!")
     return vector_store_manager

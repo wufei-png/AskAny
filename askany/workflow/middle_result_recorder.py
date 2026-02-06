@@ -4,6 +4,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from askany.config import settings
 
+
 class NodeType(str, Enum):
     """Node type enumeration for workflow nodes."""
 
@@ -251,8 +252,12 @@ class MiddleResultRecorder:
             missing_info_keywords = data.get("missing_info_keywords", [])
             sub_queries = data.get("sub_queries", [])
             hypothetical_answer = data.get("hypothetical_answer", "")
-            keywords_str = ", ".join(missing_info_keywords) if missing_info_keywords else "[]"
-            sub_queries_str = "\n".join(f"  - {q}" for q in sub_queries) if sub_queries else "  []"
+            keywords_str = (
+                ", ".join(missing_info_keywords) if missing_info_keywords else "[]"
+            )
+            sub_queries_str = (
+                "\n".join(f"  - {q}" for q in sub_queries) if sub_queries else "  []"
+            )
             return (
                 f"missing_info_keywords: [{keywords_str}]\n"
                 f"sub_queries:\n{sub_queries_str}\n"
@@ -276,5 +281,5 @@ class MiddleResultRecorder:
         else:
             # Fallback: format as JSON-like string
             import json
-            return json.dumps(data, ensure_ascii=False, indent=2)
 
+            return json.dumps(data, ensure_ascii=False, indent=2)

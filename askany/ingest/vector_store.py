@@ -33,7 +33,7 @@ logger = getLogger(__name__)
 
 def _get_keyword_index_class():
     """Get the appropriate KeywordTableIndex class based on configuration.
-    
+
     Returns:
         CustomKeywordTableIndex if using_custom_keyword_index is True,
         otherwise KeywordTableIndex
@@ -61,7 +61,7 @@ def _wrap_loaded_keyword_index(
     # Only wrap if custom keyword index is enabled
     if not settings.using_custom_keyword_index:
         return loaded_index
-    
+
     # Get global keyword extractor if available
     keyword_extractor = get_global_keyword_extractor()
 
@@ -147,7 +147,9 @@ class VectorStoreManager:
             database=settings.postgres_db,
         )
 
-    def _wait_for_db_connection(self, max_retries: int = 5, retry_delay: float = 2.0) -> bool:
+    def _wait_for_db_connection(
+        self, max_retries: int = 5, retry_delay: float = 2.0
+    ) -> bool:
         """Wait for database connection to be available.
 
         Args:
@@ -171,7 +173,9 @@ class VectorStoreManager:
                     )
                     time.sleep(retry_delay)
                 else:
-                    logger.error(f"Database connection failed after {max_retries} attempts: {e}")
+                    logger.error(
+                        f"Database connection failed after {max_retries} attempts: {e}"
+                    )
                     return False
         return False
 
@@ -220,7 +224,9 @@ class VectorStoreManager:
             index_exists = cursor.fetchone()[0]
 
             if index_exists:
-                logger.info(f"Dropping HNSW index '{index_name}' for table '{table_name}'...")
+                logger.info(
+                    f"Dropping HNSW index '{index_name}' for table '{table_name}'..."
+                )
                 cursor.execute(f'DROP INDEX IF EXISTS "{index_name}"')
                 conn.commit()
                 logger.info(f"Successfully dropped HNSW index '{index_name}'")
@@ -285,7 +291,9 @@ class VectorStoreManager:
             index_exists = cursor.fetchone()[0]
 
             if index_exists:
-                logger.info(f"HNSW index '{index_name}' already exists, skipping creation")
+                logger.info(
+                    f"HNSW index '{index_name}' already exists, skipping creation"
+                )
                 cursor.close()
                 return
 
@@ -304,8 +312,8 @@ class VectorStoreManager:
                 ON "{table_name}" 
                 USING hnsw (embedding {opclass})
                 WITH (
-                    m = {hnsw_kwargs.get('hnsw_m', 16)},
-                    ef_construction = {hnsw_kwargs.get('hnsw_ef_construction', 64)}
+                    m = {hnsw_kwargs.get("hnsw_m", 16)},
+                    ef_construction = {hnsw_kwargs.get("hnsw_ef_construction", 64)}
                 )
             """
 
@@ -419,7 +427,9 @@ class VectorStoreManager:
         # This will trigger _initialize() when data is inserted
         # Set insert_batch_size for optimal embedding batch processing
         # Use a reasonable default since FAQ batches are typically smaller
-        insert_batch_size = getattr(settings, "faq_insert_batch_size", settings.docs_insert_batch_size)
+        insert_batch_size = getattr(
+            settings, "faq_insert_batch_size", settings.docs_insert_batch_size
+        )
         self.faq_index = VectorStoreIndex.from_vector_store(
             vector_store=self.faq_vector_store,
             embed_model=self.embedding_model,
@@ -439,7 +449,8 @@ class VectorStoreManager:
             try:
                 self.faq_vector_store._initialize()
                 logger.info(
-                    "FAQ vector store initialized, table '%s' should be created", table_name
+                    "FAQ vector store initialized, table '%s' should be created",
+                    table_name,
                 )
             except Exception as e:
                 logger.warning(
@@ -783,7 +794,9 @@ class VectorStoreManager:
             # Recreate HNSW index only if auto_create_index=True
             # By default, skip index creation to allow user to create it manually after all data is inserted
             if auto_create_index and settings.enable_hnsw:
-                logger.info("Auto-creating HNSW index after insertion (auto_create_index=True)...")
+                logger.info(
+                    "Auto-creating HNSW index after insertion (auto_create_index=True)..."
+                )
                 # self._create_hnsw_index(self.docs_vector_store)
                 logger.info("HNSW index created successfully")
             elif settings.enable_hnsw:
@@ -799,7 +812,7 @@ class VectorStoreManager:
                     f"Insertion failed, attempting to recreate HNSW index before re-raising error: {e}"
                 )
                 # try:
-                    # self._create_hnsw_index(self.docs_vector_store)
+                # self._create_hnsw_index(self.docs_vector_store)
                 # except Exception as recreate_error:
                 #     logger.error(
                 #         f"Failed to recreate HNSW index after insertion failure: {recreate_error}"
@@ -808,11 +821,11 @@ class VectorStoreManager:
 
     def create_docs_hnsw_index(self) -> None:
         """Manually create HNSW index for docs vector store.
-        
+
         This method should be called after all data has been inserted to create
         the HNSW index for optimal query performance. Creating the index after
         all data is inserted is much faster than creating it incrementally during insertion.
-        
+
         Raises:
             ValueError: If docs vector store is not initialized
         """
@@ -820,22 +833,22 @@ class VectorStoreManager:
             raise ValueError(
                 "Docs vector store not initialized. Call initialize_docs_index() first."
             )
-        
+
         if not settings.enable_hnsw:
             logger.warning("HNSW is disabled in settings, skipping index creation")
             return
-        
+
         logger.info("Creating HNSW index for docs vector store...")
         self._create_hnsw_index(self.docs_vector_store)
         logger.info("HNSW index for docs vector store created successfully")
 
     def create_faq_hnsw_index(self) -> None:
         """Manually create HNSW index for FAQ vector store.
-        
+
         This method should be called after all data has been inserted to create
         the HNSW index for optimal query performance. Creating the index after
         all data is inserted is much faster than creating it incrementally during insertion.
-        
+
         Raises:
             ValueError: If FAQ vector store is not initialized
         """
@@ -843,11 +856,11 @@ class VectorStoreManager:
             raise ValueError(
                 "FAQ vector store not initialized. Call initialize_faq_index() first."
             )
-        
+
         if not settings.enable_hnsw:
             logger.warning("HNSW is disabled in settings, skipping index creation")
             return
-        
+
         logger.info("Creating HNSW index for FAQ vector store...")
         self._create_hnsw_index(self.faq_vector_store)
         logger.info("HNSW index for FAQ vector store created successfully")
@@ -900,9 +913,13 @@ class VectorStoreManager:
             )
             if not isinstance(existing_keyword_index, KeywordTableIndex):
                 existing_keyword_index = None
-            elif settings.using_custom_keyword_index and not isinstance(existing_keyword_index, CustomKeywordTableIndex):
+            elif settings.using_custom_keyword_index and not isinstance(
+                existing_keyword_index, CustomKeywordTableIndex
+            ):
                 # Wrap as CustomKeywordTableIndex if enabled
-                existing_keyword_index = _wrap_loaded_keyword_index(existing_keyword_index)
+                existing_keyword_index = _wrap_loaded_keyword_index(
+                    existing_keyword_index
+                )
         except (ValueError, KeyError, FileNotFoundError):
             # Index doesn't exist yet, which is fine
             pass
@@ -1041,9 +1058,13 @@ class VectorStoreManager:
             )
             if not isinstance(existing_keyword_index, KeywordTableIndex):
                 existing_keyword_index = None
-            elif settings.using_custom_keyword_index and not isinstance(existing_keyword_index, CustomKeywordTableIndex):
+            elif settings.using_custom_keyword_index and not isinstance(
+                existing_keyword_index, CustomKeywordTableIndex
+            ):
                 # Wrap as CustomKeywordTableIndex if enabled
-                existing_keyword_index = _wrap_loaded_keyword_index(existing_keyword_index)
+                existing_keyword_index = _wrap_loaded_keyword_index(
+                    existing_keyword_index
+                )
         except (ValueError, KeyError, FileNotFoundError):
             # Index doesn't exist yet, which is fine
             pass
@@ -1243,7 +1264,9 @@ class VectorStoreManager:
                 return None
 
             # Wrap as CustomKeywordTableIndex if enabled and not already wrapped
-            if settings.using_custom_keyword_index and not isinstance(keyword_index, CustomKeywordTableIndex):
+            if settings.using_custom_keyword_index and not isinstance(
+                keyword_index, CustomKeywordTableIndex
+            ):
                 keyword_index = _wrap_loaded_keyword_index(keyword_index)
 
             self.docs_keyword_index = keyword_index
@@ -1350,7 +1373,9 @@ class VectorStoreManager:
                 return None
 
             # Wrap as CustomKeywordTableIndex if enabled and not already wrapped
-            if settings.using_custom_keyword_index and not isinstance(keyword_index, CustomKeywordTableIndex):
+            if settings.using_custom_keyword_index and not isinstance(
+                keyword_index, CustomKeywordTableIndex
+            ):
                 keyword_index = _wrap_loaded_keyword_index(keyword_index)
 
             self.faq_keyword_index = keyword_index

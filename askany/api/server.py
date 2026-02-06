@@ -147,7 +147,14 @@ def create_app(
     Returns:
         FastAPI application instance
     """
-    global router, vector_store_manager, llm, embed_model, agent_workflow_global, workflow_filter_global, simple_agent_global
+    global \
+        router, \
+        vector_store_manager, \
+        llm, \
+        embed_model, \
+        agent_workflow_global, \
+        workflow_filter_global, \
+        simple_agent_global
     router = query_router
     vector_store_manager = vstore_manager
     llm = _llm
@@ -179,7 +186,7 @@ def create_app(
         health_status = {
             "status": "ok",
             "workflow": "unknown",
-            "simple_agent": "unknown"
+            "simple_agent": "unknown",
         }
 
         # Check AgentWorkflow availability (for deep search)
@@ -219,13 +226,15 @@ def create_app(
     @app.get("/v1/models")
     async def list_models():
         """List available models by forwarding to the configured OpenAI API base.
-        
+
         Additionally, creates -deepsearch variants for each model to enable
         deep search workflow selection. On upstream error or missing config,
         returns the configured openai_model (and its -deepsearch variant).
         """
         if not settings.openai_api_base:
-            logger.warning("OpenAI API base not configured, returning configured openai_model")
+            logger.warning(
+                "OpenAI API base not configured, returning configured openai_model"
+            )
             return _fallback_models_response()
 
         target_url = f"{settings.openai_api_base}/models"
@@ -237,7 +246,9 @@ def create_app(
                 models_data = response.json()
                 original_models = models_data.get("data") or []
                 if not original_models:
-                    logger.warning("Upstream /models returned no data, using openai_model fallback")
+                    logger.warning(
+                        "Upstream /models returned no data, using openai_model fallback"
+                    )
                     return _fallback_models_response()
 
                 # Add -deepsearch variants for each model
@@ -252,7 +263,9 @@ def create_app(
                 models_data["data"] = original_models + deepsearch_models
                 return JSONResponse(content=models_data)
         except httpx.HTTPError as e:
-            logger.warning(f"Upstream /models failed ({target_url}): {e}, using openai_model fallback")
+            logger.warning(
+                f"Upstream /models failed ({target_url}): {e}, using openai_model fallback"
+            )
             return _fallback_models_response()
 
     @app.get("/openapi.json")
@@ -328,14 +341,18 @@ def create_app(
     @app.post("/v1/chat/completions")
     async def chat_completions(request: ChatCompletionRequest):
         """Chat completions endpoint (OpenAI-compatible).
-        
+
         Selects workflow based on model name suffix:
         - Models ending with '-deepsearch' use AgentWorkflow (complex workflow)
         - Other models use simple_agent (min_langchain_agent)
         """
         # Determine which workflow to use based on model name suffix
         use_deepsearch = request.model.endswith("-deepsearch")
-        actual_model = request.model.replace("-deepsearch", "") if use_deepsearch else request.model
+        actual_model = (
+            request.model.replace("-deepsearch", "")
+            if use_deepsearch
+            else request.model
+        )
         # request.model = actual_model
         # Extract user message
         user_messages = [msg for msg in request.messages if msg.role == "user"]
@@ -343,12 +360,19 @@ def create_app(
             raise HTTPException(status_code=400, detail="No user message found")
 
         user_query = user_messages[-1].content
-        logger.info("Chat request model=%s (use_deepsearch=%s) query=%s", request.model, use_deepsearch, user_query)
+        logger.info(
+            "Chat request model=%s (use_deepsearch=%s) query=%s",
+            request.model,
+            use_deepsearch,
+            user_query,
+        )
 
-        if use_deepsearch and len(user_messages) == 1: #二次问答直接给simple agent
+        if use_deepsearch and len(user_messages) == 1:  # 二次问答直接给simple agent
             # Use complex workflow (AgentWorkflow)
             if agent_workflow_global is None:
-                raise HTTPException(status_code=500, detail="AgentWorkflow not initialized")
+                raise HTTPException(
+                    status_code=500, detail="AgentWorkflow not initialized"
+                )
 
             # Get query type from system message or default to AUTO
             query_type = QueryType.AUTO
@@ -371,7 +395,10 @@ def create_app(
             # - Multiple related questions: serial processing with context accumulation
             try:
                 response_text = await process_query_with_subproblems(
-                    agent_workflow_global, workflow_filter_global, user_query, query_type
+                    agent_workflow_global,
+                    workflow_filter_global,
+                    user_query,
+                    query_type,
                 )
             except Exception as e:
                 # Handle workflow errors gracefully
@@ -385,15 +412,26 @@ def create_app(
         else:
             # Use simple agent (min_langchain_agent)
             if simple_agent_global is None:
-                raise HTTPException(status_code=500, detail="Simple agent not initialized")
-            
+                raise HTTPException(
+                    status_code=500, detail="Simple agent not initialized"
+                )
+
             try:
                 # Convert messages to format expected by simple agent
                 # Simple agent expects messages in format: [{"role": "user", "content": "..."}]
-                messages_input = {"messages": [{"role": msg.role, "content": msg.content} for msg in request.messages]}
-                
+                messages_input = {
+                    "messages": [
+                        {"role": msg.role, "content": msg.content}
+                        for msg in request.messages
+                    ]
+                }
+
                 # Invoke simple agent
-                from askany.workflow.min_langchain_agent import invoke_with_retry, extract_and_format_response
+                from askany.workflow.min_langchain_agent import (
+                    invoke_with_retry,
+                    extract_and_format_response,
+                )
+
                 result = invoke_with_retry(simple_agent_global, messages_input)
                 response_text = extract_and_format_response(result)
 
@@ -401,7 +439,8 @@ def create_app(
                 error_msg = str(e)
                 logger.error(f"Simple agent error: {error_msg}", exc_info=True)
                 raise HTTPException(
-                    status_code=500, detail=f"Simple agent execution failed: {error_msg}"
+                    status_code=500,
+                    detail=f"Simple agent execution failed: {error_msg}",
                 )
         logger.info(
             "Chat response model=%s characters=%d\n%s",
@@ -544,6 +583,7 @@ async def process_query_with_subproblems(
         处理结果字符串
     """
     import asyncio
+
     # TODO 二轮问答这里跳过filter处理.
     filter_result = workflow_filter.process(user_query)
     if filter_result.have_result:
@@ -553,7 +593,9 @@ async def process_query_with_subproblems(
     # 如果 WorkflowFilter 返回 have_result=False，继续执行子问题提取
     logger.debug("工作流过滤器未生成答案，进行子问题提取")
     try:
-        sub_problem_structure = agent_workflow.sub_problem_generator.generate(user_query)
+        sub_problem_structure = agent_workflow.sub_problem_generator.generate(
+            user_query
+        )
         logger.debug(
             "子问题分解完成 - 并行组数: %d",
             len(sub_problem_structure.parallel_groups),
@@ -616,7 +658,6 @@ async def process_query_with_subproblems(
         result = await agent_workflow.graph.ainvoke(initial_state)
         return result.get("result", "抱歉，无法生成答案。")
 
-
     # 处理所有并行组
     if len(sub_problem_structure.parallel_groups) == 1:
         # 只有一个并行组，直接处理（可能是单个问题或多个相关问题）
@@ -678,10 +719,16 @@ def run_server(
         agent_workflow: AgentWorkflow instance for running workflows (deep search)
         workflow_filter: WorkflowFilter instance for filtering queries
         simple_agent: Simple agent instance (min_langchain_agent) for fast queries
-        """
+    """
     global app
     app = create_app(
-        query_router, vector_store_manager, llm, embed_model, agent_workflow, workflow_filter, simple_agent
+        query_router,
+        vector_store_manager,
+        llm,
+        embed_model,
+        agent_workflow,
+        workflow_filter,
+        simple_agent,
     )
 
     uvicorn.run(

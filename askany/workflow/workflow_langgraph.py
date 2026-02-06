@@ -33,7 +33,7 @@ from askany.workflow.AnalysisRelated_langchain import (
 #     extract_docs_references,
 #     format_docs_references,
 #     generate_final_answer,
-    
+
 # )
 from askany.workflow.FinalSummaryLlm_langchain import (
     FinalAnswerGenerator,
@@ -53,6 +53,7 @@ from askany.workflow.middle_result_recorder import (
     MiddleResultRecorder,
     NodeType,
 )
+
 logger = getLogger(__name__)
 
 debug = True  # Whether to enable debug mode / 是否开启调试模式
@@ -62,7 +63,9 @@ output_file = "workflow_langgraph.log"
 debug_logger = None
 if debug:
     debug_logger = getLogger("workflow_debug")
-    debug_logger.setLevel(1)  # Set to lowest level to ensure all messages are logged / 设置为最低级别以确保所有消息都被记录
+    debug_logger.setLevel(
+        1
+    )  # Set to lowest level to ensure all messages are logged / 设置为最低级别以确保所有消息都被记录
     # Remove all existing handlers / 移除所有现有的处理器
     debug_logger.handlers = []
     # Create file handler with real-time flush / 创建文件处理器，实时刷新
@@ -74,7 +77,10 @@ if debug:
     )
     file_handler.setFormatter(formatter)
     debug_logger.addHandler(file_handler)
-    debug_logger.propagate = False  # Prevent propagation to root logger / 防止传播到根日志记录器
+    debug_logger.propagate = (
+        False  # Prevent propagation to root logger / 防止传播到根日志记录器
+    )
+
 
 async def process_parallel_group(
     agent_workflow: "AgentWorkflow",
@@ -123,7 +129,7 @@ async def process_parallel_group(
         # 多个相关问题，串行处理，将上一个问题的答案放到outer_previous_qa_context中
         logger.debug("并行组包含 %d 个相关问题，串行处理", len(parallel_group))
         outer_previous_qa_context: List[Dict[str, str]] = []
-        
+
         for idx, sub_query in enumerate(parallel_group):
             logger.debug(
                 "处理子问题 %d/%d - 子问题: %s",
@@ -180,16 +186,16 @@ async def process_parallel_group(
                     query_type,
                     exc_info=True,
                 )
-                sub_answer = (
-                    f"抱歉，处理子问题时发生错误: {error_type}: {error_msg}"
-                )
+                sub_answer = f"抱歉，处理子问题时发生错误: {error_type}: {error_msg}"
 
             # Update context, accumulate all sub-questions' Q&A
             # 更新上下文，累积所有子问题的Q&A
-            outer_previous_qa_context.append({
-                "query": sub_query,
-                "answer": sub_answer,
-            })
+            outer_previous_qa_context.append(
+                {
+                    "query": sub_query,
+                    "answer": sub_answer,
+                }
+            )
 
         # Format return result / 格式化返回结果
         result_parts = []
@@ -233,7 +239,9 @@ def _format_state_for_debug(state: "AgentState") -> str:
                                 )
                             ),
                         }
-                        for node in value[:3]  # Only show first 3 nodes / 只显示前3个节点
+                        for node in value[
+                            :3
+                        ]  # Only show first 3 nodes / 只显示前3个节点
                     ]
                     if value
                     else []
@@ -335,18 +343,24 @@ class AgentState(TypedDict):
     # Sub-problem handling
     no_relevant_result: Optional[NoRelevantResult]
     current_sub_query: Optional[str]
-    inner_previous_qa_context: List[Dict[str, str]]  # List of {"query": str, "answer": str}
-    outer_previous_qa_context: List[Dict[str, str]]  # List of {"query": str, "answer": str}
+    inner_previous_qa_context: List[
+        Dict[str, str]
+    ]  # List of {"query": str, "answer": str}
+    outer_previous_qa_context: List[
+        Dict[str, str]
+    ]  # List of {"query": str, "answer": str}
     is_inner_sub_query_workflow: bool
     is_outer_sub_query_workflow: bool
 
     # Final output
     result: Optional[str]
-    
+
     # Middle results for visualization
     middle_results: List[Dict[str, Any]]  # List of middle result dictionaries
 
     no_complete_answer: bool = False  # Whether to return no complete answer
+
+
 class AgentWorkflow:
     """Agent workflow using LangGraph."""
 
@@ -393,13 +407,16 @@ class AgentWorkflow:
                 priority=settings.keyword_extractor_priority
             )
             set_global_keyword_extractor(self.keyword_extractor)
-        
+
         # Use shared local_file_search if provided, otherwise create new one
         if local_file_search is not None:
             self.local_file_search = local_file_search
         else:
-            self.local_file_search = LocalFileSearchTool(base_path=base_path,keyword_extractor=self.keyword_extractor.GetKeywordExtractorFromTFIDF())
-        
+            self.local_file_search = LocalFileSearchTool(
+                base_path=base_path,
+                keyword_extractor=self.keyword_extractor.GetKeywordExtractorFromTFIDF(),
+            )
+
         # Initialize LLM for LangChain
         api_base = settings.openai_api_base
         api_key = settings.openai_api_key if settings.openai_api_key else ""
@@ -423,12 +440,17 @@ class AgentWorkflow:
             try:
                 self.web_search_tool = WebSearchTool()
             except ImportError:
-                logger.warning("WebSearchTool not available, web search will be disabled")
+                logger.warning(
+                    "WebSearchTool not available, web search will be disabled"
+                )
                 self.web_search_tool = None
 
         # Initialize first stage relevance generators (using LangChain version)
         self.direct_answer_generator = DirectAnswerGenerator(llm=self.chat_llm)
-        self.web_or_rag_generator = WebOrRagAnswerGenerator(llm=self.chat_llm, keyword_extractor=self.keyword_extractor.GetKeywordExtractorFromTFIDF())
+        self.web_or_rag_generator = WebOrRagAnswerGenerator(
+            llm=self.chat_llm,
+            keyword_extractor=self.keyword_extractor.GetKeywordExtractorFromTFIDF(),
+        )
         self.query_rewrite_generator = QueryRewriteGenerator(llm=self.chat_llm)
         self.relevance_analyzer = RelevanceAnalyzer(llm=self.chat_llm)
         self.final_answer_generator = FinalAnswerGenerator(llm=self.chat_llm)
@@ -585,9 +607,7 @@ class AgentWorkflow:
 
         # Record middle result
         middle_results = state.get("middle_results", [])
-        MiddleResultRecorder.record_web_or_rag_check(
-            middle_results, need_web, need_rag
-        )
+        MiddleResultRecorder.record_web_or_rag_check(middle_results, need_web, need_rag)
 
         # Case 1: web=true, rag=false -> web search only
         if need_web and not need_rag:
@@ -694,7 +714,7 @@ class AgentWorkflow:
             cleaned_query,
             metadata_filters,
         )
-        
+
         # Update state with cleaned_query and metadata_filters
         state = {
             **state,
@@ -764,30 +784,39 @@ class AgentWorkflow:
                     cleaned_query, metadata_filters
                 )
                 logger.debug("DOCS检索完成 - 检索到 %d 个节点", len(nodes))
-                
+
         # Now we have nodes from rag;
-        
+
         # raise Exception("Stop here")
         # Extract keywords
         keywords, keywords_other = self._extract_keywords_from_query(cleaned_query)
-        logger.debug("关键词提取完成 - 提取到 %d 个关键词: %s, 过滤关键词数: %d", len(keywords), keywords, len(keywords_other))
-        
+        logger.debug(
+            "关键词提取完成 - 提取到 %d 个关键词: %s, 过滤关键词数: %d",
+            len(keywords),
+            keywords,
+            len(keywords_other),
+        )
+
         # Tokenize query for sliding window search
-        tokens = self.local_file_search.keyword_extractor.tokenize_text(cleaned_query, filter_stopwords=False)
+        tokens = self.local_file_search.keyword_extractor.tokenize_text(
+            cleaned_query, filter_stopwords=False
+        )
         logger.debug("查询分词完成 - 分词数: %d, tokens: %s", len(tokens), tokens)
-        
-        #TODO first use tokens or keywords?
+
+        # TODO first use tokens or keywords?
         # First attempt: search using extracted keywords
-        print("keywords",keywords)
-        keyword_nodes_tmp = self.local_file_search.search_keyword_using_binary_algorithm(keywords)
+        print("keywords", keywords)
+        keyword_nodes_tmp = (
+            self.local_file_search.search_keyword_using_binary_algorithm(keywords)
+        )
         keyword_nodes = self._search_results_to_nodes(keyword_nodes_tmp)
-        
+
         # If no results found, try again with tokenized tokens
         # TODO now not use this, if use, add the min slide window size
         # if not keyword_nodes:
         #     logger.debug("使用keywords未找到结果，尝试使用直接分词进行搜索")
         #     keyword_nodes_tmp = self.local_file_search.search_keyword_using_binary_algorithm(tokens)
-            
+
         #     for token in tokens:
         #         if token not in keywords:
         #             keywords.append(token)
@@ -823,9 +852,7 @@ class AgentWorkflow:
 
         # Record middle result
         middle_results = state.get("middle_results", [])
-        MiddleResultRecorder.record_rag_retrieval(
-            middle_results, keywords, len(nodes)
-        )
+        MiddleResultRecorder.record_rag_retrieval(middle_results, keywords, len(nodes))
 
         return {
             **state,
@@ -845,7 +872,7 @@ class AgentWorkflow:
         iteration = state.get("iteration", 0)
         nodes = state.get("nodes", [])
         keywords = state.get("keywords", [])
-        
+
         # Prepend outer and inner previous Q&A context nodes if exist
         outer_previous_qa_context = state.get("outer_previous_qa_context", [])
         inner_previous_qa_context = state.get("inner_previous_qa_context", [])
@@ -926,7 +953,7 @@ class AgentWorkflow:
         logger.debug(
             "检查完成条件 - 是否相关: %s, 是否完整: %s", is_relevant, is_complete
         )
-        
+
         filtered_nodes = self.relevance_analyzer.filter_relevant_nodes(
             nodes, analysis.relevant_file_paths
         )
@@ -938,7 +965,7 @@ class AgentWorkflow:
         # 更新 state 的 nodes 为过滤后的节点
         nodes = filtered_nodes
         state["nodes"] = nodes
-        
+
         # 处理逻辑：is_complete true 且有relevant_file_paths -> 针对relevant_file_paths回答
         if is_complete and is_relevant:
             logger.debug("查询已相关且完整，过滤相关节点并生成最终答案")
@@ -1013,9 +1040,13 @@ class AgentWorkflow:
                 len(no_relevant_result.missing_info_keywords),
                 "有" if no_relevant_result.hypothetical_answer else "无",
             )
-            
+
             # Merge keywords from state, missing_info_keywords, and keywords_other, then update state keywords
-            merged_keywords_set = set(keywords) | set(no_relevant_result.missing_info_keywords) | set(keywords_other)
+            merged_keywords_set = (
+                set(keywords)
+                | set(no_relevant_result.missing_info_keywords)
+                | set(keywords_other)
+            )
             updated_keywords = list(merged_keywords_set)
             state["keywords"] = updated_keywords
             logger.debug(
@@ -1041,9 +1072,15 @@ class AgentWorkflow:
             if has_keywords or has_hypothetical:
                 logger.debug("检测到关键词或假想答案，触发并发检索")
                 # Merge keywords_other into missing_info_keywords to enhance search
-                original_missing_info_keywords_len = len(no_relevant_result.missing_info_keywords)
-                enhanced_missing_info_keywords = list(set(no_relevant_result.missing_info_keywords) | set(keywords_other))
-                no_relevant_result.missing_info_keywords = enhanced_missing_info_keywords
+                original_missing_info_keywords_len = len(
+                    no_relevant_result.missing_info_keywords
+                )
+                enhanced_missing_info_keywords = list(
+                    set(no_relevant_result.missing_info_keywords) | set(keywords_other)
+                )
+                no_relevant_result.missing_info_keywords = (
+                    enhanced_missing_info_keywords
+                )
                 logger.debug(
                     "增强missing_info_keywords完成（子问题workflow） - 原始数: %d, keywords_other数: %d, 增强后: %d",
                     original_missing_info_keywords_len,
@@ -1086,9 +1123,13 @@ class AgentWorkflow:
             len(no_relevant_result.missing_info_keywords),
             "有" if no_relevant_result.hypothetical_answer else "无",
         )
-        
+
         # Merge keywords from state, missing_info_keywords, and keywords_other, then update state keywords
-        merged_keywords_set = set(keywords) | set(no_relevant_result.missing_info_keywords) | set(keywords_other)
+        merged_keywords_set = (
+            set(keywords)
+            | set(no_relevant_result.missing_info_keywords)
+            | set(keywords_other)
+        )
         updated_keywords = list(merged_keywords_set)
         state["keywords"] = updated_keywords
         logger.debug(
@@ -1124,8 +1165,12 @@ class AgentWorkflow:
         if has_keywords or has_hypothetical:
             logger.debug("检测到关键词或假想答案，触发并发检索")
             # Merge keywords_other into missing_info_keywords to enhance search
-            original_missing_info_keywords_len = len(no_relevant_result.missing_info_keywords)
-            enhanced_missing_info_keywords = list(set(no_relevant_result.missing_info_keywords) | set(keywords_other))
+            original_missing_info_keywords_len = len(
+                no_relevant_result.missing_info_keywords
+            )
+            enhanced_missing_info_keywords = list(
+                set(no_relevant_result.missing_info_keywords) | set(keywords_other)
+            )
             no_relevant_result.missing_info_keywords = enhanced_missing_info_keywords
             logger.debug(
                 "增强missing_info_keywords完成 - 原始数: %d, keywords_other数: %d, 增强后: %d",
@@ -1180,7 +1225,9 @@ class AgentWorkflow:
 
         # 在一个循环中处理所有子问题
         # inner_previous_qa_context is now a list, so we'll append to it
-        all_qa_context = inner_previous_qa_context.copy() if inner_previous_qa_context else []
+        all_qa_context = (
+            inner_previous_qa_context.copy() if inner_previous_qa_context else []
+        )
         for idx, sub_query in enumerate(sub_queries):
             logger.debug(
                 "处理子问题 %d/%d - 子问题: %s",
@@ -1214,9 +1261,13 @@ class AgentWorkflow:
                     "no_relevant_result": None,
                     "current_sub_query": None,
                     "inner_previous_qa_context": all_qa_context.copy(),  # 传递之前的内部Q&A上下文
-                    "outer_previous_qa_context": state.get("outer_previous_qa_context", []),
+                    "outer_previous_qa_context": state.get(
+                        "outer_previous_qa_context", []
+                    ),
                     "is_inner_sub_query_workflow": True,  # 设置标志防止子问题再次分割
-                    "is_outer_sub_query_workflow": state.get("is_outer_sub_query_workflow", False),
+                    "is_outer_sub_query_workflow": state.get(
+                        "is_outer_sub_query_workflow", False
+                    ),
                     "result": None,
                     "middle_results": [],
                 }
@@ -1242,20 +1293,20 @@ class AgentWorkflow:
                 sub_answer = f"抱歉，处理子问题时发生错误: {error_type}: {error_msg}"
 
             # 更新上下文，累积所有子问题的Q&A
-            all_qa_context.append({
-                "query": sub_query,
-                "answer": sub_answer,
-            })
+            all_qa_context.append(
+                {
+                    "query": sub_query,
+                    "answer": sub_answer,
+                }
+            )
 
         # 所有子问题处理完成，更新上下文并返回最终答案
         logger.debug("所有子问题处理完成，生成最终答案")
-        
+
         # Record middle result
         middle_results = state.get("middle_results", [])
-        MiddleResultRecorder.record_process_sub_query(
-            middle_results, all_qa_context
-        )
-        
+        MiddleResultRecorder.record_process_sub_query(middle_results, all_qa_context)
+
         # Format the final answer from the Q&A context list
         result_parts = []
         for qa_pair in all_qa_context:
@@ -1373,14 +1424,16 @@ class AgentWorkflow:
                 logger.debug("替换节点 - 扩展节点数: %d", len(expanded_nodes))
                 nodes = expanded_nodes
         # TODO here truncate nodes by tokens
-        nodes, total_tokens, was_truncated = truncate_nodes_by_tokens(nodes, settings.llm_max_tokens)
-        
+        nodes, total_tokens, was_truncated = truncate_nodes_by_tokens(
+            nodes, settings.llm_max_tokens
+        )
+
         # Record middle result
         middle_results = state.get("middle_results", [])
         MiddleResultRecorder.record_expand_context(
             middle_results, len(expanded_nodes) if expanded_nodes else 0
         )
-        
+
         return {
             **state,
             "nodes": nodes,
@@ -1394,11 +1447,11 @@ class AgentWorkflow:
         nodes = state.get("nodes", [])
         result = state.get("result")
         middle_results = state.get("middle_results", [])
-        
+
         # Prepend outer and inner previous Q&A context nodes if exist
         outer_previous_qa_context = state.get("outer_previous_qa_context", [])
         inner_previous_qa_context = state.get("inner_previous_qa_context", [])
-        
+
         if outer_previous_qa_context or inner_previous_qa_context:
             context_nodes = self._qa_context_to_nodes(
                 outer_previous_qa_context, inner_previous_qa_context
@@ -1431,14 +1484,14 @@ class AgentWorkflow:
                 "需求2条件满足：上一个节点是analyze_relevance，上上一个节点是expand_context，"
                 "且expand_node_force_end_line为true，且模型认为依然不能总结回答，使用generate_not_complete_answer"
             )
-            answer, reasoning = self.final_answer_generator.generate_not_complete_answer(
-                query, nodes
+            answer, reasoning = (
+                self.final_answer_generator.generate_not_complete_answer(query, nodes)
             )
             references = extract_docs_references(nodes)
             formatted_refs = format_docs_references(references)
             reasoning_str = reasoning if reasoning else ""
             final_result = answer + formatted_refs + reasoning_str
-            
+
             if settings.return_middle_result:
                 formatted_result = MiddleResultRecorder.format_middle_results(
                     middle_results, final_result
@@ -1460,7 +1513,7 @@ class AgentWorkflow:
         formatted_refs = format_docs_references(references)
         reasoning_str = reasoning if reasoning else ""
         final_result = answer + formatted_refs + reasoning_str
-        
+
         if settings.return_middle_result:
             formatted_result = MiddleResultRecorder.format_middle_results(
                 middle_results, final_result
@@ -1540,7 +1593,7 @@ class AgentWorkflow:
             previous_node = middle_results[-1].get("node_type")
         if len(middle_results) >= 2:
             previous_previous_node = middle_results[-2].get("node_type")
-        
+
         # Check requirement 2 condition
         requirement_met = (
             previous_node == NodeType.ANALYZE_RELEVANCE.value
@@ -1679,7 +1732,7 @@ class AgentWorkflow:
             nodes = self._search_results_to_nodes(search_results)
             logger.debug("关键词搜索完成 - 节点数: %d", len(nodes))
             return nodes
-        
+
         def search_keywords_from_vector_search():
             """使用关键词进行向量检索。"""
             if not no_relevant_result.missing_info_keywords:
@@ -1691,7 +1744,7 @@ class AgentWorkflow:
                 nodes = self._merge_nodes(nodes, new_nodes)
             logger.debug("关键词向量检索完成 - 节点数: %d", len(nodes))
             return nodes
-        
+
         def search_by_hypothetical():
             """使用假想答案进行向量检索。"""
             if not no_relevant_result.hypothetical_answer:
@@ -1709,13 +1762,19 @@ class AgentWorkflow:
         with concurrent.futures.ThreadPoolExecutor() as executor:
             keyword_future = executor.submit(search_by_keywords)
             hypothetical_future = executor.submit(search_by_hypothetical)
-            keywords_from_vector_search_future = executor.submit(search_keywords_from_vector_search)
+            keywords_from_vector_search_future = executor.submit(
+                search_keywords_from_vector_search
+            )
             keyword_nodes = keyword_future.result()
             hypothetical_nodes = hypothetical_future.result()
-            keywords_from_vector_search_nodes = keywords_from_vector_search_future.result()
+            keywords_from_vector_search_nodes = (
+                keywords_from_vector_search_future.result()
+            )
 
         # 合并并去重
-        all_nodes = self._merge_nodes(keyword_nodes, hypothetical_nodes, keywords_from_vector_search_nodes)
+        all_nodes = self._merge_nodes(
+            keyword_nodes, hypothetical_nodes, keywords_from_vector_search_nodes
+        )
         logger.debug("并发检索完成 - 合并后节点数: %d", len(all_nodes))
 
         # 使用reranker重排序 (SafeReranker handles all edge cases)
@@ -1727,27 +1786,27 @@ class AgentWorkflow:
         return all_nodes
 
     def _qa_context_to_nodes(
-        self, 
-        outer_qa_context: List[Dict[str, str]], 
-        inner_qa_context: List[Dict[str, str]]
+        self,
+        outer_qa_context: List[Dict[str, str]],
+        inner_qa_context: List[Dict[str, str]],
     ) -> List[NodeWithScore]:
         """Convert Q&A context lists to NodeWithScore objects.
-        
+
         Generates nodes in the format:
         - node1: "问题1：\n回答1" (outer)
         - node2: "问题2：\n回答2" (outer)
         - node3: "问题3：\n    子问题1：\n     子问题回答1：" (inner with indentation)
-        
+
         Args:
             outer_qa_context: List of dicts with "query" and "answer" keys for outer context
             inner_qa_context: List of dicts with "query" and "answer" keys for inner context
-            
+
         Returns:
             List of NodeWithScore objects
         """
         nodes = []
         from llama_index.core.schema import TextNode
-        
+
         # Add outer Q&A context nodes
         # Format: "问题1：\n回答1"
         for qa_pair in outer_qa_context:
@@ -1755,7 +1814,7 @@ class AgentWorkflow:
             answer = qa_pair.get("answer", "")
             # Outer format: "问题：[query]\n回答：[answer]"
             text = f"问题：{query}\n回答：{answer}"
-            
+
             node = TextNode(
                 text=text,
                 metadata={
@@ -1765,7 +1824,7 @@ class AgentWorkflow:
                 },
             )
             nodes.append(NodeWithScore(node=node, score=1.0))
-        
+
         # Add inner Q&A context nodes with indentation
         # Format: "问题3：\n    子问题1：\n     子问题回答1："
         for qa_pair in inner_qa_context:
@@ -1773,7 +1832,7 @@ class AgentWorkflow:
             answer = qa_pair.get("answer", "")
             # Inner format: "问题：[query]\n    回答：[answer]" (answer is indented)
             text = f"问题：{query}\n    回答：{answer}"
-            
+
             node = TextNode(
                 text=text,
                 metadata={
@@ -1783,7 +1842,7 @@ class AgentWorkflow:
                 },
             )
             nodes.append(NodeWithScore(node=node, score=1.0))
-        
+
         return nodes
 
     def _search_results_to_nodes(
@@ -1809,20 +1868,20 @@ class AgentWorkflow:
                         "keyword": keyword,
                     },
                 )
-                #TODO score 0.8?
+                # TODO score 0.8?
                 nodes.append(NodeWithScore(node=node, score=0.8))
 
         logger.debug("搜索结果转换完成 - 总节点数: %d", len(nodes))
         return nodes
 
     def _merge_nodes(
-        self, 
-        existing_nodes: List[NodeWithScore], 
+        self,
+        existing_nodes: List[NodeWithScore],
         new_nodes: List[NodeWithScore],
-        third_nodes: List[NodeWithScore] = None
+        third_nodes: List[NodeWithScore] = None,
     ) -> List[NodeWithScore]:
         """Merge nodes with strict overlap checking.
-        
+
         Merge logic:
         1. Extract file_name from file_path
         2. Group nodes by file_name
@@ -1832,7 +1891,7 @@ class AgentWorkflow:
         """
         if third_nodes is None:
             third_nodes = []
-        
+
         logger.debug(
             "开始合并节点 - 已有节点数: %d, 新节点数: %d, 第三节点数: %d",
             len(existing_nodes),
@@ -1842,21 +1901,23 @@ class AgentWorkflow:
 
         # 合并所有节点以便统一处理
         all_nodes = list(existing_nodes) + list(new_nodes) + list(third_nodes)
-        
+
         if not all_nodes:
             return []
 
         # 按文件名分组，同时收集没有文件路径的节点
         file_name_groups: Dict[str, List[NodeWithScore]] = {}
         nodes_without_path = []
-        
+
         for node in all_nodes:
-            path = node.node.metadata.get("file_path") or node.node.metadata.get("source")
+            path = node.node.metadata.get("file_path") or node.node.metadata.get(
+                "source"
+            )
             if not path:
                 # 如果没有文件路径，单独收集（如QA上下文节点）
                 nodes_without_path.append(node)
                 continue
-            
+
             file_name = os.path.basename(path)
             if file_name not in file_name_groups:
                 file_name_groups[file_name] = []
@@ -1880,28 +1941,43 @@ class AgentWorkflow:
             current = nodes[0]
 
             for next_node in nodes[1:]:
-                current_path = current.node.metadata.get("file_path") or current.node.metadata.get("source")
+                current_path = current.node.metadata.get(
+                    "file_path"
+                ) or current.node.metadata.get("source")
                 current_start = current.node.metadata.get("start_line")
                 current_end = current.node.metadata.get("end_line")
-                next_path = next_node.node.metadata.get("file_path") or next_node.node.metadata.get("source")
+                next_path = next_node.node.metadata.get(
+                    "file_path"
+                ) or next_node.node.metadata.get("source")
                 next_start = next_node.node.metadata.get("start_line")
                 next_end = next_node.node.metadata.get("end_line")
 
                 # 检查是否有有效的行号
-                if current_start is None or current_end is None or next_start is None or next_end is None:
+                if (
+                    current_start is None
+                    or current_end is None
+                    or next_start is None
+                    or next_end is None
+                ):
                     # 行号无效，都保留
                     merged.append(current)
                     current = next_node
                     continue
 
                 # 检查是否完全相同（相同的路径、起始行和结束行）
-                if (current_path == next_path and 
-                    current_start == next_start and 
-                    current_end == next_end):
+                if (
+                    current_path == next_path
+                    and current_start == next_start
+                    and current_end == next_end
+                ):
                     # 完全相同，跳过下一个节点，保留当前节点（保留较高的分数）
-                    if (hasattr(next_node, "score") and next_node.score and
-                        hasattr(current, "score") and current.score and
-                        next_node.score > current.score):
+                    if (
+                        hasattr(next_node, "score")
+                        and next_node.score
+                        and hasattr(current, "score")
+                        and current.score
+                        and next_node.score > current.score
+                    ):
                         current = next_node
                     skipped_count += 1
                     continue
@@ -1911,7 +1987,7 @@ class AgentWorkflow:
                     # 有重叠，检查重叠行的内容是否重复
                     overlap_start = max(current_start, next_start)
                     overlap_end = min(current_end, next_end)
-                    
+
                     # 获取重叠行的内容
                     current_overlap_content = self._get_overlap_content(
                         current_path, overlap_start, overlap_end, current
@@ -1923,38 +1999,60 @@ class AgentWorkflow:
                     # 检查重叠内容是否相同
                     if current_overlap_content and next_overlap_content:
                         # 去除首尾空白后比较
-                        if current_overlap_content.strip() == next_overlap_content.strip():
+                        if (
+                            current_overlap_content.strip()
+                            == next_overlap_content.strip()
+                        ):
                             # 内容重复，合并：取最小 start_line 和最大 end_line
                             merged_start = min(current_start, next_start)
                             merged_end = max(current_end, next_end)
-                            print("success merge", current_path, current_start, current_end, next_start, next_end, merged_start, merged_end)
+                            print(
+                                "success merge",
+                                current_path,
+                                current_start,
+                                current_end,
+                                next_start,
+                                next_end,
+                                merged_start,
+                                merged_end,
+                            )
                             # 重新获取合并后的内容
-                            merged_content = self.local_file_search.get_file_content_by_lines(
-                                current_path, merged_start, merged_end
+                            merged_content = (
+                                self.local_file_search.get_file_content_by_lines(
+                                    current_path, merged_start, merged_end
+                                )
                             )
                             if merged_content:
                                 from llama_index.core.schema import TextNode
-                                
+
                                 # 创建合并后的节点，保留较高的分数
                                 merged_score = max(
-                                    current.score if hasattr(current, "score") and current.score else 0,
-                                    next_node.score if hasattr(next_node, "score") and next_node.score else 0
+                                    current.score
+                                    if hasattr(current, "score") and current.score
+                                    else 0,
+                                    next_node.score
+                                    if hasattr(next_node, "score") and next_node.score
+                                    else 0,
                                 )
-                                
+
                                 merged_node = TextNode(
                                     text=merged_content,
                                     metadata={
                                         "file_path": current_path,
                                         "source": current_path,
-                                        "type": current.node.metadata.get("type", "markdown"),
+                                        "type": current.node.metadata.get(
+                                            "type", "markdown"
+                                        ),
                                         "start_line": merged_start,
                                         "end_line": merged_end,
                                     },
                                 )
-                                current = NodeWithScore(node=merged_node, score=merged_score)
+                                current = NodeWithScore(
+                                    node=merged_node, score=merged_score
+                                )
                                 skipped_count += 1
                                 continue
-                    
+
                     # 重叠但内容不同，都保留
                     merged.append(current)
                     current = next_node
@@ -1981,13 +2079,13 @@ class AgentWorkflow:
         self, file_path: str, overlap_start: int, overlap_end: int, node: NodeWithScore
     ) -> Optional[str]:
         """获取重叠行的内容。
-        
+
         Args:
             file_path: 文件路径
             overlap_start: 重叠起始行
             overlap_end: 重叠结束行
             node: 节点对象
-            
+
         Returns:
             重叠行的内容，如果获取失败返回None
         """
@@ -1998,7 +2096,7 @@ class AgentWorkflow:
             )
             if content:
                 return content
-            
+
             # 如果从文件读取失败，尝试从节点内容中提取
             node_content = (
                 node.node.get_content()
@@ -2007,25 +2105,25 @@ class AgentWorkflow:
             )
             if not node_content:
                 return None
-            
+
             node_start = node.node.metadata.get("start_line")
             node_end = node.node.metadata.get("end_line")
-            
+
             if node_start is None or node_end is None:
                 return None
-            
+
             # 计算重叠部分在节点内容中的位置
             node_lines = node_content.split("\n")
             node_line_count = len(node_lines)
-            
+
             # 计算重叠部分在节点中的相对行号
             overlap_in_node_start = max(0, overlap_start - node_start)
             overlap_in_node_end = min(node_line_count, overlap_end - node_start + 1)
-            
+
             if overlap_in_node_start < overlap_in_node_end:
                 overlap_lines = node_lines[overlap_in_node_start:overlap_in_node_end]
                 return "\n".join(overlap_lines)
-            
+
             return None
         except Exception as e:
             logger.debug("获取重叠内容失败: %s", e)
@@ -2098,7 +2196,9 @@ class AgentWorkflow:
         if not is_inner_sub_query_workflow and "context" in kwargs:
             context = kwargs.get("context")
             if isinstance(context, dict):
-                is_inner_sub_query_workflow = context.get("is_inner_sub_query_workflow", False)
+                is_inner_sub_query_workflow = context.get(
+                    "is_inner_sub_query_workflow", False
+                )
                 # 如果context中有store（来自Context.to_dict()），尝试从store中读取
                 if not is_inner_sub_query_workflow and "store" in context:
                     store = context.get("store", {})
