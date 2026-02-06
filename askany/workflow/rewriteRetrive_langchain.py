@@ -24,7 +24,8 @@ class QueryRewriteResult(BaseModel):
         default="",
     )
 
-SYS_PROMPT="""
+
+SYS_PROMPT = """
 将用户的查询重写为更适合RAG知识库检索的形式: 简化表达，明确化概念，更正错别字。如果原查询已经很清晰，可以保持基本不变。不要增加问题。
 将问句改为解决方案陈述句，如：
 
@@ -40,6 +41,8 @@ SYS_PROMPT="""
 原始查询：属性库查询慢如何优化
 返回：属性库查询性能优化
 """
+
+
 class QueryRewriteGenerator:
     """Generator for rewriting user queries to optimize RAG retrieval."""
 
@@ -97,9 +100,7 @@ class QueryRewriteGenerator:
         # Call LLM with structured output using LangChain messages
         result = self.structured_llm.invoke(
             [
-                SystemMessage(
-                    content=SYS_PROMPT
-                ),
+                SystemMessage(content=SYS_PROMPT),
                 HumanMessage(content=prompt),
             ]
         )
@@ -122,7 +123,7 @@ class QueryRewriteGenerator:
 
 if __name__ == "__main__":
     query_rewrite_generator = QueryRewriteGenerator()
-    queries=["介绍算法编排2.0","app打包流程变更了吗？有什么变化"]
+    queries = ["介绍算法编排2.0", "app打包流程变更了吗？有什么变化"]
     for query in queries:
         result = query_rewrite_generator.generate(query)
         print(result.rewritten_query)

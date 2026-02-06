@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 import time
+
 # Add parent directory to path to import askany modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -77,7 +78,6 @@ def send_query(
     else:
         # Use provided messages as history (make a copy to avoid modifying original)
         messages = messages.copy()
-    
 
     # Build request payload
     payload = {

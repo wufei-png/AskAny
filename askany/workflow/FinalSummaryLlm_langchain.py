@@ -91,7 +91,7 @@ class FinalAnswerGenerator:
             context_parts.append(
                 f"### 参考文件路径: {file_path}\n"
                 f"内容:\n"
-                f"```\n{content[:settings.max_content_length]}...\n```\n"
+                f"```\n{content[: settings.max_content_length]}...\n```\n"
                 f"---"
             )
 
@@ -202,16 +202,20 @@ class FinalAnswerGenerator:
                 raise
 
         # 直接从 response.content 获取响应内容
-        summary_answer = response.content if hasattr(response, "content") else str(response)
-        
+        summary_answer = (
+            response.content if hasattr(response, "content") else str(response)
+        )
+
         # 尝试获取 reasoning 字段（如果存在）
         reasoning = getattr(response, "reasoning", None)
-        
+
         # 打印调试信息
-        print(f"Completion response - answer length: {len(summary_answer) if summary_answer else 0}")
+        print(
+            f"Completion response - answer length: {len(summary_answer) if summary_answer else 0}"
+        )
         if reasoning:
             print(f"Reasoning length: {len(reasoning)}")
-        
+
         # 尝试获取 token usage（如果可用）
         if hasattr(response, "response_metadata"):
             token_usage = response.response_metadata.get("token_usage", {})
@@ -220,7 +224,9 @@ class FinalAnswerGenerator:
 
         return (summary_answer, reasoning)
 
-    def _format_not_complete_answer_input(self, query: str, nodes: List[NodeWithScore]) -> str:
+    def _format_not_complete_answer_input(
+        self, query: str, nodes: List[NodeWithScore]
+    ) -> str:
         """格式化输入用于生成不完整答案。
 
         Args:
@@ -244,7 +250,7 @@ class FinalAnswerGenerator:
             context_parts.append(
                 f"### 参考文件路径: {file_path}\n"
                 f"内容:\n"
-                f"```\n{content[:settings.max_content_length]}...\n```\n"
+                f"```\n{content[: settings.max_content_length]}...\n```\n"
                 f"---"
             )
 
@@ -355,16 +361,20 @@ class FinalAnswerGenerator:
                 raise
 
         # 直接从 response.content 获取响应内容
-        summary_answer = response.content if hasattr(response, "content") else str(response)
-        
+        summary_answer = (
+            response.content if hasattr(response, "content") else str(response)
+        )
+
         # 尝试获取 reasoning 字段（如果存在）
         reasoning = getattr(response, "reasoning", None)
-        
+
         # 打印调试信息
-        print(f"Completion response - answer length: {len(summary_answer) if summary_answer else 0}")
+        print(
+            f"Completion response - answer length: {len(summary_answer) if summary_answer else 0}"
+        )
         if reasoning:
             print(f"Reasoning length: {len(reasoning)}")
-        
+
         # 尝试获取 token usage（如果可用）
         if hasattr(response, "response_metadata"):
             token_usage = response.response_metadata.get("token_usage", {})
@@ -399,11 +409,13 @@ def extract_docs_references(nodes: List[NodeWithScore]) -> Dict[str, List]:
                 seen_sources.add(source)
                 start_line = node_metadata.get("start_line")
                 end_line = node_metadata.get("end_line")
-                markdown_refs.append({
-                    "source": source,
-                    "start_line": start_line,
-                    "end_line": end_line,
-                })
+                markdown_refs.append(
+                    {
+                        "source": source,
+                        "start_line": start_line,
+                        "end_line": end_line,
+                    }
+                )
         elif node_type == "faq":
             # Extract FAQ reference (id and answer)
             faq_id = node_metadata.get("id", "")

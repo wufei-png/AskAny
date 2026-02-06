@@ -157,6 +157,7 @@ def get_prompts(language: LanguageType | None = None) -> PromptManager:
 
     if language is None:
         from askany.config import settings
+
         language = getattr(settings, "language", "cn")
 
     if _prompt_manager is None or _prompt_manager.language != language:

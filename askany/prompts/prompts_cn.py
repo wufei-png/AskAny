@@ -123,7 +123,9 @@ GET_FILE_CONTENT_DESCRIPTION = tw.dedent("""
 # AnalysisRelated_langchain.py - Relevance Analysis
 # =============================================================================
 
-RELEVANCE_ANALYSIS_SYSTEM = "你是一个运维助手，负责评估检索到的内容对用户问题的相关性和完整性。"
+RELEVANCE_ANALYSIS_SYSTEM = (
+    "你是一个运维助手，负责评估检索到的内容对用户问题的相关性和完整性。"
+)
 
 RELEVANCE_ANALYSIS_TASK = tw.dedent("""
     --- 任务要求 ---

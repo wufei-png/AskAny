@@ -1,10 +1,10 @@
 """Workflow module for agent-based RAG refinement."""
 
-from askany.workflow.AnalysisRelated import (
+from askany.workflow.AnalysisRelated_langchain import (
     RelevantResult,
     analyze_relevance_and_completeness,
 )
-from askany.workflow.FinalSummaryLlm import (
+from askany.workflow.FinalSummaryLlm_langchain import (
     extract_docs_references,
     format_docs_references,
     generate_final_answer,

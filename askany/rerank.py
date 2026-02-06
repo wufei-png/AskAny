@@ -150,7 +150,7 @@ class SafeReranker(BaseNodePostprocessor):
         Args:
             top_n: Number of top results to return. Use -1 to return all nodes.
             device: Device to use ("cuda" or "cpu"). If None, auto-detect.
-            reranker_model: Model name for reranker (e.g., "BAAI/bge-reranker-v2-m3") or 
+            reranker_model: Model name for reranker (e.g., "BAAI/bge-reranker-v2-m3") or
                           local path to model directory (e.g., "/path/to/bge-reranker-v2-m3").
                           If local path is provided, model will be loaded offline.
                           If None, uses settings.reranker_model.
@@ -210,15 +210,22 @@ class SafeReranker(BaseNodePostprocessor):
             if base_reranker is None:
                 try:
                     # Check if local_files_only should be used
-                    local_files_only = getattr(settings, "reranker_local_files_only", False)
+                    local_files_only = getattr(
+                        settings, "reranker_local_files_only", False
+                    )
                     # Auto-detect: if reranker_model is an absolute path, use local_files_only
                     import os
+
                     if os.path.isabs(reranker_model) and os.path.exists(reranker_model):
                         local_files_only = True
-                    
-                    logger.info(f"Creating SentenceTransformerRerank with model={reranker_model}, device={device}, top_n={top_n}, local_files_only={local_files_only}")
+
+                    logger.info(
+                        f"Creating SentenceTransformerRerank with model={reranker_model}, device={device}, top_n={top_n}, local_files_only={local_files_only}"
+                    )
                     if not local_files_only:
-                        logger.info("This may take a while if the model needs to be downloaded or loaded...")
+                        logger.info(
+                            "This may take a while if the model needs to be downloaded or loaded..."
+                        )
                     base_reranker = SentenceTransformerRerank(
                         model=reranker_model,
                         top_n=top_n,

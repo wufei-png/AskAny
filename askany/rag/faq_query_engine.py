@@ -114,7 +114,9 @@ class FAQQueryEngine:
         logger.info(
             f"Rerank strategy: retrieve {rerank_candidate_k} candidates, rerank to top {reranker_top_n if similarity_top_k > 0 else 'all'}"
         )
-        logger.info(f"Creating reranker with top_n={reranker_top_n}, device={self.device}, model={reranker_model}")
+        logger.info(
+            f"Creating reranker with top_n={reranker_top_n}, device={self.device}, model={reranker_model}"
+        )
         logger.info("This may take a while if the reranker model needs to be loaded...")
         self.reranker = SafeReranker.create(
             top_n=reranker_top_n,  # Final number of nodes after reranking
@@ -361,5 +363,8 @@ class FAQQueryEngine:
             Filtered list of nodes with score >= threshold
         """
         return [
-            node for node in nodes if (node.score is None) or (node.score is not None and node.score >= threshold)
+            node
+            for node in nodes
+            if (node.score is None)
+            or (node.score is not None and node.score >= threshold)
         ]

@@ -6,8 +6,10 @@
 
 import re
 
+
 def contains_chinese(s: str) -> bool:
-    return bool(re.search(r'[\u4e00-\u9fff]', s))
+    return bool(re.search(r"[\u4e00-\u9fff]", s))
+
 
 # if __name__ == "__main__":
 #   querys=["Hello, world!", "解析结果成功写到kafka中了，但没有在属性库里找到，怎么办？", "activate rate", "I am wufei", "Hello, world!", "Hello 世界 こんにちは", "Hello 世界 こんにちは","我是wufei"]

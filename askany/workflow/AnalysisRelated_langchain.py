@@ -125,6 +125,7 @@ class NoRelevantResultWithoutSubQueries(BaseModel):
     #     description="简要解释为什么没有任何文档相关，以及为什么生成这些关键词或假想答案（思维链）。"
     # )
 
+
 class GenerateKeywords(BaseModel):
     """生成关键词。"""
 
@@ -132,7 +133,7 @@ class GenerateKeywords(BaseModel):
         description="参考已经有的关键词，生成不同于已有的，用于搜索的缺失或不同角度的关键字列表。",
         default_factory=list,
     )
-    
+
 
 class RelevanceAnalyzer:
     """Analyzer for relevance and completeness checking using LangChain."""
@@ -228,10 +229,10 @@ class RelevanceAnalyzer:
             context_parts.append(
                 f"### 参考文件路径: {file_path}\n"
                 f"内容:\n"
-                f"```\n{content[:settings.max_content_length]}...\n```\n"
+                f"```\n{content[: settings.max_content_length]}...\n```\n"
                 f"---"
             )
-        #这里不需要关键词 直接根据文件内容判断相关性
+        # 这里不需要关键词 直接根据文件内容判断相关性
         context = chr(10).join(context_parts)
         return prompts.relevance_analysis_task.format(query=query, context=context)
 
@@ -262,7 +263,7 @@ class RelevanceAnalyzer:
         #     max_tokens=settings.llm_max_tokens,
         #     reserve_for_prompt=2000,  # Reserve for query, keywords, system message
         # )
-        #TODO 更精准的预估，这个可能估不准
+        # TODO 更精准的预估，这个可能估不准
         # Start with all nodes, will be truncated if token limit exceeded
         current_nodes = nodes
         # if nodes_truncated:
@@ -285,9 +286,7 @@ class RelevanceAnalyzer:
             # Check and truncate messages if needed
             prompts = get_prompts()
             messages = [
-                SystemMessage(
-                    content=prompts.relevance_analysis_system
-                ),
+                SystemMessage(content=prompts.relevance_analysis_system),
                 HumanMessage(content=formatted_input),
             ]
 
@@ -330,7 +329,7 @@ class RelevanceAnalyzer:
                     or ("tokens" in error_msg and "request" in error_msg)
                     or ("400" in error_msg and "tokens" in error_msg)
                 )
-                
+
                 if is_token_limit_error and attempt < max_retries - 1:
                     # Truncate nodes to half
                     original_count = len(current_nodes)
@@ -434,9 +433,7 @@ class RelevanceAnalyzer:
         # Check and truncate messages if needed
         prompts = get_prompts()
         messages = [
-            SystemMessage(
-                content=prompts.no_relevant_system
-            ),
+            SystemMessage(content=prompts.no_relevant_system),
             HumanMessage(content=formatted_input),
         ]
 
@@ -474,9 +471,7 @@ class RelevanceAnalyzer:
         filtered_keywords = [
             kw for kw in result.missing_info_keywords if kw not in keywords
         ]
-        duplicate_keywords = [
-            kw for kw in original_keywords if kw in keywords
-        ]
+        duplicate_keywords = [kw for kw in original_keywords if kw in keywords]
 
         if duplicate_keywords:
             logger.warning(
@@ -491,13 +486,9 @@ class RelevanceAnalyzer:
             )
             filtered_keywords = self._generate_keywords_simple(query, keywords)
             # Filter again to ensure no duplicates
-            filtered_keywords = [
-                kw for kw in filtered_keywords if kw not in keywords
-            ]
+            filtered_keywords = [kw for kw in filtered_keywords if kw not in keywords]
             if not filtered_keywords:
-                logger.warning(
-                    "简化提示词生成的关键词仍然全部重复，返回空列表"
-                )
+                logger.warning("简化提示词生成的关键词仍然全部重复，返回空列表")
 
         # Update result with filtered keywords
         result.missing_info_keywords = filtered_keywords
@@ -516,7 +507,9 @@ class RelevanceAnalyzer:
             格式化的提示文本
         """
         prompts = get_prompts()
-        return prompts.no_relevant_without_sub_task.format(query=query, keywords=keywords)
+        return prompts.no_relevant_without_sub_task.format(
+            query=query, keywords=keywords
+        )
 
     def _format_simple_keywords_input(self, query: str, keywords: List[str]) -> str:
         """格式化输入用于简化关键词生成（避免任务过重）。
@@ -531,9 +524,7 @@ class RelevanceAnalyzer:
         prompts = get_prompts()
         return prompts.simple_keywords_task.format(query=query, keywords=keywords)
 
-    def _generate_keywords_simple(
-        self, query: str, keywords: List[str]
-    ) -> List[str]:
+    def _generate_keywords_simple(self, query: str, keywords: List[str]) -> List[str]:
         """使用简化的提示词生成关键词（避免任务过重）。
 
         Args:
@@ -552,9 +543,7 @@ class RelevanceAnalyzer:
         # Check and truncate messages if needed
         prompts = get_prompts()
         messages = [
-            SystemMessage(
-                content=prompts.simple_keywords_system
-            ),
+            SystemMessage(content=prompts.simple_keywords_system),
             HumanMessage(content=formatted_input),
         ]
 
@@ -573,8 +562,7 @@ class RelevanceAnalyzer:
 
         if messages_truncated:
             logger.warning(
-                "Messages truncated in _generate_keywords_simple: "
-                "total_tokens=%d/%d",
+                "Messages truncated in _generate_keywords_simple: total_tokens=%d/%d",
                 total_tokens,
                 settings.llm_max_tokens,
             )
@@ -614,9 +602,7 @@ class RelevanceAnalyzer:
         # Check and truncate messages if needed
         prompts = get_prompts()
         messages = [
-            SystemMessage(
-                content=prompts.no_relevant_without_sub_system
-            ),
+            SystemMessage(content=prompts.no_relevant_without_sub_system),
             HumanMessage(content=formatted_input),
         ]
 
@@ -654,9 +640,7 @@ class RelevanceAnalyzer:
         filtered_keywords = [
             kw for kw in result.missing_info_keywords if kw not in keywords
         ]
-        duplicate_keywords = [
-            kw for kw in original_keywords if kw in keywords
-        ]
+        duplicate_keywords = [kw for kw in original_keywords if kw in keywords]
 
         if duplicate_keywords:
             logger.warning(
@@ -671,13 +655,9 @@ class RelevanceAnalyzer:
             )
             filtered_keywords = self._generate_keywords_simple(query, keywords)
             # Filter again to ensure no duplicates
-            filtered_keywords = [
-                kw for kw in filtered_keywords if kw not in keywords
-            ]
+            filtered_keywords = [kw for kw in filtered_keywords if kw not in keywords]
             if not filtered_keywords:
-                logger.warning(
-                    "简化提示词生成的关键词仍然全部重复，返回空列表"
-                )
+                logger.warning("简化提示词生成的关键词仍然全部重复，返回空列表")
 
         # Update result with filtered keywords
         result.missing_info_keywords = filtered_keywords
@@ -735,9 +715,7 @@ if __name__ == "__main__":
     query = "如何更新系统组件？需要哪些步骤？"
     nodes = []
     node1 = Node(
-        metadata={
-            "file_path": "data/markdown/system-update-guide.md"
-        },
+        metadata={"file_path": "data/markdown/system-update-guide.md"},
     )
     node1.set_content(
         """
@@ -758,9 +736,7 @@ https://docs.example.com/system-update-guide
 """
     )
     node2 = Node(
-        metadata={
-            "file_path": "data/markdown/api-troubleshooting-guide.md"
-        },
+        metadata={"file_path": "data/markdown/api-troubleshooting-guide.md"},
     )
     node2.set_content(
         """

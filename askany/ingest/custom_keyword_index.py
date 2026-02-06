@@ -60,7 +60,9 @@ class CustomKeywordTableIndex(KeywordTableIndex):
             self._keyword_extractor = _global_keyword_extractor
         else:
             # Fallback: create a new one (should not happen in normal usage)
-            self._keyword_extractor = KeywordExtractorWrapper(priority=settings.keyword_extractor_priority)
+            self._keyword_extractor = KeywordExtractorWrapper(
+                priority=settings.keyword_extractor_priority
+            )
             set_global_keyword_extractor(self._keyword_extractor)
         # Call parent constructor
         super().__init__(
@@ -74,16 +76,19 @@ class CustomKeywordTableIndex(KeywordTableIndex):
             show_progress=show_progress,
             **kwargs,
         )
-        print(f"CustomKeywordTableIndex initialized with keyword extractor: {self._keyword_extractor}")
+        print(
+            f"CustomKeywordTableIndex initialized with keyword extractor: {self._keyword_extractor}"
+        )
+
     def _extract_keywords(self, text: str) -> Set[str]:
         """Extract keywords from text using KeywordExtractorWrapper."""
-        keywords ,_ = self._keyword_extractor.extract_keywords(text)
+        keywords, _ = self._keyword_extractor.extract_keywords(text)
         return set(keywords)
 
     async def _async_extract_keywords(self, text: str) -> Set[str]:
         """Extract keywords from text using KeywordExtractorWrapper (async)."""
         # KeywordExtractorWrapper.extract_keywords is sync, so we just call it
-        keywords ,_ = self._keyword_extractor.extract_keywords(text)
+        keywords, _ = self._keyword_extractor.extract_keywords(text)
         return set(keywords)
 
     def as_retriever(
@@ -100,7 +105,10 @@ class CustomKeywordTableIndex(KeywordTableIndex):
             KeywordTableRetrieverMode,
         )
 
-        if retriever_mode == KeywordTableRetrieverMode.DEFAULT or retriever_mode == "default":
+        if (
+            retriever_mode == KeywordTableRetrieverMode.DEFAULT
+            or retriever_mode == "default"
+        ):
             # Use custom retriever with keyword extractor
             return CustomKeywordTableGPTRetriever(
                 self,
@@ -141,7 +149,9 @@ class CustomKeywordTableGPTRetriever(KeywordTableGPTRetriever):
             self._keyword_extractor = _global_keyword_extractor
         else:
             # Fallback: create a new one (should not happen in normal usage)
-            self._keyword_extractor = KeywordExtractorWrapper(priority=settings.keyword_extractor_priority)
+            self._keyword_extractor = KeywordExtractorWrapper(
+                priority=settings.keyword_extractor_priority
+            )
             set_global_keyword_extractor(self._keyword_extractor)
         # Call parent constructor
         super().__init__(
@@ -156,7 +166,6 @@ class CustomKeywordTableGPTRetriever(KeywordTableGPTRetriever):
 
     def _get_keywords(self, query_str: str) -> List[str]:
         """Extract keywords from query using KeywordExtractorWrapper."""
-        keywords,_ = self._keyword_extractor.extract_keywords(query_str)
+        keywords, _ = self._keyword_extractor.extract_keywords(query_str)
         # Limit to max_keywords_per_query
         return keywords[: self.max_keywords_per_query]
-

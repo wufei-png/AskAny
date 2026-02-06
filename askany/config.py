@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # Database
     postgres_host: str = "localhost"
     postgres_port: int = 5432
-    postgres_user: str = "root"
+    postgres_user: str = "wufei"
     postgres_password: str = "123456"
     postgres_db: str = "askany"
     log_level: str = "DEBUG"
@@ -33,7 +33,9 @@ class Settings(BaseSettings):
     num_concurrent_runs: int = 1  # agent workflow concurrent runs
 
     enable_web_search: bool = True
-    web_search_api_url: str = "http://localhost:8800/search"  # Web search API endpoint URL
+    web_search_api_url: str = (
+        "http://localhost:8800/search"  # Web search API endpoint URL
+    )
 
     temperature: float = 0.2
     top_p: float = 0.8
@@ -54,9 +56,7 @@ class Settings(BaseSettings):
     embedding_model_type: str = (
         "sentence_transformer"  # Options: "openai", "sentence_transformer"
     )
-    embedding_local_files_only: bool = (
-        False  # If True, only load from local files (no HuggingFace download). Set to True for offline mode.
-    )
+    embedding_local_files_only: bool = False  # If True, only load from local files (no HuggingFace download). Set to True for offline mode.
 
     # Vector Store
     vector_table_name: str = (
@@ -106,9 +106,7 @@ class Settings(BaseSettings):
     reranker_type: str = (
         "sentence_transformer"  # Options: "sentence_transformer", "flag_embedding"
     )
-    reranker_local_files_only: bool = (
-        False  # If True, only load from local files (no HuggingFace download). Set to True for offline mode.
-    )
+    reranker_local_files_only: bool = False  # If True, only load from local files (no HuggingFace download). Set to True for offline mode.
 
     # Data paths
     data_dir: str = "data"
@@ -126,7 +124,7 @@ class Settings(BaseSettings):
     )
     docs_keyword_storage_index: str = (
         "docs_keyword_index"  # Directory for persisting Docs KeywordTableIndex
-    )   
+    )
     using_docs_keyword_index: bool = False  # Whether to use keyword index
     # faq_keyword_storage_index: str = (
     #     "hybrid_faq_keyword_index"  # Directory for persisting FAQ KeywordTableIndex
@@ -166,11 +164,13 @@ class Settings(BaseSettings):
     max_keywords_for_docs: int = 3  # Maximum number of keywords to extract for docs
     docs_rerank_candidate_k: int = 10  # Number of candidates to retrieve before reranking for docs (should be > docs_similarity_top_k)
     docs_similarity_threshold: float = 0.6  # Similarity threshold for docs query engine
-    
-    custom_keyword_similarity_threshold: float = 0.8  # Similarity threshold for sense keyword
-    
-    if using_docs_keyword_index==False:
-        docs_similarity_threshold-=0.05
+
+    custom_keyword_similarity_threshold: float = (
+        0.8  # Similarity threshold for sense keyword
+    )
+
+    if using_docs_keyword_index == False:
+        docs_similarity_threshold -= 0.05
     # Ensemble weights for docs query engine [keyword_weight, vector_weight]
     # Options:
     # - [0.5, 0.5] (balanced, default)
@@ -200,21 +200,25 @@ class Settings(BaseSettings):
     # Embedding batch size for sentence-transformers
     # Larger batch sizes improve throughput but use more GPU/CPU memory
     # Recommended: 32-512 for GPU, 16-128 for CPU
-    embedding_batch_size: int = (
-        512  # Batch size for embedding model when encoding multiple texts (default: 512)
-    )
+    embedding_batch_size: int = 512  # Batch size for embedding model when encoding multiple texts (default: 512)
     # HNSW index optimization for bulk insert
     # When inserting large batches (>10k nodes), it's faster to:
     # 1. Drop HNSW index before insertion
     # 2. Insert all data
     # 3. Recreate HNSW index
     # This avoids index maintenance overhead during insertion
-    enable_hnsw_bulk_insert_optimization: bool = True  # Whether to enable HNSW index optimization for bulk insert
-    hnsw_bulk_insert_threshold: int = 10000  # Minimum number of nodes to trigger index drop/recreate optimization
+    enable_hnsw_bulk_insert_optimization: bool = (
+        True  # Whether to enable HNSW index optimization for bulk insert
+    )
+    hnsw_bulk_insert_threshold: int = (
+        10000  # Minimum number of nodes to trigger index drop/recreate optimization
+    )
     # PostgreSQL maintenance_work_mem for HNSW index creation
     # Larger values speed up index creation but use more memory
     # Recommended: 256MB-1GB for 10k-100k vectors, adjust based on available RAM
-    hnsw_maintenance_work_mem: str = "512MB"  # Memory allocation for index creation (e.g., "256MB", "512MB", "1GB")
+    hnsw_maintenance_work_mem: str = (
+        "512MB"  # Memory allocation for index creation (e.g., "256MB", "512MB", "1GB")
+    )
 
     ##  for agent
     min_tfidf_score: float = 0.0  # Minimum TF-IDF score for keywords
@@ -233,27 +237,31 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",  # Ignore extra fields from environment variables
     )
-    
-    recursive_search_time_for_expand_or_norelevant: int = 2  # Recursive search time for expand or no relevant
-    #TODO 这个参数需要最后再调整
+
+    recursive_search_time_for_expand_or_norelevant: int = (
+        2  # Recursive search time for expand or no relevant
+    )
+    # TODO 这个参数需要最后再调整
     freq_in_rag_threshold: int = 80  # Frequency threshold for keywords in RAG
-    
+
     using_custom_keyword_index: bool = True  # Whether to use custom keyword index
     keyword_extractor_priority: str = "tfidf"  # Keyword extractor priority
-    expand_node_force_end_line: bool = True  # Whether to force end workflow after expand node
-    
+    expand_node_force_end_line: bool = (
+        True  # Whether to force end workflow after expand node
+    )
+
     return_middle_result: bool = True  # Whether to return middle result
     inner_sub_problems: bool = False  # Whether to return inner sub problems
     max_content_length: int = -1  # Maximum content length for each node
-    
+
     # Question-Answer Cache settings
     enable_qa_cache: bool = True  # Whether to enable question-answer caching
     qa_cache_use_similarity: bool = False  # Whether to use semantic similarity matching for cache (requires embedding model)
     qa_cache_similarity_threshold: float = 0.95  # Similarity threshold for cache matching (0-1, only used when qa_cache_use_similarity=True)
-    
+
     # CPU resource limits
     cpu_cores: Optional[int] = None  # Limit CPU cores (None = use all available cores)
-    
+
     # HanLP Tokenizer settings
     # Options:
     # - None or empty string: Use default pretrained model (hanlp.pretrained.tok.COARSE_ELECTRA_SMALL_ZH)
@@ -268,5 +276,6 @@ class Settings(BaseSettings):
     # Example: "/workspace/hanlp" (for Docker containers with mounted volumes)
     # hanlp_home: Optional[str] = "/workspace/hanlp"  # HanLP home directory (None = use default ~/.hanlp)
     hanlp_home: Optional[str] = None
-    
+
+
 settings = Settings()

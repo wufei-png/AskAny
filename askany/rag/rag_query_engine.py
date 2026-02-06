@@ -20,7 +20,7 @@ from askany.rerank import SafeReranker
 
 class KeywordVectorAppendRetriever(BaseRetriever):
     """Custom retriever that appends keyword results to filtered vector results.
-    
+
     This retriever:
     1. Accepts all keyword_retriever results (no threshold filtering)
     2. Applies reranker and threshold filtering only to vector_retriever results
@@ -37,7 +37,7 @@ class KeywordVectorAppendRetriever(BaseRetriever):
         similarity_top_k: int = 5,
     ) -> None:
         """Initialize the retriever.
-        
+
         Args:
             keyword_retriever: Retriever for keyword-based search (all results accepted)
             vector_retriever: Retriever for vector-based search (filtered by reranker and threshold)
@@ -110,7 +110,7 @@ class KeywordVectorAppendRetriever(BaseRetriever):
         for node in keyword_nodes:
             node_id = node.node.node_id
             keywords = node_to_keywords.get(node_id, [])
-            
+
             if not keywords:
                 # 如果节点没有对应的关键词，保留它
                 nodes_without_keywords.append(node)
@@ -130,14 +130,18 @@ class KeywordVectorAppendRetriever(BaseRetriever):
             # 统计该关键词命中的文件数量（通过节点的metadata中的source字段去重）
             unique_files = set()
             for node in nodes:
-                node_metadata = node.node.metadata if hasattr(node.node, "metadata") else {}
+                node_metadata = (
+                    node.node.metadata if hasattr(node.node, "metadata") else {}
+                )
                 source = node_metadata.get("source", "")
                 if source:
                     unique_files.add(source)
 
             file_count = len(unique_files)
             matches_count = len(nodes)
-            print(f"keyword: {keyword}, file_count: {file_count}, matches_count: {matches_count}")
+            print(
+                f"keyword: {keyword}, file_count: {file_count}, matches_count: {matches_count}"
+            )
             # 如果超过限制，过滤掉该关键词对应的所有节点
             if file_count > max_file_num or matches_count > max_matches_num:
                 filtered_keywords.append(keyword)
@@ -172,30 +176,30 @@ class KeywordVectorAppendRetriever(BaseRetriever):
         """Retrieve nodes given query."""
         # Get all keyword results (no filtering)
         keyword_nodes = self._keyword_retriever.retrieve(query_bundle)
-        
+
         # Get vector results
         vector_nodes = self._vector_retriever.retrieve(query_bundle)
-        
+
         # Apply reranker to vector results if available
         if vector_nodes and self._reranker:
             vector_nodes = self._reranker.postprocess_nodes(
                 vector_nodes, query_bundle=query_bundle
             )
-        
+
         # Filter vector results by similarity threshold
         filtered_vector_nodes = [
             node
             for node in vector_nodes
             if node.score is not None and node.score >= self._similarity_threshold
         ]
-        
+
         # Remove duplicates: track node IDs from vector results
         vector_node_ids = {node.node.node_id for node in filtered_vector_nodes}
-        
+
         # Filter keyword nodes by limits (file count and match count)
-        print("keyword_nodes: ",keyword_nodes[0].node.node_id)
+        print("keyword_nodes: ", keyword_nodes[0].node.node_id)
         keyword_nodes = self._filter_keyword_nodes_by_limits(keyword_nodes)
-        keyword_nodes = keyword_nodes[:self._similarity_top_k]
+        keyword_nodes = keyword_nodes[: self._similarity_top_k]
         # Add keyword nodes that are not already in vector results
         keyword_nodes_to_add = [
             node for node in keyword_nodes if node.node.node_id not in vector_node_ids
@@ -583,5 +587,8 @@ class RAGQueryEngine:
             Filtered list of nodes with score >= threshold
         """
         return [
-            node for node in nodes if (node.score is None) or (node.score is not None and node.score >= threshold)
+            node
+            for node in nodes
+            if (node.score is None)
+            or (node.score is not None and node.score >= threshold)
         ]

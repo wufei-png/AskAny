@@ -62,7 +62,11 @@ class WebOrRagAnswer(BaseModel):
 class DirectAnswerGenerator:
     """Generator for decomposing user queries into sub-problems."""
 
-    def __init__(self, llm: Optional[ChatOpenAI] = None, keyword_extractor: Optional[KeywordExtractorFromTFIDF] = None):
+    def __init__(
+        self,
+        llm: Optional[ChatOpenAI] = None,
+        keyword_extractor: Optional[KeywordExtractorFromTFIDF] = None,
+    ):
         """Initialize DirectAnswerGenerator.
 
         Args:
@@ -122,26 +126,30 @@ class DirectAnswerGenerator:
         prompts = get_prompts()
         result = self.structured_llm.invoke(
             [
-                SystemMessage(
-                    content=prompts.direct_answer_system
-                ),
+                SystemMessage(content=prompts.direct_answer_system),
                 HumanMessage(content=prompt),
             ]
         )
-        #assert result is DirectAnswerResult
-        assert isinstance(result, DirectAnswerResult), f"Expected DirectAnswerResult, got {type(result)}"
+        # assert result is DirectAnswerResult
+        assert isinstance(result, DirectAnswerResult), (
+            f"Expected DirectAnswerResult, got {type(result)}"
+        )
         result = cast(DirectAnswerResult, result)
-        
+
         # recheck can_direct_answer
         if result.can_direct_answer:
             keywords = self.keyword_extractor.extract_keywords_set(query)
-            #TODO 需要优化word_freq.txt 再使用
+            # TODO 需要优化word_freq.txt 再使用
             if keywords and len(keywords) > 0:
                 for keyword in keywords:
-                    frequency = self.keyword_extractor.get_frequency_in_freqfile(keyword)
+                    frequency = self.keyword_extractor.get_frequency_in_freqfile(
+                        keyword
+                    )
                     print(f"关键词 {keyword} 在word_freq.txt中出现，频率为 {frequency}")
                     if frequency <= settings.freq_in_rag_threshold:
-                        print(f"关键词 {keyword} 在word_freq.txt中出现，且频率小于10，我们推翻了llm的判断，需要进行网络搜索")
+                        print(
+                            f"关键词 {keyword} 在word_freq.txt中出现，且频率小于10，我们推翻了llm的判断，需要进行网络搜索"
+                        )
                         result.can_direct_answer = False
                         break
                 result.can_direct_answer = False
@@ -164,7 +172,11 @@ class DirectAnswerGenerator:
 class WebOrRagAnswerGenerator:
     """Generator for decomposing user queries into sub-problems."""
 
-    def __init__(self, llm: Optional[ChatOpenAI] = None, keyword_extractor: Optional[KeywordExtractorFromTFIDF] = None):
+    def __init__(
+        self,
+        llm: Optional[ChatOpenAI] = None,
+        keyword_extractor: Optional[KeywordExtractorFromTFIDF] = None,
+    ):
         """Initialize WebOrRagAnswerGenerator.
 
         Args:
@@ -226,15 +238,15 @@ class WebOrRagAnswerGenerator:
         prompts = get_prompts()
         result = self.structured_llm.invoke(
             [
-                SystemMessage(
-                    content=prompts.web_or_rag_system
-                ),
+                SystemMessage(content=prompts.web_or_rag_system),
                 HumanMessage(content=prompt),
             ]
         )
 
         # Type assertion to ensure result is WebOrRagAnswer for IDE type checking
-        assert isinstance(result, WebOrRagAnswer), f"Expected WebOrRagAnswer, got {type(result)}"
+        assert isinstance(result, WebOrRagAnswer), (
+            f"Expected WebOrRagAnswer, got {type(result)}"
+        )
         result = cast(WebOrRagAnswer, result)
 
         # recheck need_rag_search
@@ -244,20 +256,26 @@ class WebOrRagAnswerGenerator:
         if not result.need_rag_search:
             have_extracted_keywords = True
             keywords = self.keyword_extractor.extract_keywords_set(query)
-            if keywords and len(keywords) > 0:  # If keywords are extracted, set need_rag_search to True
+            if (
+                keywords and len(keywords) > 0
+            ):  # If keywords are extracted, set need_rag_search to True
                 logger.info(f"关键词提取有结果，我们推翻了llm的判断，需要进行RAG检索")
                 result.need_rag_search = True
-        
+
         # recheck need_web_search
         if result.need_rag_search and result.need_web_search:
             if have_extracted_keywords:
                 if keywords and len(keywords) > 0:
-                    print(f"关键词提取有结果，通常来讲这种情况是用户想要知道一些业务知识，而不是通用知识，所以不需要进行网络搜索")
+                    print(
+                        f"关键词提取有结果，通常来讲这种情况是用户想要知道一些业务知识，而不是通用知识，所以不需要进行网络搜索"
+                    )
                     result.need_web_search = False
             else:
                 keywords = self.keyword_extractor.extract_keywords_set(query)
                 if keywords and len(keywords) > 0:
-                    print(f"关键词提取有结果，通常来讲这种情况是用户想要知道一些业务知识，而不是通用知识，所以不需要进行网络搜索")
+                    print(
+                        f"关键词提取有结果，通常来讲这种情况是用户想要知道一些业务知识，而不是通用知识，所以不需要进行网络搜索"
+                    )
                     result.need_web_search = False
                 else:
                     print(f"关键词提取没有结果，我们不推翻llm的判断，需要进行网络搜索")
@@ -285,7 +303,7 @@ if __name__ == "__main__":
     model = settings.openai_model
     direct_answer = DirectAnswerGenerator()
     web_rag_answer_generator = WebOrRagAnswerGenerator()
-    query="什么是激活率？"
+    query = "什么是激活率？"
     result = direct_answer.generate(query)
     print(f"Result: {result}")
     print(f"Can direct answer: {result.can_direct_answer}")
@@ -300,18 +318,15 @@ if __name__ == "__main__":
         print("-" * 80)
     raise Exception("Stop here")
     result = web_rag_answer_generator.generate(
-            """在中美当前的关系下，普通人如何投资美股？"""
-        )
+        """在中美当前的关系下，普通人如何投资美股？"""
+    )
     print(f"在中美当前的关系下，普通人如何投资美股？Result: {result}")
     print(f"Need web search: {result.need_web_search}")
     print(f"Need rag search: {result.need_rag_search}")
     # print(f"Reasoning: {result.reasoning}")
     print("-" * 80)
-    
-    
-    result = web_rag_answer_generator.generate(
-            """k8s如何重启deployment？"""
-        )
+
+    result = web_rag_answer_generator.generate("""k8s如何重启deployment？""")
     print(f"k8s如何重启deployment？Result: {result}")
     print(f"Need web search: {result.need_web_search}")
     print(f"Need rag search: {result.need_rag_search}")

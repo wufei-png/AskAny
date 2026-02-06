@@ -16,10 +16,15 @@ from llama_index.core.schema import NodeWithScore
 from askany.ingest.keyword_extract_from_tfidf import KeywordExtractorFromTFIDF
 from askany.workflow.token_control import estimate_tokens
 
+
 class LocalFileSearchTool:
     """Tool for searching and extracting content from local files."""
 
-    def __init__(self, base_path: Optional[str] = None,keyword_extractor: Optional[KeywordExtractorFromTFIDF] = None):
+    def __init__(
+        self,
+        base_path: Optional[str] = None,
+        keyword_extractor: Optional[KeywordExtractorFromTFIDF] = None,
+    ):
         """Initialize LocalFileSearchTool.
 
         Args:
@@ -37,7 +42,9 @@ class LocalFileSearchTool:
         self.expand_context_ratio = settings.expand_context_ratio
         self.keyword_expand_ratio = settings.keyword_expand_ratio
 
-        if keyword_extractor is not None and isinstance(keyword_extractor, KeywordExtractorFromTFIDF):
+        if keyword_extractor is not None and isinstance(
+            keyword_extractor, KeywordExtractorFromTFIDF
+        ):
             self.keyword_extractor = keyword_extractor
         else:
             self.keyword_extractor = KeywordExtractorFromTFIDF()
@@ -108,14 +115,14 @@ class LocalFileSearchTool:
     ) -> Optional[Dict[str, any]]:
         """
         直接使用已知的行号来扩展上下文，而不需要重新查找文本。
-        
+
         Args:
             file_path: 文件路径
             line_num: 已知的行号
             expand_mode: 扩展模式，"ratio"（按比例扩展）或 "markdown"（提取markdown块）
             expand_ratio: 扩展比例（仅在expand_mode="ratio"时使用）
             expand_lines: 固定扩展行数（仅在expand_mode="ratio"时使用，优先级高于expand_ratio）
-            
+
         Returns:
             {file_path: str, start_line: int, end_line: int, content: str} 或 None
         """
@@ -204,7 +211,7 @@ class LocalFileSearchTool:
 
             # 确保行号在有效范围内
             start_line = max(1, min(start_line, len(lines)))
-            
+
             # 如果end_line为-1，返回从start_line到文件末尾的所有内容
             if end_line == -1:
                 end_line = len(lines)
@@ -304,9 +311,7 @@ class LocalFileSearchTool:
 
         # 移除空的关键字
         filtered_results = {
-            keyword: results
-            for keyword, results in filtered_results.items()
-            if results
+            keyword: results for keyword, results in filtered_results.items() if results
         }
 
         total_original = sum(len(results) for results in all_results.values())
@@ -440,7 +445,7 @@ class LocalFileSearchTool:
                 "content": content,
             }
 
-##TODO cache the search results
+    ##TODO cache the search results
     def search_by_keywords(
         self,
         keywords: List[str],
@@ -471,17 +476,14 @@ class LocalFileSearchTool:
         """
         if not keywords:
             return {}
-        
+
         # 初始化结果字典
         results = {keyword: [] for keyword in keywords}
-        
+
         # 构建包含所有关键字的正则表达式（用于快速过滤）
         escaped_keywords = [re.escape(keyword) for keyword in keywords]
-        combined_pattern = re.compile(
-            "|".join(escaped_keywords),
-            re.IGNORECASE
-        )
-        
+        combined_pattern = re.compile("|".join(escaped_keywords), re.IGNORECASE)
+
         # 为每个关键字创建单独的正则表达式，用于确定具体匹配的关键字
         # 这样可以在匹配的行中准确找到所有匹配的关键字
         keyword_patterns = {
@@ -492,7 +494,7 @@ class LocalFileSearchTool:
         # 只遍历所有文件一次
         # 用于统计每个keyword在所有文件中的总出现次数
         keyword_total_frequency: Dict[str, int] = {keyword: 0 for keyword in keywords}
-        
+
         for file_path in self.markdown_files:
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
@@ -502,7 +504,7 @@ class LocalFileSearchTool:
                 # 使用字典存储：行号 -> 匹配的关键字列表
                 matching_lines_keywords: Dict[int, List[str]] = {}
                 file_path_str = str(file_path)
-                
+
                 for i, line in enumerate(lines, start=1):
                     # 快速检查是否包含任何关键字
                     if combined_pattern.search(line):
@@ -513,7 +515,7 @@ class LocalFileSearchTool:
                                 matched_keywords.append(keyword)
                                 # 统计词频：每个keyword在所有文件中的总出现次数
                                 keyword_total_frequency[keyword] += 1
-                        
+
                         if matched_keywords:
                             # print(f"matched_keywords: {matched_keywords}")
                             matching_lines_keywords[i] = matched_keywords
@@ -538,7 +540,9 @@ class LocalFileSearchTool:
                     )
 
                     if not expanded:
-                        print(f"DEBUG: expand_context returned None for line_text='{line_text[:50]}...' at line_num={line_num} in file={file_path_str}")
+                        print(
+                            f"DEBUG: expand_context returned None for line_text='{line_text[:50]}...' at line_num={line_num} in file={file_path_str}"
+                        )
                         # 尝试直接使用已知的行号来扩展上下文
                         expanded = self._expand_context_by_line_num(
                             file_path_str,
@@ -548,69 +552,72 @@ class LocalFileSearchTool:
                             expand_lines=expand_lines,
                         )
                         if expanded:
-                            print(f"DEBUG: _expand_context_by_line_num succeeded for line_num={line_num}")
+                            print(
+                                f"DEBUG: _expand_context_by_line_num succeeded for line_num={line_num}"
+                            )
 
                     if expanded:
                         # 为每个匹配的keyword添加词频信息（在所有文件中的总词频）
                         for keyword in matched_keywords:
                             # 添加该keyword在所有文件中的总词频
-                            expanded['keyword_frequency'] = keyword_total_frequency[keyword]
+                            expanded["keyword_frequency"] = keyword_total_frequency[
+                                keyword
+                            ]
                             # 将结果添加到所有匹配的关键字中
                             results[keyword].append(expanded)
-                            
+
             except Exception as e:
                 print(f"Error searching in file {file_path}: {e}")
                 continue
-        
-        
+
         # 对每个关键字的结果，合并同一文件中重叠的结果
         for keyword in keywords:
             results[keyword] = self._merge_overlapping_results(results[keyword])
 
         # 根据文件数量和匹配数量限制过滤关键词结果
         results = self._filter_keywords_by_limits(results)
-        
+
         # 更新 keywords 列表，只保留过滤后仍然存在的结果中的关键词
         keywords = list(results.keys())
-        
-        
+
         # 对整体结果进行 token 限制过滤（所有关键字的结果一起估算）
         # max_tokens = settings.llm_max_tokens // 2
         max_tokens = settings.llm_max_tokens
         results = self._filter_all_results_by_tokens(results, max_tokens)
 
         return results
-    
-    
-    def _search_by_sliding_windows(self, tokens: List[str]) -> Optional[Dict[str, List[Dict[str, any]]]]:
+
+    def _search_by_sliding_windows(
+        self, tokens: List[str]
+    ) -> Optional[Dict[str, List[Dict[str, any]]]]:
         """
         核心函数：使用滑动窗口搜索关键字。
-        
+
         生成所有窗口大小>=1的滑动窗口，收集所有keywords，调用一次search_by_keywords，
         然后找到最长的有结果的窗口并返回其结果。
-        
+
         Args:
             tokens: 分词后的token列表
-            
+
         Returns:
             Dict[str, List[Dict[str, any]]]: 最长窗口的搜索结果，如果没找到返回None
         """
         # if len(tokens) < 2:
         #     return None
-        
+
         # 生成所有窗口大小>=2的滑动窗口，并记录每个keyword字符串对应的最大窗口大小
         all_keywords = []  # 所有窗口的keywords列表（用于一次性搜索）
         keyword_to_max_window = {}  # keyword_str -> max_window_size
-        
+
         # 窗口大小从2到len(tokens)
         for window_size in range(1, len(tokens) + 1):
             # 步长为1，尝试所有可能的滑动窗口位置
             for start_idx in range(len(tokens) - window_size + 1):
-                window_tokens = tokens[start_idx:start_idx + window_size]
+                window_tokens = tokens[start_idx : start_idx + window_size]
                 # 将窗口tokens转换为字符串作为keyword
-                #TODO use - and _ to join?
+                # TODO use - and _ to join?
                 keyword_str = " ".join(window_tokens)
-                
+
                 # 记录每个keyword对应的最大窗口大小
                 if keyword_str not in keyword_to_max_window:
                     keyword_to_max_window[keyword_str] = window_size
@@ -619,25 +626,25 @@ class LocalFileSearchTool:
                     # 更新最大窗口大小
                     if window_size > keyword_to_max_window[keyword_str]:
                         keyword_to_max_window[keyword_str] = window_size
-        
+
         if not all_keywords:
             return None
-        
+
         # 一次性调用search_by_keywords，传入所有keywords（去重后的）
         search_results = self.search_by_keywords(all_keywords)
-        
+
         # 检查是否有结果
         if not any(results for results in search_results.values()):
             return None
-        
+
         # 找到所有具有最大window_size的keywords
         best_window_size = 0
         best_keyword_strs = []
-        
+
         for keyword_str, results in search_results.items():
             if not results:
                 continue
-            
+
             # 获取这个keyword对应的窗口大小
             window_size = keyword_to_max_window.get(keyword_str, 0)
             if window_size > best_window_size:
@@ -645,19 +652,19 @@ class LocalFileSearchTool:
                 best_keyword_strs = [keyword_str]
             elif window_size == best_window_size:
                 best_keyword_strs.append(keyword_str)
-        
+
         if not best_keyword_strs:
             return None
-        
+
         # 如果只有一个keyword有最大window_size，直接返回
         if len(best_keyword_strs) == 1:
             return {best_keyword_strs[0]: search_results[best_keyword_strs[0]]}
-        
+
         # 如果有多个keyword，需要排序
         # 收集所有最大window_size的keyword的结果，并统计每个file_path的命中情况
         # file_path -> {matched_keywords: set, total_frequency: int, results_by_keyword: {keyword: result}}
         file_path_info = {}  # file_path -> {matched_keywords: set, total_frequency: int, results_by_keyword: dict}
-        
+
         # 收集所有最大window_size的keyword的结果
         for keyword_str in best_keyword_strs:
             for result in search_results[keyword_str]:
@@ -666,13 +673,13 @@ class LocalFileSearchTool:
                     file_path_info[file_path] = {
                         "matched_keywords": set(),
                         "total_frequency": 0,
-                        "results_by_keyword": {}
+                        "results_by_keyword": {},
                     }
                 # 添加这个keyword的结果
                 file_path_info[file_path]["results_by_keyword"][keyword_str] = result
                 # 添加这个keyword到匹配集合（只统计best_keyword_strs中的keywords）
                 file_path_info[file_path]["matched_keywords"].add(keyword_str)
-        
+
         # 计算每个file_path的所有命中keyword的词频总和
         # 每个keyword在所有文件中的总词频是固定的，可以从任意一个结果中获取
         for file_path, info in file_path_info.items():
@@ -685,17 +692,17 @@ class LocalFileSearchTool:
                     keyword_freq = keyword_results[0].get("keyword_frequency", 0)
                     total_freq += keyword_freq
             info["total_frequency"] = total_freq
-        
+
         # 排序：先按命中keyword数量降序，再按词频总和升序（少的在前）
         sorted_file_paths = sorted(
             file_path_info.items(),
-            key=lambda x: (-len(x[1]["matched_keywords"]), x[1]["total_frequency"])
+            key=lambda x: (-len(x[1]["matched_keywords"]), x[1]["total_frequency"]),
         )
-        
+
         # 重新构建结果字典，保持原有的格式 {keyword: [results]}
         # 按照排序后的顺序组织结果
         final_results = {}
-        max_num=settings.docs_similarity_top_k
+        max_num = settings.docs_similarity_top_k
         for file_path, info in sorted_file_paths:
             # 只返回最大window_size的keywords的结果
             for keyword_str in best_keyword_strs:
@@ -706,26 +713,28 @@ class LocalFileSearchTool:
                     result = info["results_by_keyword"][keyword_str]
                     if result not in final_results[keyword_str]:
                         final_results[keyword_str].append(result)
-                        max_num-=1
+                        max_num -= 1
                     if max_num <= 0:
                         return final_results
         return final_results
-    
-    def search_keyword_using_binary_algorithm(self, keywords: List[str]) -> Dict[str, List[Dict[str, any]]]:
+
+    def search_keyword_using_binary_algorithm(
+        self, keywords: List[str]
+    ) -> Dict[str, List[Dict[str, any]]]:
         """
         函数5: 使用滑动窗口算法搜索关键字。
-        
+
         使用传入的keywords列表，使用滑动窗口搜索（窗口大小>=2）。
-        
+
         Args:
             keywords: 关键词列表
-            
+
         Returns:
             Dict[str, List[Dict[str, any]]]: 关键词 -> 结果列表
         """
         if not keywords:
             return {}
-        
+
         # 使用滑动窗口搜索
         window_results = self._search_by_sliding_windows(keywords)
         if window_results is not None:
@@ -733,17 +742,19 @@ class LocalFileSearchTool:
             def _has_results(search_results: Dict[str, List[Dict[str, any]]]) -> bool:
                 """检查搜索结果是否非空"""
                 return any(results for results in search_results.values())
-            
+
             if _has_results(window_results):
                 # 对整体结果进行 token 限制过滤（所有关键字的结果一起估算）
                 # max_tokens = settings.llm_max_tokens // 2
                 max_tokens = settings.llm_max_tokens
-                window_results = self._filter_all_results_by_tokens(window_results, max_tokens)
+                window_results = self._filter_all_results_by_tokens(
+                    window_results, max_tokens
+                )
                 return window_results
-        
+
         # 如果没找到结果，返回空字典
         return {}
-        
+
     def _merge_overlapping_results(
         self, results: List[Dict[str, any]]
     ) -> List[Dict[str, any]]:
@@ -819,9 +830,7 @@ class LocalFileSearchTool:
             merged_results.extend(merged)
 
         # 去除相同文件名和相同内容的结果（保留第一个）
-        deduplicated_results = self._deduplicate_by_filename_and_content(
-            merged_results
-        )
+        deduplicated_results = self._deduplicate_by_filename_and_content(merged_results)
 
         return deduplicated_results
 
@@ -869,7 +878,7 @@ class LocalFileSearchTool:
             Resolved Path object
         """
         path = Path(file_path)
-        
+
         # If path is already absolute, check if it exists
         # If it exists, return it directly (regardless of base_path)
         # If it doesn't exist but is absolute, still return it (might be a valid path)
@@ -882,7 +891,7 @@ class LocalFileSearchTool:
             except (OSError, RuntimeError):
                 # Even if resolve() fails, return the absolute path as-is
                 return path
-        
+
         # Handle virtual paths (starting with / but relative to base_path)
         # These are typically returned by glob_search/grep_search tools
         # Only treat as virtual if it's not an absolute path (already handled above)
@@ -1136,7 +1145,6 @@ if __name__ == "__main__":
     #         print(f"    Content preview: {match['content'][:-1]}")
     # print("-" * 80)
 
-
     # print("Test 1: search_by_keywords")
     # keywords = ["ips start failed"]
     # result = tool.search_by_keywords(keywords, expand_mode="ratio", expand_ratio=5)
@@ -1149,7 +1157,7 @@ if __name__ == "__main__":
     #         print(f"    Lines: {match['start_line']}-{match['end_line']}")
     #         print(f"    Content preview: {match['content'][:-1]}")
     # print("-" * 80)
-    
+
     # print("Test 1: search_by_keywords")
     # keywords = ["ips start failed","检查一下ips的配置文件"]
     # result = tool.search_by_keywords(keywords, expand_mode="ratio", expand_ratio=5)
@@ -1162,8 +1170,6 @@ if __name__ == "__main__":
     #         print(f"    Lines: {match['start_line']}-{match['end_line']}")
     #         print(f"    Content preview: {match['content'][:-1]}")
     # print("-" * 80)
-    
-    
 
     # print("Test 1: search_by_keywords by markdown mode")
     # # keywords = ['ips', 'start', 'failed']
@@ -1182,7 +1188,7 @@ if __name__ == "__main__":
     # raise Exception("Stop here")
 
     print("Test 1: search_by_keywords by markdown mode")
-    keywords =["五分量"]
+    keywords = ["五分量"]
     result = tool.search_by_keywords(keywords)
     print(f"Search results for keywords {keywords}:")
     for keyword, matches in result.items():
@@ -1193,7 +1199,7 @@ if __name__ == "__main__":
             print(f"    Lines: {match['start_line']}-{match['end_line']}")
             # print(f"    Content preview: {match['content'][:-1]}")
     raise Exception("Stop here")
-    
+
     print("Test 1: search_by_keywords by markdown mode")
     keywords = ["ips start failed"]
     result = tool.search_by_keywords(keywords, expand_mode="markdown")
@@ -1206,8 +1212,7 @@ if __name__ == "__main__":
             print(f"    Lines: {match['start_line']}-{match['end_line']}")
             print(f"    Content preview: {match['content'][:-1]}")
     print("-" * 80)
-    
-    
+
     # Test find_text_line_range (if we have a test file)
     print("Test 2: find_text_line_range")
     # This would require an actual file to test, so we'll skip if file doesn't exist
