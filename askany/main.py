@@ -196,7 +196,6 @@ class SentenceTransformerEmbedding(BaseEmbedding):
         # Check if local_files_only should be used (from kwargs or auto-detect from path)
         local_files_only = kwargs.get("local_files_only", False)
         # Auto-detect: if model_name is an absolute path, use local_files_only
-        import os
 
         if os.path.isabs(model_name) and os.path.exists(model_name):
             local_files_only = True

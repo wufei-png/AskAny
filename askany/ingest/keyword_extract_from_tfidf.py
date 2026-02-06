@@ -4,7 +4,6 @@ import logging
 import pickle
 import sys
 import zipfile
-import shutil
 import os
 from pathlib import Path
 from typing import Dict, List, Optional, Set
@@ -137,7 +136,7 @@ class KeywordExtractorFromTFIDF:
                     extract_dir.mkdir(parents=True, exist_ok=True)
                     with zipfile.ZipFile(model_path, "r") as zip_ref:
                         zip_ref.extractall(extract_dir)
-                    logger.info(f"HanLP tokenizer extracted successfully")
+                    logger.info("HanLP tokenizer extracted successfully")
 
                 # Find the actual model directory inside extracted files
                 # Usually it's a subdirectory with the same name as the zip (without .zip)

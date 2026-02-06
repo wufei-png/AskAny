@@ -8,10 +8,8 @@ from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.response_synthesizers import ResponseMode
 from llama_index.core.retrievers import (
     BaseRetriever,
-    QueryFusionRetriever,
     VectorIndexRetriever,
 )
-from llama_index.core.retrievers.fusion_retriever import FUSION_MODES
 from llama_index.core.schema import NodeWithScore
 
 from askany.config import settings
@@ -89,7 +87,7 @@ class KeywordVectorAppendRetriever(BaseRetriever):
         # 只查找 keyword_nodes 中节点对应的关键词，避免遍历整个索引表
         # 收集所有需要查找的节点ID
         node_ids_to_find = {node.node.node_id for node in keyword_nodes}
-        print(f"node_ids_to_find: ", node_ids_to_find)
+        print("node_ids_to_find: ", node_ids_to_find)
         # with open("node_ids_to_find.txt", "w", encoding="utf-8") as f:  f.write(str(node_ids_to_find))
         # with open("keyword_table.txt", "w", encoding="utf-8") as f:  f.write(str(keyword_table))
         # 只遍历包含这些节点ID的关键词，构建反向映射：node_id -> [keywords]
@@ -102,7 +100,7 @@ class KeywordVectorAppendRetriever(BaseRetriever):
                     if node_id not in node_to_keywords:
                         node_to_keywords[node_id] = []
                     node_to_keywords[node_id].append(keyword)
-        print(f"node_to_keywords: ", node_to_keywords)
+        print("node_to_keywords: ", node_to_keywords)
         # 按关键词分组节点：keyword -> [nodes]
         keyword_to_nodes: Dict[str, List[NodeWithScore]] = {}
         nodes_without_keywords = []
@@ -120,7 +118,7 @@ class KeywordVectorAppendRetriever(BaseRetriever):
                     if keyword not in keyword_to_nodes:
                         keyword_to_nodes[keyword] = []
                     keyword_to_nodes[keyword].append(node)
-        print(f"keyword_to_nodes: ", keyword_to_nodes)
+        print("keyword_to_nodes: ", keyword_to_nodes)
         # 对每个关键词进行限制检查
         # 使用字典按node_id存储节点，避免重复（一个节点可能对应多个关键词）
         filtered_nodes_dict: Dict[str, NodeWithScore] = {}
@@ -164,7 +162,7 @@ class KeywordVectorAppendRetriever(BaseRetriever):
 
         # 转换为列表
         filtered_nodes = list(filtered_nodes_dict.values())
-        print(f"filtered_nodes: ", filtered_nodes)
+        print("filtered_nodes: ", filtered_nodes)
         if filtered_keywords:
             print(
                 f"Filtered {len(filtered_keywords)} keywords due to limits: {filtered_keywords}"
@@ -208,7 +206,7 @@ class KeywordVectorAppendRetriever(BaseRetriever):
             node.score = 1
         # Combine: vector results first (they are reranked and filtered), then keyword results
         combined_nodes = keyword_nodes_to_add + filtered_vector_nodes
-        print(f"combined_nodes: ", len(combined_nodes))
+        print("combined_nodes: ", len(combined_nodes))
         for node in combined_nodes:
             print(f"node: {node}")
         return combined_nodes

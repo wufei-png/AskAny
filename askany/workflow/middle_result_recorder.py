@@ -1,7 +1,7 @@
 """Module for recording and formatting middle results from workflow nodes."""
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from askany.config import settings
 
 

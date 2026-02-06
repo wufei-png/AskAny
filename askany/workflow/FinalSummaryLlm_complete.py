@@ -1,6 +1,5 @@
 """Final summary LLM calls for generating final answers."""
 
-import json
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -8,7 +7,6 @@ from typing import Dict, List, Optional, Tuple
 from llama_index.core.schema import NodeWithScore
 from openai import OpenAI
 from pydantic import BaseModel, Field
-from openai import OpenAI
 
 # Add project root to path to enable imports
 project_root = Path(__file__).parent.parent.parent

@@ -165,7 +165,7 @@ try:
 
     # Check if top result is more relevant
     top_node = reranked_nodes[0]
-    print(f"\n   Top reranked result:")
+    print("\n   Top reranked result:")
     print(f"   - Source: {top_node.node.metadata.get('source')}")
     print(f"   - Score: {top_node.score:.4f}")
     print(f"   - Text: {top_node.node.text[:60]}...")

@@ -18,7 +18,6 @@ from askany.config import settings
 from askany.ingest import VectorStoreManager
 from askany.rag import FAQQueryEngine
 from askany.rag.router import QueryRouter, QueryType
-from askany.workflow.SubProblemGenerator import SubProblemGenerator
 from askany.workflow.workflow_langgraph import AgentWorkflow, process_parallel_group
 from askany.workflow.workflow_filter import WorkflowFilter
 

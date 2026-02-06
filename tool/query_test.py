@@ -212,7 +212,7 @@ def main():
         host = settings.api_host
         if host == "0.0.0.0":
             host = "localhost"
-        base_url = f"http://172.20.25.225:38081"
+        base_url = "http://172.20.25.225:38081"
 
     # Check server health
     print("=" * 80)
