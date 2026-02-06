@@ -1,0 +1,54 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17-bookworm
+    container_name: askany-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: askany
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/initdb.d:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d askany"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dev:
+    image: ${ASKANY_DEV_IMAGE:-askany-dev:v2.0}
+    container_name: askany-dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - pip_cache:/root/.cache/pip
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: askany
+      NVIDIA_VISIBLE_DEVICES: "0"
+    stdin_open: true
+    tty: true
+    command: ["/bin/bash"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  postgres_data:
+  pip_cache:

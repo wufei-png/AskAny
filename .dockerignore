@@ -1,0 +1,15 @@
+.git
+.gitmodules
+.idea
+.vscode
+__pycache__
+*.py[cod]
+*.so
+*.log
+*.swp
+*.swo
+*.DS_Store
+.pytest_cache
+.coverage
+htmlcov
+node_modules

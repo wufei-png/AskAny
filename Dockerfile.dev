@@ -1,0 +1,67 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PIP_DISABLE_PIP_VERSION_CHECK=on \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+    # DEBIAN_FRONTEND=noninteractive	禁止 apt 等提示交互	Docker apt 安装
+    # PIP_DISABLE_PIP_VERSION_CHECK=on	关闭 pip 版本检查	简洁输出
+    # PYTHONDONTWRITEBYTECODE=1	不生成 .pyc 缓存	清洁镜像/文件夹
+    # PYTHONUNBUFFERED=1	实时输出 Python logs	Docker 日志、调试
+# Base tooling and Python 3.11
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        python3.11 \
+        python3.11-dev \
+        python3.11-venv \
+        python3-pip \
+        build-essential \
+        git \
+        curl \
+        wget \
+        ca-certificates \
+        pkg-config \
+        libpq-dev \
+        sudo \
+        locales \
+        zsh \
+        autojump \
+        fonts-powerline
+
+
+RUN  apt-get install -y --no-install-recommends \
+libpq-dev \
+postgresql-client \
+sudo
+
+RUN rm -rf /var/lib/apt/lists/*
+
+# Ensure Python 3.11 is the default python/python3
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+
+# Upgrade pip tooling and install uv
+RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    python -m pip install --no-cache-dir uv
+
+# Pre-install project dependencies with uv
+COPY pyproject.toml uv.lock /opt/askany/
+RUN cd /opt/askany && UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple uv sync --frozen
+ENV VIRTUAL_ENV=/opt/askany/.venv
+ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
+
+# Setup Oh My Zsh with plugins
+ENV ZSH=/root/.oh-my-zsh
+RUN git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git ${ZSH} && \
+    git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions ${ZSH}/custom/plugins/zsh-autosuggestions && \
+    git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting ${ZSH}/custom/plugins/zsh-syntax-highlighting
+
+COPY docker/dev/zshrc /root/.zshrc
+WORKDIR /workspace
+
+# Sync dependencies with uv
+RUN cd /opt/askany && uv sync
+
+# Default shell
+CMD ["/bin/zsh"]
+
