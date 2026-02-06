@@ -1,0 +1,25 @@
+# Roadmap
+
+- **English Keyword Translation**
+- **Front-End Stop Button Logic Support**
+- **Improved Question-Answering Capabilities**
+- **Long-Term Memory Support**
+- **Create Agent: SummarizationMiddleware Tool Auto-Deletion of Irrelevant Messages**
+- **Markdown Optimization**: Use an alternative parser for files over a certain size without headers `#`
+- **Markdown Optimization**: Support parsing of link jumps `@` [GitHub Link](https://github.com/PromtEngineer/agentic-file-search)
+- **Deep Search for FAQ**: Implement cascading search for `faq.md` [dev_readme/faq.md](dev_readme/faq.md#faq)
+- **Support for Mode Switching**: Auto/FAQ/Docs/Code mode toggle
+- **Stream Mode Support**
+- **Human-in-the-Loop Integration**
+- **Support for Multiple Document Formats**: docs, docx, pdf, html, yaml
+- **Hybrid Search (BM25 + Vector Search)**
+- **PGVector Support for Chinese and zhparser**: PGVectorStore hybrid_search, text_search_config configuration
+- **LlamaIndex Proposition Parser Support**: Integration with [arxiv.org paper](https://arxiv.org/pdf/2312.06648), LlamaIndex Tutorial [Levels of Text Splitting](https://github.com/FullStackRetrieval-com/RetrievalTutorials/blob/a4570f3c4883eb9b835b0ee18990e62298f518ef/tutorials/LevelsOfTextSplitting/5_Levels_Of_Text_Splitting.ipynb)
+- **Test Set Construction**: Question Generation (Based on LlamaIndex evaluation framework) [Usage Pattern](https://developers.llamaindex.ai/python/framework/module_guides/evaluating/usage_pattern#question-generation)
+- **Keyword Extraction**: Deep learning-based sequence labeling (Paddle Mode / BiGRU-CRF, etc.)
+- **Metrics Addition**
+- **Support for @Mention Users**: Allow referencing users' personal knowledge bases, with fallback to human intervention if the knowledge base does not exist. Integrate with WeChat API.
+- **FAQ Iteration Process**: Mark all Q&A as "Unprocessed" for manual review. If the response is unsatisfactory, mark it as "Completely Incorrect" or "Partially Incorrect." For completely incorrect answers, manually input the correct response. For partially incorrect answers, highlight errors and have a large model summarize the correct answer. Upon approval, the response is added to the knowledge base, and the document is switched to edit mode.
+- **Metadata Filter Optimization**: Use `SQLTableRetrieverQueryEngine` for optimized metadata queries. Metadata indexed. [HNSW Table Structure](dev_readme/hnsw.md)
+- **Support for Pulling from Internal GitLab**
+- **Dynamic Agent Launch**: Launch multiple agents in parallel and dynamically decide when to do so.

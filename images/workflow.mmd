@@ -1,0 +1,34 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	direct_answer_check(direct_answer_check)
+	web_or_rag_check(web_or_rag_check)
+	rag_retrieval(rag_retrieval)
+	analyze_relevance(analyze_relevance)
+	process_no_relevant(process_no_relevant)
+	process_sub_query(process_sub_query)
+	expand_context(expand_context)
+	generate_final_answer(generate_final_answer)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> direct_answer_check;
+	analyze_relevance -. &nbsp;incomplete&nbsp; .-> expand_context;
+	analyze_relevance -. &nbsp;complete&nbsp; .-> generate_final_answer;
+	analyze_relevance -. &nbsp;no_relevant&nbsp; .-> process_no_relevant;
+	direct_answer_check -. &nbsp;direct_answer&nbsp; .-> __end__;
+	direct_answer_check -. &nbsp;continue&nbsp; .-> web_or_rag_check;
+	expand_context --> analyze_relevance;
+	process_no_relevant -. &nbsp;search&nbsp; .-> analyze_relevance;
+	process_no_relevant -. &nbsp;error&nbsp; .-> generate_final_answer;
+	process_no_relevant -. &nbsp;sub_query&nbsp; .-> process_sub_query;
+	process_sub_query --> generate_final_answer;
+	rag_retrieval --> analyze_relevance;
+	web_or_rag_check -. &nbsp;direct_answer&nbsp; .-> generate_final_answer;
+	web_or_rag_check -. &nbsp;rag&nbsp; .-> rag_retrieval;
+	generate_final_answer --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
