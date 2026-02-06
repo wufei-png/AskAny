@@ -2,7 +2,7 @@
 
 [中文版](README_CN.md) | English
 
-A Chinese-optimized RAG (Retrieval-Augmented Generation) Q&A assistant for operations, development, and testing teams.
+A Chinese-optimized RAG (Retrieval-Augmented Generation) QA assistant for operations, development, and testing teams.
 
 ## Architecture Overview
 
