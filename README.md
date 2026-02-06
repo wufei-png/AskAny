@@ -10,9 +10,38 @@ A Chinese-optimized RAG (Retrieval-Augmented Generation) Q&A assistant for opera
 
 ![Manual Workflow Architecture](images/workflow.png)
 
+**Example Response in OpenWebUI:**
+
+![Manual Workflow Example](images/quest2.png)
+
 ### Automatic Agent Mode
 
 ![Automatic Agent Architecture](images/general_agent.png)
+
+**Example Response in OpenWebUI:**
+
+![Automatic Agent Example](images/quest1.png)
+
+### Output Structure
+
+AskAny's responses in OpenWebUI consist of three core components:
+
+1. **Tool Call Flow**
+   - Displays the sequence of tool invocations during agent execution
+   - Shows the usage of each tool (RAG retrieval, web search, local file search, etc.)
+   - Helps users understand how the system progressively gathers information to answer questions
+
+2. **Summary Answer**
+   - The final answer generated based on retrieved information
+   - Integrates results from multiple retrieval rounds and tool calls
+   - Provides clear and accurate response content
+
+3. **Reference Documents**
+   - Lists the source documents used to generate the answer
+   - Includes metadata such as document titles and source paths
+   - Enables users to trace answer sources and verify information reliability
+
+This structured output format ensures traceability and transparency, allowing users to clearly understand how the system gathers information and generates answers.
 
 ## Features
 
