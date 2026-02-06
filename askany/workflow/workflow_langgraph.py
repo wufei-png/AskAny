@@ -1311,7 +1311,7 @@ class AgentWorkflow:
         result_parts = []
         for qa_pair in all_qa_context:
             result_parts.append(f"问题: {qa_pair['query']}\n回答: {qa_pair['answer']}")
-        final_answer = f"基于以下子问题的处理结果：\n\n" + "\n\n".join(result_parts)
+        final_answer = "基于以下子问题的处理结果：\n\n" + "\n\n".join(result_parts)
         return {
             **state,
             "inner_previous_qa_context": all_qa_context,

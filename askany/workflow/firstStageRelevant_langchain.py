@@ -4,10 +4,8 @@ import re
 import sys
 from pathlib import Path
 from typing import Optional, cast
-from logging import getLogger
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from numpy import False_
 from pydantic import BaseModel, Field
 
 project_root = Path(__file__).parent.parent.parent
@@ -259,7 +257,7 @@ class WebOrRagAnswerGenerator:
             if (
                 keywords and len(keywords) > 0
             ):  # If keywords are extracted, set need_rag_search to True
-                logger.info(f"关键词提取有结果，我们推翻了llm的判断，需要进行RAG检索")
+                logger.info("关键词提取有结果，我们推翻了llm的判断，需要进行RAG检索")
                 result.need_rag_search = True
 
         # recheck need_web_search
@@ -267,18 +265,18 @@ class WebOrRagAnswerGenerator:
             if have_extracted_keywords:
                 if keywords and len(keywords) > 0:
                     print(
-                        f"关键词提取有结果，通常来讲这种情况是用户想要知道一些业务知识，而不是通用知识，所以不需要进行网络搜索"
+                        "关键词提取有结果，通常来讲这种情况是用户想要知道一些业务知识，而不是通用知识，所以不需要进行网络搜索"
                     )
                     result.need_web_search = False
             else:
                 keywords = self.keyword_extractor.extract_keywords_set(query)
                 if keywords and len(keywords) > 0:
                     print(
-                        f"关键词提取有结果，通常来讲这种情况是用户想要知道一些业务知识，而不是通用知识，所以不需要进行网络搜索"
+                        "关键词提取有结果，通常来讲这种情况是用户想要知道一些业务知识，而不是通用知识，所以不需要进行网络搜索"
                     )
                     result.need_web_search = False
                 else:
-                    print(f"关键词提取没有结果，我们不推翻llm的判断，需要进行网络搜索")
+                    print("关键词提取没有结果，我们不推翻llm的判断，需要进行网络搜索")
                     result.need_web_search = True
 
         return result

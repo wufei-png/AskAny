@@ -10,12 +10,10 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import textwrap as tw
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
-from askany.workflow.workflow_langgraph import AgentState
 from askany.rag.router import QueryRouter, QueryType
 from openai import APIStatusError
 from langchain.agents import create_agent
@@ -45,10 +43,8 @@ from askany.workflow.FinalSummaryLlm_langchain import (
     extract_docs_references,
     format_docs_references,
 )
-from logging import getLogger
 import logging
 import sys
-from tool.query_test import send_query
 
 logger = logging.getLogger(__name__)
 logger.setLevel(
@@ -61,7 +57,6 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 from pydantic import BaseModel, Field
-from typing import Optional
 
 
 class FinalSummaryResponse(BaseModel):
@@ -81,7 +76,6 @@ class FinalSummaryResponse(BaseModel):
 def initialize_components():
     """Initialize LLM, embedding model, vector store, and router."""
     from askany.main import (
-        SentenceTransformerEmbedding,
         get_device,
         initialize_llm,
     )
@@ -98,7 +92,7 @@ def initialize_components():
         vector_store_manager.initialize_faq_index()
         vector_store_manager.initialize_docs_index()
         # logger.info("Using separate indexes for FAQ and docs")
-    except Exception as e:
+    except Exception:
         # Fallback to legacy single index
         # logger.info(f"Separate indexes not available, using legacy index: {e}")
         vector_store_manager.initialize()
@@ -117,7 +111,7 @@ def initialize_components():
     try:
         web_search_tool = WebSearchTool()
         # logger.info("Web search tool initialized successfully.")
-    except Exception as e:
+    except Exception:
         # logger.info(f"WebSearchTool not available: {e}")
         web_search_tool = None
 
@@ -179,10 +173,6 @@ def create_rag_tool(
     def rag_search(query: str) -> str:
         """RAG search tool."""
         from askany.rag.query_parser import parse_query_filters
-        from askany.rag.router import QueryType
-        from llama_index.core.schema import TextNode
-        import os
-        import re
 
         query_type = "auto"  # 写死auto
         # Parse query filters
@@ -857,15 +847,16 @@ def create_agent_with_tools(
             max_file_size_mb=10,  # Skip files larger than 10MB to avoid memory issues
         ),
     ]
-    from langchain.agents.structured_output import ProviderStrategy
 
     # Create cache instance for graph execution caching
     # Note: InMemoryCache 是 LangGraph 的图执行缓存，用于缓存节点执行结果
     # 对于"相同问题直接返回答案"的优化，请使用 QuestionAnswerCache（在 invoke_with_retry 中自动使用）
     cache = InMemoryCache()
+    # Get the actual prompt string (agent_system_prompt is a function, but system_prompt needs a string)
+    prompts = get_prompts()
     agent = create_agent(
         model=chat_llm,
-        system_prompt=agent_system_prompt,
+        system_prompt=prompts.agent_system_prompt,
         tools=tools,
         middleware=middleware_list,
         # debug=True,
@@ -1122,7 +1113,7 @@ def answer_test(query_list=None, multi_turn_conversations=None):
                 logger.info(f"Time taken: {time_end - time_start:.2f} seconds")
                 logger.info("=" * 80)
 
-            except Exception as e:
+            except Exception:
                 # logger.info(f"\n❌ Error processing question: {e}\n")
                 import traceback
 
@@ -1177,7 +1168,7 @@ def answer_test(query_list=None, multi_turn_conversations=None):
                     # if "messages" in result:
                     #     messages = result["messages"]
                     messages.append({"role": "assistant", "content": agent_response})
-                except Exception as e:
+                except Exception:
                     # logger.info(f"\n❌ Error in turn {turn_idx}: {e}\n")
                     import traceback
 
@@ -1244,7 +1235,7 @@ def test_agent_ui():
         except KeyboardInterrupt:
             # logger.info("\n\nGoodbye!")
             break
-        except Exception as e:
+        except Exception:
             # logger.info(f"\nError: {e}\n")
             import traceback
 

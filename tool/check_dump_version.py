@@ -96,7 +96,7 @@ def main():
             dump_files = list(dump_dir.glob("*.dump"))
 
     if not dump_files:
-        print(f"❌ 未找到 dump 文件")
+        print("❌ 未找到 dump 文件")
         if args.dump_file:
             print(f"   路径: {args.dump_file}")
         else:

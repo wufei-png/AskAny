@@ -5,12 +5,10 @@ from typing import Any, List, Optional, Set, Union
 from llama_index.core import KeywordTableIndex
 from llama_index.core.indices.keyword_table.base import BaseKeywordTableIndex
 from llama_index.core.indices.keyword_table.retrievers import (
-    BaseKeywordTableRetriever,
     KeywordTableGPTRetriever,
 )
 from llama_index.core.llms import LLM
 from llama_index.core.prompts import BasePromptTemplate
-from llama_index.core.schema import BaseNode
 
 from askany.ingest.keyword_extract_wrapper import KeywordExtractorWrapper
 from askany.config import settings
@@ -100,7 +98,6 @@ class CustomKeywordTableIndex(KeywordTableIndex):
 
         Override to use CustomKeywordTableGPTRetriever for default mode.
         """
-        from llama_index.core.base.base_retriever import BaseRetriever
         from llama_index.core.indices.keyword_table.base import (
             KeywordTableRetrieverMode,
         )

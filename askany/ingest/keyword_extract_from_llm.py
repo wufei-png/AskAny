@@ -260,7 +260,7 @@ class KeywordExtractorFromLLM:
         # - 操作 语义过于宽泛，与大量场景相关，应过滤掉。
         # """)
 
-        return tw.dedent(f"""\
+        return tw.dedent("""\
 你是关键词过滤助手。
 
 你的任务是：  

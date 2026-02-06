@@ -18,7 +18,6 @@ from askany.config import settings
 from askany.prompts.prompt_manager import get_prompts
 from askany.workflow.token_control import (
     check_and_truncate_messages,
-    truncate_nodes_by_tokens,
 )
 
 # Linux 文件系统中最基础的禁止字符
