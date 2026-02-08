@@ -7,6 +7,7 @@
 - **Create Agent: SummarizationMiddleware Tool Auto-Deletion of Irrelevant Messages**
 - **Markdown Optimization**: Use an alternative parser for files over a certain size without headers `#`
 - **Markdown Optimization**: Support parsing of link jumps `@` [GitHub Link](https://github.com/PromtEngineer/agentic-file-search)
+- RefineDocumentsChain MapRerankDocumentsChain
 - **Deep Search for FAQ**: Implement cascading search for `faq.md` [dev_readme/faq.md](dev_readme/faq.md#faq)
 - **Support for Mode Switching**: Auto/FAQ/Docs/Code mode toggle
 - **Stream Mode Support**
