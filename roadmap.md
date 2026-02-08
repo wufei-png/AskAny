@@ -25,3 +25,4 @@
 - **Support for Pulling from Internal GitLab**
 - **Dynamic Agent Launch**: Launch multiple agents in parallel and dynamically decide when to do so.
 - use the topk layers hnfs keywords to decide whether in the certain field of faq or docs
+- Now I found the `opencode web` is enough, but have full access of the computer file system, the limition need to be solved.
