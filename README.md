@@ -4,6 +4,8 @@
 
 A Chinese-optimized RAG (Retrieval-Augmented Generation) QA assistant for operations, development, and testing teams.
 
+> 📖 **Blog Post**: [AskAny: An Intelligent Q&A Assistant for DevOps Teams](https://zhuanlan.zhihu.com/p/2004009140419310603) (Chinese) - Detailed introduction to project background, technology choices, and architecture design
+
 ## Architecture Overview
 
 ### Manual Workflow Mode
