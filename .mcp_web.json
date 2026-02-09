@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "askany-rag": {
+      "url": "http://localhost:8001",
+      "transport": "http"
+    }
+  }
+}

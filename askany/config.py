@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # Database
     postgres_host: str = "localhost"
     postgres_port: int = 5432
-    postgres_user: str = "root"
+    postgres_user: str = "wufei"
     postgres_password: str = "123456"
     postgres_db: str = "askany"
     log_level: str = "DEBUG"
