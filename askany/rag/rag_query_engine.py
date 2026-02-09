@@ -1,6 +1,6 @@
 """RAG query engine for document retrieval and generation."""
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from llama_index.core import KeywordTableIndex, QueryBundle, VectorStoreIndex
 from llama_index.core.llms import LLM
@@ -365,6 +365,25 @@ class RAGQueryEngine:
             response_text += self._format_docs_references(references)
 
         return response_text
+
+    def retrieve_with_scores(
+        self, query_str: str, metadata_filters: Optional[Dict[str, str]] = None
+    ) -> Tuple[List, float]:
+        """Retrieve relevant documents and return the top score.
+
+        Args:
+            query_str: User query string (may contain @tag filters)
+            metadata_filters: Optional metadata filters dict (if None, will parse from query)
+
+        Returns:
+            Tuple of (list of retrieved nodes, top score)
+        """
+
+        nodes = self.retrieve(query_str, metadata_filters)
+
+        # Get the top score (highest similarity score)
+        top_score = nodes[0].score if nodes and nodes[0].score is not None else 0.0
+        return nodes, top_score
 
     def retrieve(
         self, query_str: str, metadata_filters: Optional[Dict[str, str]] = None

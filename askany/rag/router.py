@@ -3,7 +3,7 @@
 from copy import deepcopy
 from enum import Enum
 from logging import getLogger
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from llama_index.core.schema import NodeWithScore, TextNode
 
@@ -54,13 +54,13 @@ class QueryRouter:
     def __init__(
         self,
         docs_query_engine: RAGQueryEngine,
-        faq_query_engine: Optional[FAQQueryEngine] = None,
+        faq_query_engine: Optional[Union[FAQQueryEngine, RAGQueryEngine]] = None,
     ):
         """Initialize query router.
 
         Args:
             docs_query_engine: Query engine for documentation
-            faq_query_engine: Query engine for FAQ (optional, uses ensemble retriever)
+            faq_query_engine: Query engine for FAQ (optional, can be FAQQueryEngine or RAGQueryEngine)
         """
         self.docs_query_engine = docs_query_engine
         self.faq_query_engine = faq_query_engine

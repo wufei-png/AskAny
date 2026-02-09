@@ -1,0 +1,93 @@
+uv run python -m askany_mcp.server_http --host 0.0.0.0 --port 8001
+2026-02-10 02:01:44,194 - askany-mcp-http - INFO - Starting AskAny RAG MCP HTTP server on 0.0.0.0:8001
+2026-02-10 02:01:44,194 - askany-mcp-http - INFO - RAG components will be initialized lazily on first tool call
+2026-02-10 02:01:44,194 - askany-mcp-http - INFO - SSE endpoint: http://0.0.0.0:8001/sse
+2026-02-10 02:01:44,194 - askany-mcp-http - INFO - Health check: http://0.0.0.0:8001/health
+INFO:     Started server process [2780780]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     127.0.0.1:58090 - "GET /.well-known/oauth-authorization-server HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58098 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+2026-02-10 02:02:04,948 - askany-mcp-http - INFO - New SSE connection from 127.0.0.1
+INFO:     127.0.0.1:58112 - "GET /sse HTTP/1.1" 500 Internal Server Error
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/uvicorn/protocols/http/h11_impl.py", line 403, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/uvicorn/middleware/proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/applications.py", line 107, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/routing.py", line 78, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/routing.py", line 75, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/home/wufei/github.com/wufei-png/AskAny/askany_mcp/server_http.py", line 258, in handle_sse
+    async with SseServerTransport("/messages") as transport:
+TypeError: 'SseServerTransport' object does not support the asynchronous context manager protocol
+INFO:     127.0.0.1:58126 - "GET /.well-known/oauth-authorization-server HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58128 - "POST /sse HTTP/1.1" 405 Method Not Allowed
+2026-02-10 02:02:08,186 - askany-mcp-http - INFO - New SSE connection from 127.0.0.1
+INFO:     127.0.0.1:58136 - "GET /sse HTTP/1.1" 500 Internal Server Error
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/uvicorn/protocols/http/h11_impl.py", line 403, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/uvicorn/middleware/proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/applications.py", line 107, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/routing.py", line 78, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/wufei/github.com/wufei-png/AskAny/.venv/lib/python3.11/site-packages/starlette/routing.py", line 75, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/home/wufei/github.com/wufei-png/AskAny/askany_mcp/server_http.py", line 258, in handle_sse
+    async with SseServerTransport("/messages") as transport:
+TypeError: 'SseServerTransport' object does not support the asynchronous context manager protocol
