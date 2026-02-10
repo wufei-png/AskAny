@@ -1,8 +1,9 @@
 """Configuration management for AskAny."""
 
+import re
 from typing import List, Literal, Optional
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -12,6 +13,35 @@ class Settings(BaseSettings):
     # Language setting for prompts
     # Options: "cn" (Chinese), "en" (English)
     language: Literal["cn", "en"] = "cn"
+
+    @field_validator("language", mode="before")
+    @classmethod
+    def normalize_language(cls, v: str) -> str:
+        """Normalize language from locale format (e.g., 'en_US:en' -> 'en', 'zh_CN:zh' -> 'cn')."""
+        if not isinstance(v, str):
+            return v
+
+        # Handle locale format like "en_US:en" or "zh_CN:zh"
+        # Extract the language code before the colon or underscore
+        if ":" in v:
+            v = v.split(":")[0]
+        if "_" in v:
+            lang_code = v.split("_")[0].lower()
+        else:
+            lang_code = v.lower()
+
+        # Map common language codes to our format
+        if lang_code.startswith("zh") or lang_code == "cn":
+            return "cn"
+        elif lang_code.startswith("en"):
+            return "en"
+
+        # If it's already "cn" or "en", return as is
+        if lang_code in ("cn", "en"):
+            return lang_code
+
+        # Default to "cn" if unrecognized
+        return "cn"
 
     device: str = "cuda"
     # Database
