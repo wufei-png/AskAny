@@ -1,15 +1,9 @@
 {
   "mcpServers": {
-    "askany-rag": {
-      "command": "uv",
-      "args": [
-        "--directory",
-        "/home/wufei/github.com/wufei-png/AskAny",
-        "run",
-        "python",
-        "-m",
-        "askany_mcp.server"
-      ]
+    "docs_rag_search": {
+      "type": "remote",
+      "url": "http://ip:38081/sse",
+      "enabled": true
     }
   }
 }
