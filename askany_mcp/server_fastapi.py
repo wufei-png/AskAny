@@ -250,6 +250,7 @@ async def lifespan(app: FastAPI):
 
 
 # Create FastAPI app
+
 app = FastAPI(
     title="AskAny RAG MCP Server",
     version="0.1.0",
@@ -296,13 +297,13 @@ def main():
 
     parser = argparse.ArgumentParser(description="AskAny RAG MCP FastAPI Server")
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind to")
-    parser.add_argument("--port", type=int, default=8001, help="Port to bind to")
+    parser.add_argument("--port", type=int, default=38081, help="Port to bind to")
     args = parser.parse_args()
 
     logger.info(f"Starting AskAny RAG MCP FastAPI server on {args.host}:{args.port}")
     logger.info(f"SSE endpoint: http://{args.host}:{args.port}/sse")
     logger.info(f"Health check: http://{args.host}:{args.port}/health")
-
+    _ensure_initialized()  # Initialize RAG components
     uvicorn.run(app, host=args.host, port=args.port)
 
 
