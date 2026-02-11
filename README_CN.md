@@ -405,6 +405,48 @@ python tool/import_vector_data.py --input-dir vector_data --drop-existing
 
 ## 部署
 
+### OpenCode 集成（推荐）
+
+AskAny 可以与 OpenCode 集成，通过 MCP（Model Context Protocol）协议，在利用 OpenCode 原生 grep 和本地文件搜索能力的同时，使用 AskAny 的 RAG 功能。
+
+**核心特性：**
+- 通过 OpenCode 提供基于 GUI 的 Web 界面
+- 原生 grep 和本地文件搜索工具
+- MCP 集成以访问 AskAny RAG 能力
+- 文件夹级别的权限控制
+- **最推荐的解决方案** - 结合两者优势
+
+**设置步骤：**
+
+详细说明请参考 [mcp.md](mcp.md)。
+
+**快速开始：**
+
+1. 克隆 OpenCode 仓库：
+```bash
+git clone https://github.com/wufei-png/opencode.git
+cd opencode
+git checkout wf/dev
+```
+
+2. 构建并部署 OpenCode（使用您的网络 IP）：
+```bash
+# 终端 1: 启动服务器
+bun dev serve --hostname YOUR_IP --port 4096
+
+# 终端 2: 启动 Web 应用
+VITE_HOSTNAME=YOUR_IP bun run --cwd packages/app dev
+```
+
+3. 启动 AskAny MCP 服务器：
+```bash
+uv run python -m askany_mcp.server_fastapi
+```
+
+4. 配置 OpenCode：在 `~/.config/opencode/opencode.json` 中添加 MCP 服务器配置，并设置 `allowed_folders` 进行权限控制。
+
+5. 测试：使用 `askany_mcp/test_fastapi_client.py` 验证集成。
+
 ### OpenWebUI 集成
 
 AskAny 可以与 OpenWebUI 集成，提供基于 Web 的聊天界面。
@@ -458,8 +500,10 @@ python agent/api_serve.py
 
 ## 相关资源
 
+- [OpenCode 集成指南](mcp.md) - 详细的 OpenCode MCP 集成说明
 - [Proxyless LLM WebSearch](https://github.com/wufei-png/proxyless-llm-websearch/tree/wf/company)
 - [OpenWebUI](https://github.com/wufei-png/open-webui/tree/wf/dev)
+- [OpenCode 仓库](https://github.com/wufei-png/opencode/tree/wf/dev)
 
 ## 许可证
 
