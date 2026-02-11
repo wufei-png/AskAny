@@ -404,6 +404,48 @@ See [roadmap.md](roadmap.md) for planned features and improvements.
 
 ## Deployment
 
+### OpenCode Integration (Recommended)
+
+AskAny can be integrated with OpenCode to leverage OpenCode's native grep and local file search capabilities alongside AskAny's RAG functionality through MCP (Model Context Protocol).
+
+**Key Features:**
+- GUI-based web interface via OpenCode
+- Native grep and local file search tools
+- MCP integration for AskAny RAG capabilities
+- Folder-level permission control
+- **Most recommended solution** - combines best of both worlds
+
+**Setup Steps:**
+
+See [mcp.md](mcp.md) for detailed OpenCode integration instructions.
+
+**Quick Start:**
+
+1. Clone OpenCode repository:
+```bash
+git clone https://github.com/wufei-png/opencode.git
+cd opencode
+git checkout wf/dev
+```
+
+2. Build and deploy OpenCode (use your network IP):
+```bash
+# Terminal 1: Start server
+bun dev serve --hostname YOUR_IP --port 4096
+
+# Terminal 2: Start web app
+VITE_HOSTNAME=YOUR_IP bun run --cwd packages/app dev
+```
+
+3. Start AskAny MCP server:
+```bash
+uv run python -m askany_mcp.server_fastapi
+```
+
+4. Configure OpenCode: Add MCP server to `~/.config/opencode/opencode.json` and set `allowed_folders` for permission control.
+
+5. Test: Use `askany_mcp/test_fastapi_client.py` to verify the integration.
+
 ### OpenWebUI Integration
 
 AskAny can be integrated with OpenWebUI for a web-based chat interface.
@@ -457,8 +499,10 @@ The service will start on `http://localhost:8800` by default. The search endpoin
 
 ## Related Resources
 
+- [OpenCode Integration Guide](mcp.md) - Detailed OpenCode MCP integration instructions
 - [Proxyless LLM WebSearch](https://github.com/wufei-png/proxyless-llm-websearch/tree/wf/company)
 - [OpenWebUI](https://github.com/wufei-png/open-webui/tree/wf/dev)
+- [OpenCode Repository](https://github.com/wufei-png/opencode/tree/wf/dev)
 
 ## Star History
 
