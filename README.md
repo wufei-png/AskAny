@@ -459,7 +459,7 @@ cd open-webui
 git checkout wf/dev  # Use the custom branch
 ```
 
-Then follow the instructions to deploy OpenWebUI, refer to the [OpenWebUI Development Documentation](https://docs.openwebui.com/getting-started/advanced-topics/development/).
+Then follow the instructions to deploy OpenWebUI, refer to the [OpenWebUI Development Documentation](https://docs.openwebui.com/getting-started/development).
 
 My deployment operations are:
 - the frontend: ```npm run dev```

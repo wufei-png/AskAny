@@ -460,7 +460,7 @@ cd open-webui
 git checkout wf/dev  # 使用自定义分支
 ```
 
-然后按照说明部署 OpenWebUI，参考 [OpenWebUI 开发文档](https://docs.openwebui.com/getting-started/advanced-topics/development/)。
+然后按照说明部署 OpenWebUI，参考 [OpenWebUI 开发文档](https://docs.openwebui.com/getting-started/development)。
 
 我的部署操作：
 - 前端：```npm run dev```
