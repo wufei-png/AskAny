@@ -2,7 +2,7 @@
 
 - **English Keyword Translation**
 - **Front-End Stop Button Logic Support**
-- **Improved Question-Answering Capabilities**
+- **Improved Question-Answering Capabilities such as return the question instead of the incorrect answer**
 - **Long-Term Memory Support**
 - **Create Agent: SummarizationMiddleware Tool Auto-Deletion of Irrelevant Messages**
 - **Markdown Optimization**: Use an alternative parser for files over a certain size without headers `#`
@@ -25,5 +25,7 @@
 - **Support for Pulling from Internal GitLab**
 - **Dynamic Agent Launch**: Launch multiple agents in parallel and dynamically decide when to do so.
 - use the topk layers hnfs keywords to decide whether in the certain field of faq or docs
-- Now I found the `opencode web` is enough, but have full access of the computer file system, the limition need to be solved.
 - memory bank, not only rag similarity search, but also memory bank for long term memory, short term memory, context memory, etc.
+- fastmcp to simplify the code and make it more readable and maintainable.
+- ColBERT for rag.
+- use funncall instead of the rewrite logic when doing the rag search.
