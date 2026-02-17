@@ -28,4 +28,5 @@
 - memory bank, not only rag similarity search, but also memory bank for long term memory, short term memory, context memory, etc.
 - fastmcp to simplify the code and make it more readable and maintainable.
 - ColBERT for rag.
-- use funncall instead of the rewrite logic when doing the rag search.
+- use funccall instead of the rewrite logic when doing the rag search.
+- DSpy for rag.
