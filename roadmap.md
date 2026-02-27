@@ -12,7 +12,7 @@
 - **Support for Mode Switching**: Auto/FAQ/Docs/Code mode toggle
 - **Stream Mode Support**
 - **Human-in-the-Loop Integration**
-- **Support for Multiple Document Formats**: docs, docx, pdf, html, yaml
+- **Support for Multiple Document Formats**: docs, docx, pdf, html, yaml (ragflow is good)
 - **Hybrid Search (BM25 + Vector Search)**
 - **PGVector Support for Chinese and zhparser**: PGVectorStore hybrid_search, text_search_config configuration
 - **LlamaIndex Proposition Parser Support**: Integration with [arxiv.org paper](https://arxiv.org/pdf/2312.06648), LlamaIndex Tutorial [Levels of Text Splitting](https://github.com/FullStackRetrieval-com/RetrievalTutorials/blob/a4570f3c4883eb9b835b0ee18990e62298f518ef/tutorials/LevelsOfTextSplitting/5_Levels_Of_Text_Splitting.ipynb)
@@ -22,10 +22,9 @@
 - **Support for @Mention Users**: Allow referencing users' personal knowledge bases, with fallback to human intervention if the knowledge base does not exist. Integrate with WeChat API.
 - **FAQ Iteration Process**: Mark all Q&A as "Unprocessed" for manual review. If the response is unsatisfactory, mark it as "Completely Incorrect" or "Partially Incorrect." For completely incorrect answers, manually input the correct response. For partially incorrect answers, highlight errors and have a large model summarize the correct answer. Upon approval, the response is added to the knowledge base, and the document is switched to edit mode.
 - **Metadata Filter Optimization**: Use `SQLTableRetrieverQueryEngine` for optimized metadata queries. Metadata indexed. [HNSW Table Structure](dev_readme/hnsw.md)
-- **Support for Pulling from Internal GitLab**
+- **Support for Pulling from Internal GitLab** (now opencode is supported)
 - **Dynamic Agent Launch**: Launch multiple agents in parallel and dynamically decide when to do so.
 - use the topk layers hnfs keywords to decide whether in the certain field of faq or docs
 - memory bank, not only rag similarity search, but also memory bank for long term memory, short term memory, context memory, etc.
 - fastmcp to simplify the code and make it more readable and maintainable.
 - use funccall instead of the rewrite logic when doing the rag search.
-- use rag project: ragflow instead of llamaindex.

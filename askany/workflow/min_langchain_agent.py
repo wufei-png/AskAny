@@ -251,6 +251,28 @@ def create_rag_tool(
             nodes = _merge_nodes(nodes, keyword_nodes, local_file_search)
             logger.debug("合并关键词搜索结果后节点数: %d", len(nodes))
 
+        # ── LightRAG knowledge-graph augmentation ──────────────────────────
+        # When enabled, retrieves entity/relationship/chunk nodes from the
+        # LightRAG knowledge graph and merges them with existing results.
+        # This adds cross-document relational context that pure vector search misses.
+        if getattr(settings, "enable_lightrag", False):
+            try:
+                from askany.rag.lightrag_adapter import get_lightrag_adapter
+
+                lightrag_adapter = get_lightrag_adapter()
+                lightrag_nodes = lightrag_adapter.retrieve(
+                    cleaned_query, mode=getattr(settings, "lightrag_query_mode", "mix")
+                )
+                if lightrag_nodes:
+                    logger.debug("LightRAG返回节点数: %d", len(lightrag_nodes))
+                    if nodes:
+                        nodes = _merge_nodes(nodes, lightrag_nodes, local_file_search)
+                    else:
+                        nodes = lightrag_nodes
+                    logger.debug("合并LightRAG节点后总节点数: %d", len(nodes))
+            except Exception as e:
+                logger.warning("LightRAG retrieval failed, skipping: %s", e)
+
         # Format nodes as string
         if not nodes:
             return (
@@ -1249,8 +1271,6 @@ if __name__ == "__main__":
     # 15 questions that can be answered via RAG (conceptual, process-oriented)
     # test_agent_ui()
     # exit()
-    from question import all_questions
-    from question import all_conversations
 
     # logger.info("=" * 80)
     print("=" * 80)

@@ -48,6 +48,8 @@ from askany.workflow.LocalFileSearchTool import LocalFileSearchTool
 from askany.workflow.rewriteRetrive_langchain import QueryRewriteGenerator
 from askany.workflow.SubProblemGenerator import SubProblemGenerator
 from askany.workflow.WebSearchTool import WebSearchTool
+
+# LightRAG adapter is imported lazily inside __init__ (optional dependency)
 from askany.workflow.token_control import truncate_nodes_by_tokens
 from askany.workflow.middle_result_recorder import (
     MiddleResultRecorder,
@@ -445,6 +447,18 @@ class AgentWorkflow:
                 )
                 self.web_search_tool = None
 
+        # Initialize LightRAG knowledge-graph adapter (optional, graceful degradation)
+        if getattr(settings, "enable_lightrag", False):
+            try:
+                from askany.rag.lightrag_adapter import get_lightrag_adapter
+
+                self.lightrag_adapter = get_lightrag_adapter()
+            except Exception as _lgr_exc:
+                logger.warning("LightRAGAdapter not available: %s", _lgr_exc)
+                self.lightrag_adapter = None
+        else:
+            self.lightrag_adapter = None
+
         # Initialize first stage relevance generators (using LangChain version)
         self.direct_answer_generator = DirectAnswerGenerator(llm=self.chat_llm)
         self.web_or_rag_generator = WebOrRagAnswerGenerator(
@@ -786,6 +800,26 @@ class AgentWorkflow:
                 logger.debug("DOCS检索完成 - 检索到 %d 个节点", len(nodes))
 
         # Now we have nodes from rag;
+
+        # ── LightRAG knowledge-graph augmentation ──────────────────────────────
+        # Retrieve KG-derived nodes and merge them in.  Controlled by the
+        # settings.enable_lightrag flag (defaults to False until the graph
+        # has been built with lightrag_ingest.py).
+        if getattr(settings, "enable_lightrag", False) and self.lightrag_adapter:
+            try:
+                lightrag_nodes = self.lightrag_adapter.retrieve(
+                    cleaned_query,
+                    mode=getattr(settings, "lightrag_query_mode", "mix"),
+                )
+                if lightrag_nodes:
+                    nodes = self._merge_nodes(nodes, lightrag_nodes)
+                    logger.debug(
+                        "LightRAG KG检索完成 - 合并了 %d 个KG节点, 合并后总节点数: %d",
+                        len(lightrag_nodes),
+                        len(nodes),
+                    )
+            except Exception as _lgr_exc:
+                logger.warning("LightRAG retrieval failed, skipping: %s", _lgr_exc)
 
         # raise Exception("Stop here")
         # Extract keywords

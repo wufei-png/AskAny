@@ -86,6 +86,10 @@ All settings in `askany/config.py` can be overridden via `.env`:
 - `postgres_*` - Database connection
 - `embedding_model`, `reranker_model` - Model selection
 - `faq_similarity_top_k`, `docs_similarity_top_k` - Retrieval parameters
+- `enable_lightrag` - Master switch for LightRAG KG augmentation (default: False)
+- `lightrag_query_mode` - Query mode: local/global/hybrid/naive/mix/bypass
+- `lightrag_working_dir` - Working directory for LightRAG cache/temp files
+- `lightrag_*` - LLM, embedding, chunking, and extraction overrides (see config.py)
 
 ## API Endpoints
 

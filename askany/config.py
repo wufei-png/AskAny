@@ -307,4 +307,51 @@ class Settings(BaseSettings):
     hanlp_home: Optional[str] = None
     deepl_auth_key: Optional[str] = None
 
+    # ── LightRAG knowledge-graph integration ────────────────────────────────
+    # Set enable_lightrag=True only AFTER you have run:
+    #   python -m askany.rag.lightrag_ingest --ingest-markdown --ingest-json
+    enable_lightrag: bool = False  # Master switch for KG augmentation
+
+    # Query mode: "local" | "global" | "hybrid" | "naive" | "mix" | "bypass"
+    lightrag_query_mode: str = "mix"
+
+    # Working directory for LightRAG cache / temp files (must exist on disk)
+    lightrag_working_dir: str = "lightrag_data"
+
+    # Override LightRAG LLM endpoint (defaults to openai_api_base / openai_model)
+    lightrag_api_base: Optional[str] = None
+    lightrag_api_key: Optional[str] = None
+    lightrag_llm_model: Optional[str] = None
+
+    # Embedding model served by the same endpoint (defaults to embedding_model)
+    # LightRAG needs its own embedding table – can reuse the same model
+    lightrag_embedding_model: Optional[str] = None
+    lightrag_embedding_dim: int = 1024  # must match embedding model output dim
+
+    # Retrieval budget
+    lightrag_top_k: int = 60  # entities/relations from KG
+    lightrag_chunk_top_k: int = 10  # text chunks
+
+    # ── Chunking (for entity extraction quality on Chinese technical docs) ──────
+    # 800 tokens per chunk: smaller than default 1200 to avoid mixing multiple
+    # H2 sections in one chunk, which degrades entity extraction precision
+    # for dense Chinese DevOps docs where each H2 covers a distinct component.
+    lightrag_chunk_token_size: int = 800
+    # 150 token overlap: higher than default 100 to preserve cross-boundary
+    # context (Chinese compound terms often span chunk boundaries).
+    lightrag_chunk_overlap_token_size: int = 150
+
+    # ── Entity extraction ──────────────────────────────────────────────────────
+    # Max gleaning passes for entity extraction.  LightRAG runs extra passes
+    # when >0 to catch missed entities.  1 = one extra pass (the default),
+    # which is sufficient for well-structured Markdown with clear headings.
+    lightrag_entity_extract_max_gleaning: int = 1
+
+    # ── Summary ────────────────────────────────────────────────────────────────
+    # Max tokens for community/entity summaries.  1500 > default 1200 because
+    # Chinese technical descriptions are verbose (component dependencies,
+    # config parameters) and truncation loses critical operational detail.
+    lightrag_summary_max_tokens: int = 1500
+
+
 settings = Settings()
