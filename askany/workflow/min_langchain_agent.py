@@ -1084,6 +1084,8 @@ def answer_test(query_list=None, multi_turn_conversations=None):
                 result = invoke_with_retry(
                     agent, {"messages": [{"role": "user", "content": question}]}
                 )
+                print("result: ", result)
+                raise Exception("test")
                 time_end = time.time()
 
                 # Extract and format response
@@ -1254,7 +1256,7 @@ if __name__ == "__main__":
     print("=" * 80)
     # Run tests
     answer_test(
-        query_list=all_questions,
+        query_list=[],
         # query_list=[],
-        multi_turn_conversations=all_conversations,
+        multi_turn_conversations=[],
     )

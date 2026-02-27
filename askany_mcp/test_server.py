@@ -30,7 +30,7 @@ def test_rag_search():
             for i, result in enumerate(results, 1):
                 print(f"\n[Result {i}]")
                 print(f"File: {result['file_path']}")
-                if result['start_line'] and result['end_line']:
+                if result["start_line"] and result["end_line"]:
                     print(f"Lines: {result['start_line']}-{result['end_line']}")
                 print(f"Content: {result['content'][:200]}...")
                 print()

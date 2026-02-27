@@ -30,7 +30,6 @@ def initialize_rag_components():
     global router, embed_model, llm
 
     try:
-        from askany.config import settings
         from askany.main import initialize_llm, get_device
         from askany.ingest import VectorStoreManager
         from askany.rag import create_query_router
@@ -98,7 +97,9 @@ def rag_search_query(query: str, query_type: str = "auto") -> list[dict[str, Any
         logger.info("Using DOCS engine")
         # Debug: Check if docs_query_engine and its retriever exist
         logger.info(f"Docs query engine: {router.docs_query_engine}")
-        logger.info(f"Docs query engine retriever: {router.docs_query_engine.query_engine.retriever if hasattr(router.docs_query_engine, 'query_engine') else None}")
+        logger.info(
+            f"Docs query engine retriever: {router.docs_query_engine.query_engine.retriever if hasattr(router.docs_query_engine, 'query_engine') else None}"
+        )
         nodes = router.docs_query_engine.retrieve(cleaned_query, metadata_filters)
     else:
         # AUTO mode: try FAQ first, then docs
@@ -106,20 +107,26 @@ def rag_search_query(query: str, query_type: str = "auto") -> list[dict[str, Any
         if router.faq_query_engine:
             logger.info("FAQ engine exists")
             # Check if FAQ engine has retrieve_with_scores (FAQQueryEngine)
-            if hasattr(router.faq_query_engine, 'retrieve_with_scores'):
+            if hasattr(router.faq_query_engine, "retrieve_with_scores"):
                 logger.info("FAQ engine has retrieve_with_scores, using it")
                 logger.info(f"Query: {cleaned_query}")
                 logger.info(f"Metadata filters: {metadata_filters}")
                 nodes, top_score = router.faq_query_engine.retrieve_with_scores(
                     cleaned_query, metadata_filters
                 )
-                logger.info(f"FAQ retrieved {len(nodes)} nodes with top_score={top_score}")
+                logger.info(
+                    f"FAQ retrieved {len(nodes)} nodes with top_score={top_score}"
+                )
                 # If FAQ score is low, try docs instead
                 if top_score < settings.docs_similarity_threshold:
-                    logger.info(f"FAQ score {top_score} < threshold {settings.docs_similarity_threshold}, using docs")
+                    logger.info(
+                        f"FAQ score {top_score} < threshold {settings.docs_similarity_threshold}, using docs"
+                    )
                     # Debug: Check if docs_query_engine and its retriever exist
                     logger.info(f"Docs query engine: {router.docs_query_engine}")
-                    logger.info(f"Docs query engine retriever: {router.docs_query_engine.query_engine.retriever if hasattr(router.docs_query_engine, 'query_engine') else None}")
+                    logger.info(
+                        f"Docs query engine retriever: {router.docs_query_engine.query_engine.retriever if hasattr(router.docs_query_engine, 'query_engine') else None}"
+                    )
                     nodes = router.docs_query_engine.retrieve(
                         cleaned_query, metadata_filters
                     )
@@ -127,25 +134,31 @@ def rag_search_query(query: str, query_type: str = "auto") -> list[dict[str, Any
             else:
                 # FAQ engine is RAGQueryEngine, just retrieve
                 logger.info("FAQ engine is RAGQueryEngine, using it directly")
-                nodes = router.faq_query_engine.retrieve(cleaned_query, metadata_filters)
+                nodes = router.faq_query_engine.retrieve(
+                    cleaned_query, metadata_filters
+                )
                 logger.info(f"FAQ retrieved {len(nodes)} nodes")
                 # If FAQ returns no results, fall back to docs
                 if not nodes:
                     logger.info("FAQ returned no results, falling back to docs")
                     # Debug: Check if docs_query_engine and its retriever exist
                     logger.info(f"Docs query engine: {router.docs_query_engine}")
-                    logger.info(f"Docs query engine retriever: {router.docs_query_engine.query_engine.retriever if hasattr(router.docs_query_engine, 'query_engine') else None}")
-                    nodes = router.docs_query_engine.retrieve(cleaned_query, metadata_filters)
+                    logger.info(
+                        f"Docs query engine retriever: {router.docs_query_engine.query_engine.retriever if hasattr(router.docs_query_engine, 'query_engine') else None}"
+                    )
+                    nodes = router.docs_query_engine.retrieve(
+                        cleaned_query, metadata_filters
+                    )
                     logger.info(f"Docs retrieved {len(nodes)} nodes")
         else:
             # No FAQ engine, use docs
             logger.info("No FAQ engine, using docs")
             # Debug: Check if docs_query_engine and its retriever exist
             logger.info(f"Docs query engine: {router.docs_query_engine}")
-            logger.info(f"Docs query engine retriever: {router.docs_query_engine.query_engine.retriever if hasattr(router.docs_query_engine, 'query_engine') else None}")
-            nodes = router.docs_query_engine.retrieve(
-                cleaned_query, metadata_filters
+            logger.info(
+                f"Docs query engine retriever: {router.docs_query_engine.query_engine.retriever if hasattr(router.docs_query_engine, 'query_engine') else None}"
             )
+            nodes = router.docs_query_engine.retrieve(cleaned_query, metadata_filters)
             logger.info(f"Docs retrieved {len(nodes)} nodes")
 
     logger.info(f"Retrieved {len(nodes)} nodes before filtering")
@@ -154,17 +167,21 @@ def rag_search_query(query: str, query_type: str = "auto") -> list[dict[str, Any
     if nodes:
         for i, node in enumerate(nodes[:3]):  # Log first 3 nodes
             score = node.score if hasattr(node, "score") and node.score else None
-            logger.info(f"Node {i+1} score: {score}")
+            logger.info(f"Node {i + 1} score: {score}")
 
     # Filter low quality docs nodes based on similarity threshold
     filtered_nodes = []
     for node in nodes:
         score = node.score if hasattr(node, "score") and node.score else 0.0
-        logger.debug(f"Node score: {score}, threshold: {settings.docs_similarity_threshold}")
+        logger.debug(
+            f"Node score: {score}, threshold: {settings.docs_similarity_threshold}"
+        )
         if score >= settings.docs_similarity_threshold:
             filtered_nodes.append(node)
 
-    logger.info(f"Filtered {len(nodes)} nodes to {len(filtered_nodes)} nodes (threshold: {settings.docs_similarity_threshold})")
+    logger.info(
+        f"Filtered {len(nodes)} nodes to {len(filtered_nodes)} nodes (threshold: {settings.docs_similarity_threshold})"
+    )
     nodes = filtered_nodes
 
     # Format nodes into structured results
@@ -301,4 +318,5 @@ async def main():
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(main())

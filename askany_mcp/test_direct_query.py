@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Direct database test to check vector retrieval."""
 
-from askany.config import settings
 from askany.main import initialize_llm
 from askany.ingest import VectorStoreManager
 
@@ -28,6 +27,6 @@ nodes = retriever.retrieve(query)
 print(f"Retrieved {len(nodes)} nodes")
 
 for i, node in enumerate(nodes[:3]):
-    print(f"\nNode {i+1}:")
+    print(f"\nNode {i + 1}:")
     print(f"  Score: {node.score}")
     print(f"  Text: {node.text[:100]}...")

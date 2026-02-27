@@ -40,15 +40,14 @@ async def test_mcp_server():
                 ]
 
                 for query in test_queries:
-                    logger.info(f"\n{'='*60}")
+                    logger.info(f"\n{'=' * 60}")
                     logger.info(f"Testing query: {query}")
-                    logger.info(f"{'='*60}")
+                    logger.info(f"{'=' * 60}")
 
                     try:
                         # Call the rag_search tool
                         result = await session.call_tool(
-                            "rag_search",
-                            arguments={"query": query}
+                            "rag_search", arguments={"query": query}
                         )
 
                         # Print results

@@ -28,6 +28,4 @@
 - memory bank, not only rag similarity search, but also memory bank for long term memory, short term memory, context memory, etc.
 - fastmcp to simplify the code and make it more readable and maintainable.
 - use funccall instead of the rewrite logic when doing the rag search.
-- ColBERT, DSpy for rag.
 - use rag project: ragflow instead of llamaindex.
-- change answer tool use position. Same as the code cli tool message position in the chat history, that is "ok, I will use xxx; tool use xxx; tool result: xxx; final answer: xxx".

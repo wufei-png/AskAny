@@ -48,7 +48,6 @@ def _ensure_initialized():
         raise _initialization_error
 
     try:
-        from askany.config import settings
         from askany.main import initialize_llm, get_device
         from askany.ingest import VectorStoreManager
         from askany.rag import create_query_router

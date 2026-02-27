@@ -1,6 +1,5 @@
 """Configuration management for AskAny."""
 
-import re
 from typing import List, Literal, Optional
 
 from pydantic import ConfigDict, field_validator
@@ -55,10 +54,10 @@ class Settings(BaseSettings):
     # OpenAI/LLM
     openai_api_key: Optional[str] = ""
     openai_api_base: Optional[str] = (
-        "https://dashscope.aliyuncs.com/compatible-mode/v1"  # For vLLM compatibility
+        "http://127.0.0.1:8081/v1"  # For vLLM compatibility
     )
     # For vLLM: model name is still required to specify which model to use
-    openai_model: str = "qwen-plus"
+    openai_model: str = "/net/ai02/data/xlzhong/wufei/models/Qwen3-14B-AWQ/"
 
     num_concurrent_runs: int = 1  # agent workflow concurrent runs
 
@@ -306,6 +305,6 @@ class Settings(BaseSettings):
     # Example: "/workspace/hanlp" (for Docker containers with mounted volumes)
     # hanlp_home: Optional[str] = "/workspace/hanlp"  # HanLP home directory (None = use default ~/.hanlp)
     hanlp_home: Optional[str] = None
-
+    deepl_auth_key: Optional[str] = None
 
 settings = Settings()

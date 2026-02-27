@@ -4,7 +4,6 @@
 This server exposes RAG search capabilities via SSE transport for MCP protocol.
 """
 
-import sys
 import os
 import logging
 from typing import Any
@@ -26,9 +25,7 @@ from mcp.server.sse import SseServerTransport
 from mcp.types import Tool, TextContent
 from starlette.applications import Starlette
 from starlette.routing import Route, Mount
-from starlette.responses import Response
 import uvicorn
-import anyio
 
 # Global variables for RAG components
 router = None
@@ -48,7 +45,6 @@ def _ensure_initialized():
         raise _initialization_error
 
     try:
-        from askany.config import settings
         from askany.main import initialize_llm, get_device
         from askany.ingest import VectorStoreManager
         from askany.rag import create_query_router
@@ -100,38 +96,56 @@ def rag_search_query(query: str, query_type: str = "auto") -> list[dict[str, Any
     else:
         # AUTO mode
         if router.faq_query_engine:
-            if hasattr(router.faq_query_engine, 'retrieve_with_scores'):
+            if hasattr(router.faq_query_engine, "retrieve_with_scores"):
                 nodes, top_score = router.faq_query_engine.retrieve_with_scores(
                     cleaned_query, metadata_filters
                 )
                 if top_score < settings.docs_similarity_threshold:
-                    nodes = router.docs_query_engine.retrieve(cleaned_query, metadata_filters)
+                    nodes = router.docs_query_engine.retrieve(
+                        cleaned_query, metadata_filters
+                    )
             else:
-                nodes = router.faq_query_engine.retrieve(cleaned_query, metadata_filters)
+                nodes = router.faq_query_engine.retrieve(
+                    cleaned_query, metadata_filters
+                )
                 if not nodes:
-                    nodes = router.docs_query_engine.retrieve(cleaned_query, metadata_filters)
+                    nodes = router.docs_query_engine.retrieve(
+                        cleaned_query, metadata_filters
+                    )
         else:
             nodes = router.docs_query_engine.retrieve(cleaned_query, metadata_filters)
 
     # Filter by threshold
     filtered_nodes = [
-        node for node in nodes
-        if (node.score if hasattr(node, "score") and node.score else 0.0) >= settings.docs_similarity_threshold
+        node
+        for node in nodes
+        if (node.score if hasattr(node, "score") and node.score else 0.0)
+        >= settings.docs_similarity_threshold
     ]
 
     # Format results
     results = []
     for node in filtered_nodes:
-        content = node.node.get_content() if hasattr(node.node, "get_content") else node.node.text
-        file_path = node.node.metadata.get("file_path") or node.node.metadata.get("source") or "unknown"
+        content = (
+            node.node.get_content()
+            if hasattr(node.node, "get_content")
+            else node.node.text
+        )
+        file_path = (
+            node.node.metadata.get("file_path")
+            or node.node.metadata.get("source")
+            or "unknown"
+        )
 
-        results.append({
-            "content": content,
-            "score": node.score if hasattr(node, "score") else None,
-            "file_path": file_path,
-            "start_line": node.node.metadata.get("start_line"),
-            "end_line": node.node.metadata.get("end_line"),
-        })
+        results.append(
+            {
+                "content": content,
+                "score": node.score if hasattr(node, "score") else None,
+                "file_path": file_path,
+                "start_line": node.node.metadata.get("start_line"),
+                "end_line": node.node.metadata.get("end_line"),
+            }
+        )
 
     return results
 
@@ -202,7 +216,10 @@ async def handle_sse(scope, receive, send):
     """Handle SSE connection."""
     logger.info("New SSE connection")
 
-    async with sse_transport.connect_sse(scope, receive, send) as (read_stream, write_stream):
+    async with sse_transport.connect_sse(scope, receive, send) as (
+        read_stream,
+        write_stream,
+    ):
         await server.run(
             read_stream,
             write_stream,
@@ -226,12 +243,12 @@ async def handle_messages(scope, receive, send):
 async def handle_health(scope, receive, send):
     """Health check endpoint."""
     from starlette.responses import PlainTextResponse
+
     response = PlainTextResponse("OK")
     await response(scope, receive, send)
 
 
 # Create Starlette application
-from starlette.routing import Mount
 
 app = Starlette(
     routes=[

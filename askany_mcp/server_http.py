@@ -5,7 +5,6 @@ This server exposes RAG search capabilities via HTTP/SSE for remote access.
 Other machines can connect to this server using the MCP SSE transport protocol.
 """
 
-import sys
 import os
 import logging
 from contextlib import asynccontextmanager
@@ -51,7 +50,6 @@ def _ensure_initialized():
         raise _initialization_error
 
     try:
-        from askany.config import settings
         from askany.main import initialize_llm, get_device
         from askany.ingest import VectorStoreManager
         from askany.rag import create_query_router
@@ -117,7 +115,7 @@ def rag_search_query(query: str, query_type: str = "auto") -> list[dict[str, Any
         # AUTO mode
         logger.info("Using AUTO mode")
         if router.faq_query_engine:
-            if hasattr(router.faq_query_engine, 'retrieve_with_scores'):
+            if hasattr(router.faq_query_engine, "retrieve_with_scores"):
                 nodes, top_score = router.faq_query_engine.retrieve_with_scores(
                     cleaned_query, metadata_filters
                 )
@@ -126,9 +124,13 @@ def rag_search_query(query: str, query_type: str = "auto") -> list[dict[str, Any
                         cleaned_query, metadata_filters
                     )
             else:
-                nodes = router.faq_query_engine.retrieve(cleaned_query, metadata_filters)
+                nodes = router.faq_query_engine.retrieve(
+                    cleaned_query, metadata_filters
+                )
                 if not nodes:
-                    nodes = router.docs_query_engine.retrieve(cleaned_query, metadata_filters)
+                    nodes = router.docs_query_engine.retrieve(
+                        cleaned_query, metadata_filters
+                    )
         else:
             nodes = router.docs_query_engine.retrieve(cleaned_query, metadata_filters)
 
@@ -256,7 +258,7 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
 # HTTP endpoint handlers
 async def handle_sse(scope, receive, send):
     """Handle SSE connection for MCP protocol."""
-    logger.info(f"New SSE connection")
+    logger.info("New SSE connection")
     await sse_transport.connect_sse(scope, receive, send)
 
 
@@ -281,6 +283,7 @@ async def lifespan(app):
 
     # Start server task
     import asyncio
+
     server_task = asyncio.create_task(
         server.run(
             read_stream,
