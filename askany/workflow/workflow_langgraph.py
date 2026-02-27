@@ -88,6 +88,8 @@ async def process_parallel_group(
     agent_workflow: "AgentWorkflow",
     parallel_group: List[str],
     query_type: QueryType,
+    *,
+    mem0_qa_context: Optional[List[Dict[str, str]]] = None,
 ) -> str:
     """Process a parallel group (may contain multiple related questions that need serial processing).
     处理一个并行组（可能包含多个相关问题需要串行处理）。
@@ -96,10 +98,12 @@ async def process_parallel_group(
         agent_workflow: AgentWorkflow instance / AgentWorkflow 实例
         parallel_group: List of questions in the parallel group / 并行组中的问题列表
         query_type: Query type / 查询类型
+        mem0_qa_context: Mem0 memory context as QA pairs (optional)
 
     Returns:
         Processing result string / 处理结果字符串
     """
+    _mem0_ctx = mem0_qa_context or []
     if len(parallel_group) == 1:
         # Single question, process directly / 单个问题，直接处理
         logger.debug("并行组只有一个问题，直接处理: %s", parallel_group[0])
@@ -117,7 +121,7 @@ async def process_parallel_group(
             "no_relevant_result": None,
             "current_sub_query": None,
             "inner_previous_qa_context": [],
-            "outer_previous_qa_context": [],
+            "outer_previous_qa_context": list(_mem0_ctx),
             "is_inner_sub_query_workflow": False,
             "is_outer_sub_query_workflow": False,
             "result": None,
@@ -130,7 +134,7 @@ async def process_parallel_group(
         # Multiple related questions, process serially, put previous answer in outer_previous_qa_context
         # 多个相关问题，串行处理，将上一个问题的答案放到outer_previous_qa_context中
         logger.debug("并行组包含 %d 个相关问题，串行处理", len(parallel_group))
-        outer_previous_qa_context: List[Dict[str, str]] = []
+        outer_previous_qa_context: List[Dict[str, str]] = list(_mem0_ctx)
 
         for idx, sub_query in enumerate(parallel_group):
             logger.debug(

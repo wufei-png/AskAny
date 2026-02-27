@@ -353,5 +353,23 @@ class Settings(BaseSettings):
     # config parameters) and truncation loses critical operational detail.
     lightrag_summary_max_tokens: int = 1500
 
+    # ── Mem0 user memory integration ──────────────────────────────────────────
+    # Provides persistent cross-session user memory via Mem0 OSS SDK.
+    # Requires: pip install mem0ai   (or add to pyproject.toml)
+    # User identity is read from the X-OpenWebUI-User-Id header.
+    # Enable ENABLE_FORWARD_USER_INFO_HEADERS=true in OpenWebUI.
+    enable_mem0: bool = False  # Master switch for user memory
+    mem0_collection_name: str = "askany_mem0"  # pgvector collection for memories
+    mem0_top_k: int = 5  # Max memories to retrieve per query
+    mem0_score_threshold: float = 0.1  # Min relevance score to include a memory
+    # LLM/embedder for Mem0 (defaults to AskAny's own openai_api_base/model)
+    # Mem0 uses an LLM internally to extract/consolidate memories.
+    mem0_llm_provider: str = "openai"  # "openai" works with any OpenAI-compatible endpoint
+    mem0_llm_model: Optional[str] = None  # None → falls back to openai_model
+    mem0_llm_api_base: Optional[str] = None  # None → falls back to openai_api_base
+    mem0_llm_api_key: Optional[str] = None  # None → falls back to openai_api_key
+    mem0_embedder_provider: str = "huggingface"  # "huggingface" for local sentence-transformers
+    mem0_embedder_model: Optional[str] = None  # None → falls back to embedding_model
+
 
 settings = Settings()

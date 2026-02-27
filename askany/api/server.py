@@ -1,5 +1,6 @@
 """FastAPI server with OpenAI-compatible interface."""
 
+import asyncio
 import base64
 import json
 import threading
@@ -13,6 +14,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
+from starlette.requests import Request
 
 from askany.config import settings
 from askany.ingest import VectorStoreManager
@@ -20,11 +22,14 @@ from askany.rag import FAQQueryEngine
 from askany.rag.router import QueryRouter, QueryType
 from askany.workflow.workflow_langgraph import AgentWorkflow, process_parallel_group
 from askany.workflow.workflow_filter import WorkflowFilter
+from askany.memory.mem0_adapter import get_mem0_adapter
 
 logger = getLogger(__name__)
 
 # Global device variable (set during initialization)
 _device: Optional[str] = None
+
+_background_tasks: set[asyncio.Task] = set()  # prevent GC of fire-and-forget tasks
 
 
 def set_device(device: str) -> None:
@@ -338,7 +343,7 @@ def create_app(
         return JSONResponse(content=schema)
 
     @app.post("/v1/chat/completions")
-    async def chat_completions(request: ChatCompletionRequest):
+    async def chat_completions(request: ChatCompletionRequest, raw_request: Request):
         """Chat completions endpoint (OpenAI-compatible).
 
         Selects workflow based on model name suffix:
@@ -366,6 +371,22 @@ def create_app(
             user_query,
         )
 
+        # ── Mem0: extract user identity & retrieve memories ──
+        user_id: Optional[str] = raw_request.headers.get("x-openwebui-user-id")
+        mem0_adapter = get_mem0_adapter()
+        memory_system_text: Optional[str] = None
+        if user_id and mem0_adapter:
+            memories = mem0_adapter.search(user_query, user_id)
+            if memories:
+                memory_system_text = mem0_adapter.format_memories_as_system_text(
+                    memories
+                )
+                logger.debug(
+                    "Mem0 injecting %d memories for user_id=%s",
+                    len(memories),
+                    user_id,
+                )
+
         if use_deepsearch and len(user_messages) == 1:  # 二次问答直接给simple agent
             # Use complex workflow (AgentWorkflow)
             if agent_workflow_global is None:
@@ -392,12 +413,20 @@ def create_app(
             # - Single question: direct workflow execution
             # - Multiple unrelated questions: parallel processing
             # - Multiple related questions: serial processing with context accumulation
+            # Inject Mem0 memory context into workflow as previous QA context
+            mem0_qa_context: List[Dict[str, str]] = []
+            if memory_system_text:
+                mem0_qa_context = [
+                    {"query": "user_memory_context", "answer": memory_system_text}
+                ]
+
             try:
                 response_text = await process_query_with_subproblems(
                     agent_workflow_global,
                     workflow_filter_global,
                     user_query,
                     query_type,
+                    mem0_qa_context=mem0_qa_context,
                 )
             except Exception as e:
                 # Handle workflow errors gracefully
@@ -418,8 +447,14 @@ def create_app(
             try:
                 # Convert messages to format expected by simple agent
                 # Simple agent expects messages in format: [{"role": "user", "content": "..."}]
+                # Inject Mem0 memory context as a system message at the front
+                mem0_messages = []
+                if memory_system_text:
+                    mem0_messages = [{"role": "system", "content": memory_system_text}]
+
                 messages_input = {
-                    "messages": [
+                    "messages": mem0_messages
+                    + [
                         {"role": msg.role, "content": msg.content}
                         for msg in request.messages
                     ]
@@ -468,6 +503,14 @@ def create_app(
                 "total_tokens": len(user_query.split()) + len(response_text.split()),
             },
         )
+
+        # ── Mem0: fire-and-forget save ──
+        if user_id and mem0_adapter:
+            task = asyncio.create_task(
+                mem0_adapter.save_turn_async(user_query, response_text, user_id)
+            )
+            _background_tasks.add(task)
+            task.add_done_callback(_background_tasks.discard)
 
         return response
 
@@ -562,6 +605,8 @@ async def process_query_with_subproblems(
     workflow_filter: WorkflowFilter,
     user_query: str,
     query_type: QueryType,
+    *,
+    mem0_qa_context: Optional[List[Dict[str, str]]] = None,
 ) -> str:
     """处理用户查询，支持子问题分解和并行/串行处理。
 
@@ -577,11 +622,14 @@ async def process_query_with_subproblems(
         agent_workflow: AgentWorkflow 实例
         user_query: 用户查询字符串
         query_type: 查询类型
+        mem0_qa_context: Mem0 memory context as QA pairs (optional)
 
     Returns:
         处理结果字符串
     """
     import asyncio
+
+    _mem0_ctx = mem0_qa_context or []
 
     # TODO 二轮问答这里跳过filter处理.
     filter_result = workflow_filter.process(user_query)
@@ -619,7 +667,7 @@ async def process_query_with_subproblems(
             "no_relevant_result": None,
             "current_sub_query": None,
             "inner_previous_qa_context": [],
-            "outer_previous_qa_context": [],
+            "outer_previous_qa_context": _mem0_ctx,
             "is_inner_sub_query_workflow": False,
             "is_outer_sub_query_workflow": False,
             "result": None,
@@ -649,7 +697,7 @@ async def process_query_with_subproblems(
             "no_relevant_result": None,
             "current_sub_query": None,
             "inner_previous_qa_context": [],
-            "outer_previous_qa_context": [],
+            "outer_previous_qa_context": _mem0_ctx,
             "is_inner_sub_query_workflow": False,
             "is_outer_sub_query_workflow": False,
             "result": None,
@@ -662,7 +710,10 @@ async def process_query_with_subproblems(
         # 只有一个并行组，直接处理（可能是单个问题或多个相关问题）
         logger.debug("只有一个并行组，直接处理")
         result = await process_parallel_group(
-            agent_workflow, sub_problem_structure.parallel_groups[0], query_type
+            agent_workflow,
+            sub_problem_structure.parallel_groups[0],
+            query_type,
+            mem0_qa_context=_mem0_ctx,
         )
         return result
     else:
@@ -672,7 +723,9 @@ async def process_query_with_subproblems(
         )
         # 创建并行任务
         tasks = [
-            process_parallel_group(agent_workflow, group, query_type)
+            process_parallel_group(
+                agent_workflow, group, query_type, mem0_qa_context=_mem0_ctx
+            )
             for group in sub_problem_structure.parallel_groups
         ]
         # 等待所有并行任务完成
