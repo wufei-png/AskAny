@@ -3,16 +3,18 @@
 import asyncio
 import base64
 import json
+import time
 import threading
+import uuid
 from logging import getLogger
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 from starlette.requests import Request
 
@@ -127,6 +129,82 @@ class UpdateFAQsResponse(BaseModel):
     inserted: int  # Number of new FAQs inserted
     updated: int  # Number of existing FAQs updated
     errors: List[str]  # List of error messages
+
+
+def _make_sse_chunk(
+    model: str,
+    content: Optional[str] = None,
+    finish_reason: Optional[str] = None,
+    chunk_id: Optional[str] = None,
+) -> str:
+    """Build a single SSE data line in OpenAI chat.completion.chunk format.
+
+    Args:
+        model: Model name echoed back to the client.
+        content: Token text for ``delta.content`` (omit for empty delta).
+        finish_reason: If set, signals the end of this choice.
+        chunk_id: Optional chunk id; auto-generated if not provided.
+
+    Returns:
+        A complete SSE line ``data: {json}\n\n``.
+    """
+    delta: Dict[str, Any] = {}
+    if content is not None:
+        delta["content"] = content
+    chunk = {
+        "id": chunk_id or f"chatcmpl-{uuid.uuid4().hex[:12]}",
+        "object": "chat.completion.chunk",
+        "created": int(time.time()),
+        "model": model,
+        "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
+    }
+    return f"data: {json.dumps(chunk)}\n\n"
+
+
+async def _sse_generator(
+    model: str,
+    stream: AsyncGenerator[str, None],
+) -> AsyncGenerator[str, None]:
+    """Wrap an async content stream into OpenAI-compatible SSE events.
+
+    Yields ``data: {json}\n\n`` lines for each content chunk, a final
+    ``finish_reason='stop'`` chunk, and the terminating ``data: [DONE]\n\n``.
+
+    Args:
+        model: Model name to echo in each chunk.
+        stream: Async generator yielding content strings.
+    """
+    chunk_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
+    # First chunk includes role
+    first = True
+    try:
+        async for content in stream:
+            if not content:
+                continue
+            if first:
+                # Send role delta first, then content
+                role_chunk: Dict[str, Any] = {
+                    "id": chunk_id,
+                    "object": "chat.completion.chunk",
+                    "created": int(time.time()),
+                    "model": model,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"role": "assistant", "content": ""},
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+                yield f"data: {json.dumps(role_chunk)}\n\n"
+                first = False
+            yield _make_sse_chunk(model, content=content, chunk_id=chunk_id)
+    except Exception:
+        logger.exception("Error during SSE streaming")
+    finally:
+        # Always send stop + [DONE]
+        yield _make_sse_chunk(model, finish_reason="stop", chunk_id=chunk_id)
+        yield "data: [DONE]\n\n"
 
 
 def create_app(
@@ -352,12 +430,6 @@ def create_app(
         """
         # Determine which workflow to use based on model name suffix
         use_deepsearch = request.model.endswith("-deepsearch")
-        actual_model = (
-            request.model.replace("-deepsearch", "")
-            if use_deepsearch
-            else request.model
-        )
-        # request.model = actual_model
         # Extract user message
         user_messages = [msg for msg in request.messages if msg.role == "user"]
         if not user_messages:
@@ -387,6 +459,73 @@ def create_app(
                     user_id,
                 )
 
+        # ── Streaming path: return SSE StreamingResponse early ──
+        if request.stream:
+            # Pre-validate required globals before creating the StreamingResponse.
+            # HTTPException raised inside an async generator won't be caught by
+            # FastAPI's exception middleware (headers are already sent), so we
+            # validate eagerly here while we can still return a proper error response.
+            if use_deepsearch and len(user_messages) == 1:
+                if agent_workflow_global is None:
+                    raise HTTPException(
+                        status_code=500, detail="AgentWorkflow not initialized"
+                    )
+            else:
+                if simple_agent_global is None:
+                    raise HTTPException(
+                        status_code=500, detail="Simple agent not initialized"
+                    )
+
+            from askany.workflow.min_langchain_agent import astream_agent_response
+
+            async def _build_content_stream() -> AsyncGenerator[str, None]:
+                """Build the content-level async generator for the chosen workflow."""
+                if use_deepsearch and len(user_messages) == 1:
+                    # Deepsearch single-query streaming
+                    query_type = QueryType.AUTO
+                    system_messages = [
+                        msg for msg in request.messages if msg.role == "system"
+                    ]
+                    if system_messages:
+                        system_content = system_messages[-1].content.lower()
+                        if "faq" in system_content:
+                            query_type = QueryType.FAQ
+                        elif "docs" in system_content:
+                            query_type = QueryType.DOCS
+                        elif "code" in system_content:
+                            query_type = QueryType.CODE
+                    async for chunk in agent_workflow_global.astream_final_answer(
+                        user_query, query_type
+                    ):
+                        yield chunk
+                else:
+                    # Simple agent streaming
+                    mem0_messages: List[Dict[str, str]] = []
+                    if memory_system_text:
+                        mem0_messages = [
+                            {"role": "system", "content": memory_system_text}
+                        ]
+                    messages_input = {
+                        "messages": mem0_messages
+                        + [
+                            {"role": msg.role, "content": msg.content}
+                            for msg in request.messages
+                        ]
+                    }
+                    async for chunk in astream_agent_response(
+                        simple_agent_global, messages_input
+                    ):
+                        yield chunk
+
+            return StreamingResponse(
+                _sse_generator(request.model, _build_content_stream()),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no",
+                },
+            )
         if use_deepsearch and len(user_messages) == 1:  # 二次问答直接给simple agent
             # Use complex workflow (AgentWorkflow)
             if agent_workflow_global is None:
@@ -484,7 +623,6 @@ def create_app(
         )
 
         # Build response
-        import time
 
         response = ChatCompletionResponse(
             id=f"chatcmpl-{int(time.time())}",

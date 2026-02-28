@@ -8,7 +8,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 
 # Add project root to path
@@ -1027,6 +1027,75 @@ def invoke_with_retry(agent, messages_input: dict, max_retries: int = 2):
                 continue
             raise
     raise RuntimeError("invoke_with_retry: unreachable")
+
+
+async def astream_agent_response(
+    agent, messages_input: dict
+) -> AsyncGenerator[str, None]:
+    """Stream agent response token-by-token via astream_events.
+
+    Uses astream_events(version='v2') to capture on_chat_model_stream events
+    from the agent's LLM calls. Yields content chunks as they arrive.
+
+    For structured output (FinalSummaryResponse), the final model call may produce
+    tool-call chunks instead of content. In that case, we collect the structured
+    response and yield it at the end.
+
+    Args:
+        agent: Compiled LangGraph agent from create_agent().
+        messages_input: Messages dict for agent invocation.
+
+    Yields:
+        str: Content chunks from the LLM.
+    """
+    collected_content = []
+    has_streamed = False
+
+    try:
+        async for event in agent.astream_events(messages_input, version="v2"):
+            kind = event.get("event", "")
+
+            if kind == "on_chat_model_stream":
+                chunk = event.get("data", {}).get("chunk")
+                if chunk is not None:
+                    # AIMessageChunk may have content or tool_call_chunks
+                    content = getattr(chunk, "content", "")
+                    if content:
+                        has_streamed = True
+                        yield content
+                    else:
+                        # Collect tool call chunks for structured output
+                        tool_call_chunks = getattr(chunk, "tool_call_chunks", [])
+                        for tc in tool_call_chunks:
+                            args_str = tc.get("args", "")
+                            if args_str:
+                                collected_content.append(args_str)
+
+        # If we didn't stream any content (structured output mode),
+        # try to parse the collected tool call args as FinalSummaryResponse
+        if not has_streamed and collected_content:
+            full_args = "".join(collected_content)
+            try:
+                parsed = json.loads(full_args)
+                answer = parsed.get("summary_answer", full_args)
+                refs = parsed.get("references", [])
+                yield answer
+                if refs:
+                    ref_text = "\n\n---\n**参考数据来源：**\n"
+                    for ref in refs:
+                        ref_text += f"- {ref}\n"
+                    yield ref_text
+            except (json.JSONDecodeError, TypeError):
+                yield full_args
+
+    except Exception as e:
+        err = str(e).lower()
+        if "json_invalid" in err or "eof while parsing" in err:
+            logger.warning("Model output truncated during streaming: %s", e)
+            if collected_content:
+                yield "".join(collected_content)
+        else:
+            raise
 
 
 def write_result_to_file(
