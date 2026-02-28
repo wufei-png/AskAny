@@ -2,7 +2,7 @@
 
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import AsyncGenerator, Dict, List, Optional, Tuple
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -224,6 +224,95 @@ class FinalAnswerGenerator:
 
         return (summary_answer, reasoning)
 
+    async def generate_final_answer_stream(
+        self, query: str, nodes: List[NodeWithScore]
+    ) -> AsyncGenerator[str, None]:
+        """Stream the final answer token-by-token.
+
+        Uses the same prompt construction and truncation logic as
+        generate_final_answer(), but yields content chunks via astream().
+
+        Args:
+            query: User question.
+            nodes: Final nodes list.
+
+        Yields:
+            str: Content chunks from the LLM.
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        # Truncate nodes to fit within token limit
+        truncated_nodes, node_tokens, nodes_truncated = truncate_nodes_by_tokens(
+            nodes,
+            max_tokens=settings.llm_max_tokens,
+            reserve_for_prompt=1500,
+        )
+
+        if nodes_truncated:
+            logger.warning(
+                "Nodes truncated in generate_final_answer_stream: "
+                "original=%d nodes, kept=%d nodes",
+                len(nodes),
+                len(truncated_nodes),
+            )
+
+        formatted_input = self._format_final_answer_input(query, truncated_nodes)
+
+        prompts = get_prompts()
+        messages = [
+            SystemMessage(content=prompts.final_answer_system),
+            HumanMessage(content=formatted_input),
+        ]
+
+        # Convert to dict format for truncation check
+        messages_dict = [
+            {"role": "system", "content": messages[0].content},
+            {"role": "user", "content": messages[1].content},
+        ]
+
+        truncated_messages_dict, total_tokens, messages_truncated = (
+            check_and_truncate_messages(
+                messages_dict,
+                max_tokens=settings.llm_max_tokens,
+            )
+        )
+
+        if messages_truncated:
+            logger.warning(
+                "Messages truncated in generate_final_answer_stream: total_tokens=%d/%d",
+                total_tokens,
+                settings.llm_max_tokens,
+            )
+            messages = [
+                SystemMessage(content=truncated_messages_dict[0]["content"]),
+                HumanMessage(content=truncated_messages_dict[1]["content"]),
+            ]
+
+        try:
+            async for chunk in self.llm.astream(messages):
+                if chunk.content:
+                    yield chunk.content
+        except Exception as e:
+            error_msg = str(e)
+            if "length limit" in error_msg.lower() or "LengthFinishReasonError" in str(
+                type(e)
+            ):
+                logger.error(
+                    "LLM response hit token limit during streaming. Error: %s",
+                    error_msg,
+                )
+                yield "抱歉，由于响应过长，无法生成完整答案。请尝试将问题分解为更小的子问题，或提供更具体的查询。"
+            elif "timeout" in error_msg.lower() or "Timeout" in str(type(e)):
+                logger.error(
+                    "LLM request timed out during streaming. Error: %s",
+                    error_msg,
+                )
+                yield "抱歉，请求超时。请稍后重试，或尝试将问题分解为更小的子问题。"
+            else:
+                raise
+
     def _format_not_complete_answer_input(
         self, query: str, nodes: List[NodeWithScore]
     ) -> str:
@@ -382,6 +471,95 @@ class FinalAnswerGenerator:
                 print(f"Token Usage: {token_usage}")
 
         return (summary_answer, reasoning)
+
+    async def generate_not_complete_answer_stream(
+        self, query: str, nodes: List[NodeWithScore]
+    ) -> AsyncGenerator[str, None]:
+        """Stream the not-complete answer token-by-token.
+
+        Uses the same prompt construction and truncation logic as
+        generate_not_complete_answer(), but yields content chunks via astream().
+
+        Args:
+            query: User question.
+            nodes: Final nodes list.
+
+        Yields:
+            str: Content chunks from the LLM.
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        # Truncate nodes to fit within token limit
+        truncated_nodes, node_tokens, nodes_truncated = truncate_nodes_by_tokens(
+            nodes,
+            max_tokens=settings.llm_max_tokens,
+            reserve_for_prompt=1500,
+        )
+
+        if nodes_truncated:
+            logger.warning(
+                "Nodes truncated in generate_not_complete_answer_stream: "
+                "original=%d nodes, kept=%d nodes",
+                len(nodes),
+                len(truncated_nodes),
+            )
+
+        formatted_input = self._format_not_complete_answer_input(query, truncated_nodes)
+
+        prompts = get_prompts()
+        messages = [
+            SystemMessage(content=prompts.not_complete_answer_system),
+            HumanMessage(content=formatted_input),
+        ]
+
+        # Convert to dict format for truncation check
+        messages_dict = [
+            {"role": "system", "content": messages[0].content},
+            {"role": "user", "content": messages[1].content},
+        ]
+
+        truncated_messages_dict, total_tokens, messages_truncated = (
+            check_and_truncate_messages(
+                messages_dict,
+                max_tokens=settings.llm_max_tokens,
+            )
+        )
+
+        if messages_truncated:
+            logger.warning(
+                "Messages truncated in generate_not_complete_answer_stream: total_tokens=%d/%d",
+                total_tokens,
+                settings.llm_max_tokens,
+            )
+            messages = [
+                SystemMessage(content=truncated_messages_dict[0]["content"]),
+                HumanMessage(content=truncated_messages_dict[1]["content"]),
+            ]
+
+        try:
+            async for chunk in self.llm.astream(messages):
+                if chunk.content:
+                    yield chunk.content
+        except Exception as e:
+            error_msg = str(e)
+            if "length limit" in error_msg.lower() or "LengthFinishReasonError" in str(
+                type(e)
+            ):
+                logger.error(
+                    "LLM response hit token limit during streaming. Error: %s",
+                    error_msg,
+                )
+                yield "抱歉，由于响应过长，无法生成完整答案。请尝试将问题分解为更小的子问题，或提供更具体的查询。"
+            elif "timeout" in error_msg.lower() or "Timeout" in str(type(e)):
+                logger.error(
+                    "LLM request timed out during streaming. Error: %s",
+                    error_msg,
+                )
+                yield "抱歉，请求超时。请稍后重试，或尝试将问题分解为更小的子问题。"
+            else:
+                raise
 
 
 def extract_docs_references(nodes: List[NodeWithScore]) -> Dict[str, List]:

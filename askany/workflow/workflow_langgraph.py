@@ -5,7 +5,7 @@ import os
 import re
 from datetime import datetime
 from logging import FileHandler, Formatter, getLogger
-from typing import Any, Dict, List, Literal, Optional, Tuple, TypedDict
+from typing import Any, AsyncGenerator, Dict, List, Literal, Optional, Tuple, TypedDict
 
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
@@ -126,6 +126,9 @@ async def process_parallel_group(
             "is_outer_sub_query_workflow": False,
             "result": None,
             "middle_results": [],
+            "metadata_filters": None,
+            "no_complete_answer": False,
+            "_stream_mode": False,
         }
         result = await agent_workflow.graph.ainvoke(initial_state)
         answer = result.get("result", "抱歉，无法生成答案。")
@@ -172,6 +175,9 @@ async def process_parallel_group(
                     "is_outer_sub_query_workflow": True,  # 设置标志表示这是外部子问题workflow
                     "result": None,
                     "middle_results": [],
+                    "metadata_filters": None,
+                    "no_complete_answer": False,
+                    "_stream_mode": False,
                 }
                 result = await agent_workflow.graph.ainvoke(initial_state)
                 sub_answer = result.get("result", "抱歉，无法生成答案。")
@@ -364,7 +370,10 @@ class AgentState(TypedDict):
     # Middle results for visualization
     middle_results: List[Dict[str, Any]]  # List of middle result dictionaries
 
-    no_complete_answer: bool = False  # Whether to return no complete answer
+    no_complete_answer: bool  # Whether to return no complete answer
+
+    # Streaming support
+    _stream_mode: bool  # When True, _generate_final_answer_node skips LLM call
 
 
 class AgentWorkflow:
@@ -1308,6 +1317,9 @@ class AgentWorkflow:
                     ),
                     "result": None,
                     "middle_results": [],
+                    "metadata_filters": None,
+                    "no_complete_answer": False,
+                    "_stream_mode": False,
                 }
                 # 使用异步的ainvoke方法
                 result = await self.graph.ainvoke(initial_state)
@@ -1500,6 +1512,25 @@ class AgentWorkflow:
                 len(outer_previous_qa_context),
                 len(inner_previous_qa_context),
             )
+
+        # ---- Stream mode: skip LLM call, store prepared state for caller ----
+        if state.get("_stream_mode", False):
+            # If result already exists (direct answer / web search), no streaming needed
+            if result:
+                if settings.return_middle_result:
+                    formatted_result = MiddleResultRecorder.format_middle_results(
+                        middle_results, result
+                    )
+                    return {
+                        **state,
+                        "result": formatted_result,
+                        "nodes": nodes,
+                    }
+                return {**state, "nodes": nodes}
+            # Return state with updated nodes but no result — caller will stream
+            return {**state, "nodes": nodes, "result": None}
+
+        # ---- Normal (non-streaming) mode ----
 
         # If result already exists (from direct answer or web search), handle return_middle_result
         if result:
@@ -2264,6 +2295,9 @@ class AgentWorkflow:
             "is_outer_sub_query_workflow": False,
             "result": None,
             "middle_results": [],
+            "metadata_filters": None,
+            "no_complete_answer": False,
+            "_stream_mode": False,
         }
 
         result = self.graph.invoke(initial_state)
@@ -2286,3 +2320,130 @@ class AgentWorkflow:
                     handler.flush()
 
         return result.get("result", "抱歉，无法生成答案。")
+
+    async def astream_final_answer(
+        self, query: str, query_type: QueryType = QueryType.AUTO, **kwargs
+    ) -> AsyncGenerator[str, None]:
+        """Stream the final answer via SSE-compatible async generator.
+
+        Runs the graph in stream_mode (skips LLM call in final node),
+        then streams the LLM answer token-by-token, followed by refs/reasoning.
+
+        Args:
+            query: User query string.
+            query_type: Query type (AUTO, FAQ, DOCS).
+            **kwargs: Additional arguments (same as invoke).
+
+        Yields:
+            str: Content chunks for SSE streaming.
+        """
+        if debug and debug_logger:
+            debug_logger.info(
+                f"\n{'#' * 80}\n"
+                f"工作流开始执行（流式模式）\n"
+                f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}\n"
+                f"查询: {query}\n"
+                f"查询类型: {query_type}\n"
+                f"{'#' * 80}\n"
+            )
+            for handler in debug_logger.handlers:
+                if isinstance(handler, FileHandler):
+                    handler.flush()
+
+        # Build initial state with _stream_mode=True
+        is_inner_sub_query_workflow = kwargs.get("is_inner_sub_query_workflow", False)
+        if not is_inner_sub_query_workflow and "context" in kwargs:
+            context = kwargs.get("context")
+            if isinstance(context, dict):
+                is_inner_sub_query_workflow = context.get(
+                    "is_inner_sub_query_workflow", False
+                )
+                if not is_inner_sub_query_workflow and "store" in context:
+                    store = context.get("store", {})
+                    if isinstance(store, dict):
+                        is_inner_sub_query_workflow = store.get(
+                            "is_inner_sub_query_workflow", False
+                        )
+
+        initial_state: AgentState = {
+            "query": query,
+            "query_type": query_type,
+            "can_direct_answer": False,
+            "need_web_search": False,
+            "need_rag_search": False,
+            "web_or_rag_result_cached": False,
+            "nodes": [],
+            "keywords": [],
+            "analysis": None,
+            "iteration": 0,
+            "no_relevant_result": None,
+            "current_sub_query": None,
+            "inner_previous_qa_context": [],
+            "outer_previous_qa_context": [],
+            "is_inner_sub_query_workflow": is_inner_sub_query_workflow,
+            "is_outer_sub_query_workflow": False,
+            "result": None,
+            "middle_results": [],
+            "metadata_filters": None,
+            "no_complete_answer": False,
+            "_stream_mode": True,
+        }
+
+        # Run graph (sync invoke — all nodes except final LLM are fast)
+        # Using ainvoke for proper async support
+        final_state = await self.graph.ainvoke(initial_state)
+
+        query_text = final_state.get("query", query)
+        nodes = final_state.get("nodes", [])
+        result = final_state.get("result")
+        middle_results = final_state.get("middle_results", [])
+        no_complete_answer = final_state.get("no_complete_answer", False)
+
+        # If result already exists (direct answer / web search), yield it as one chunk
+        if result:
+            yield result
+            return
+
+        # Stream middle results prefix if enabled
+        if settings.return_middle_result and middle_results:
+            middle_prefix_parts = []
+            for mr in middle_results:
+                node_type = mr["node_type"]
+                data = mr["data"]
+                formatted_data = MiddleResultRecorder._format_node_data(node_type, data)
+                middle_prefix_parts.append(
+                    f"<_{node_type}>\n{formatted_data}\n</_{node_type}>"
+                )
+            middle_prefix = "\n\n".join(middle_prefix_parts) + "\n\n"
+            yield middle_prefix
+
+        # Stream the LLM answer
+        if no_complete_answer:
+            async for (
+                chunk
+            ) in self.final_answer_generator.generate_not_complete_answer_stream(
+                query_text, nodes
+            ):
+                yield chunk
+        else:
+            async for chunk in self.final_answer_generator.generate_final_answer_stream(
+                query_text, nodes
+            ):
+                yield chunk
+
+        # Yield references and reasoning as final chunk
+        references = extract_docs_references(nodes)
+        formatted_refs = format_docs_references(references)
+        if formatted_refs:
+            yield formatted_refs
+
+        if debug and debug_logger:
+            debug_logger.info(
+                f"\n{'#' * 80}\n"
+                f"工作流执行完成（流式模式）\n"
+                f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}\n"
+                f"{'#' * 80}\n"
+            )
+            for handler in debug_logger.handlers:
+                if isinstance(handler, FileHandler):
+                    handler.flush()
