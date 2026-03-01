@@ -476,6 +476,15 @@ def main():
         )
 
     elif args.serve:
+        # ── Observability: Langfuse tracing + RAGAS evaluation ──────────
+        try:
+            from askany.observability import initialize_langfuse, initialize_ragas
+
+            initialize_langfuse(settings)
+            initialize_ragas(settings)
+        except ImportError:
+            logger.debug("Observability package not available (install with: pip install 'askany[observability]')")
+
         # Initialize vector store manager (assumes already ingested)
         vector_store_manager = VectorStoreManager(embed_model, llm=llm)
 

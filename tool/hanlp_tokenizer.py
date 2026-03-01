@@ -7,14 +7,16 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import hanlp
 
 # python -u -m askany.main --ingest > ingest1.log 2>&1 然后 更新custom_dict
-import tensorflow as tf
+try:
+    import tensorflow as tf
+    print("TensorFlow version:", tf.__version__)
+    print("GPU devices:", tf.config.list_physical_devices("GPU"))
+    print("Built with CUDA:", tf.test.is_built_with_cuda())
+except ImportError:
+    print("TensorFlow not installed (HanLP tokenizer uses PyTorch by default).")
 
 from askany.config import settings
 from tool.keyword_utils import load_keywords_from_txt
-
-print("TensorFlow version:", tf.__version__)
-print("GPU devices:", tf.config.list_physical_devices("GPU"))
-print("Built with CUDA:", tf.test.is_built_with_cuda())
 
 # 加载分词模型
 tok = hanlp.load(hanlp.pretrained.tok.COARSE_ELECTRA_SMALL_ZH)

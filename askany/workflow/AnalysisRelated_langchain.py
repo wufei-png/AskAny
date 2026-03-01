@@ -1,5 +1,10 @@
 """Analysis related LLM calls for relevance and completeness checking (LangChain version)."""
 
+try:
+    from askany.observability.langfuse_setup import get_langfuse_callback_handler
+except ImportError:
+    get_langfuse_callback_handler = lambda: None  # noqa: E731
+
 import os
 import re
 import sys
@@ -150,12 +155,14 @@ class RelevanceAnalyzer:
 
             # Create ChatOpenAI client from configuration
             client_api_key = api_key if api_key else ""
+            _lf_handler = get_langfuse_callback_handler()
             self.llm = ChatOpenAI(
                 model=model,
                 api_key=client_api_key,
                 base_url=api_base,
                 temperature=settings.temperature,
                 max_tokens=settings.output_tokens,
+                callbacks=[_lf_handler] if _lf_handler else None,
             )
 
             print(f"Using LLM: {type(self.llm)}")

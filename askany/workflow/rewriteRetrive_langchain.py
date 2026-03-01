@@ -1,5 +1,10 @@
 """Query rewrite generator for optimizing queries for RAG retrieval (LangChain version)."""
 
+try:
+    from askany.observability.langfuse_setup import get_langfuse_callback_handler
+except ImportError:
+    get_langfuse_callback_handler = lambda: None  # noqa: E731
+
 import sys
 from pathlib import Path
 from typing import Optional
@@ -61,12 +66,14 @@ class QueryRewriteGenerator:
             # For vLLM, api_key can be None or empty string, but ChatOpenAI requires it
             # Use empty string as fallback for vLLM (vLLM typically doesn't require auth)
             client_api_key = api_key if api_key else ""
+            _lf_handler = get_langfuse_callback_handler()
             self.llm = ChatOpenAI(
                 model=model,
                 api_key=client_api_key,
                 base_url=api_base,
                 temperature=settings.temperature,
                 max_tokens=settings.output_tokens,
+                callbacks=[_lf_handler] if _lf_handler else None,
             )
 
             print(f"Using LLM: {type(self.llm)}")

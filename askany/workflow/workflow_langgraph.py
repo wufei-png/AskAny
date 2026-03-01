@@ -1,5 +1,10 @@
 """Agent workflow using LangGraph functionality."""
 
+try:
+    from askany.observability.langfuse_setup import get_langfuse_callback_handler
+except ImportError:
+    get_langfuse_callback_handler = lambda: None  # noqa: E731
+
 import json
 import os
 import re
@@ -435,12 +440,14 @@ class AgentWorkflow:
         # Initialize LLM for LangChain
         api_base = settings.openai_api_base
         api_key = settings.openai_api_key if settings.openai_api_key else ""
+        _lf_handler = get_langfuse_callback_handler()
         self.chat_llm = ChatOpenAI(
             model=settings.openai_model,
             api_key=api_key,
             base_url=api_base,
             temperature=settings.temperature,
             max_tokens=settings.output_tokens,
+            callbacks=[_lf_handler] if _lf_handler else None,
         )
 
         # Initialize reranker (shared instance) using SafeReranker

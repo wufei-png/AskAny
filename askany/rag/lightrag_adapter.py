@@ -14,17 +14,32 @@ Retrieval (per query):
     # or sync wrapper:
     nodes = adapter.retrieve("your question", mode="mix")
 
+Langfuse tracing (optional):
+    # Set LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY in the environment
+    # (or via settings.langfuse_public_key / langfuse_secret_key).
+    # LightRAG auto-instruments per-OpenAI-call tracing when those keys exist.
+    # The adapter adds query-level trace grouping and user/session context.
+    #
+    # To attach user context from a workflow:
+    #   with propagate_lightrag_attributes(user_id="u123", session_id="s456"):
+    #       nodes = await adapter.retrieve_async(query)
+    #
+    # Flush buffered events at shutdown:
+    #   adapter.langfuse_flush()
+
 Shutdown:
     await adapter.finalize()
+    adapter.langfuse_shutdown()
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import logging
 import os
-from typing import List, Optional
+from typing import Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +62,43 @@ except ImportError:  # pragma: no cover
 
 # LlamaIndex imports are already a hard dependency of the project
 from llama_index.core.schema import NodeWithScore, TextNode
+
+# ---------------------------------------------------------------------------
+# Langfuse observability – optional dependency.
+#
+# If LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY are present in the environment
+# AND the ``langfuse`` package is installed:
+#   - LightRAG's own OpenAI client (lightrag/llm/openai.py) will already
+#     auto-instrument every individual LLM call via langfuse.openai.AsyncOpenAI.
+#   - This adapter additionally wraps each ``retrieve_async()`` call in a
+#     parent Langfuse span so sub-calls are grouped under a single trace, and
+#     exposes helpers to attach user_id / session_id context.
+#
+# Env vars checked at import time:
+#   LANGFUSE_PUBLIC_KEY   (required for activation)
+#   LANGFUSE_SECRET_KEY   (required for activation)
+#   LANGFUSE_HOST         (optional, defaults to https://cloud.langfuse.com)
+# ---------------------------------------------------------------------------
+_LANGFUSE_ENABLED = False
+_langfuse_client: Any = None  # langfuse.Langfuse singleton or None
+
+try:
+    _langfuse_pub = os.environ.get("LANGFUSE_PUBLIC_KEY", "")
+    _langfuse_sec = os.environ.get("LANGFUSE_SECRET_KEY", "")
+    if _langfuse_pub and _langfuse_sec:
+        from langfuse import get_client as _lf_get_client
+        from langfuse import observe as _lf_observe  # noqa: F401 – used below
+        from langfuse import propagate_attributes as _lf_propagate  # noqa: F401
+
+        _langfuse_client = _lf_get_client()
+        _LANGFUSE_ENABLED = True
+        logger.info("Langfuse observability enabled for LightRAGAdapter")
+    else:
+        _lf_observe = None  # type: ignore[assignment]
+        _lf_propagate = None  # type: ignore[assignment]
+except ImportError:
+    _lf_observe = None  # type: ignore[assignment]
+    _lf_propagate = None  # type: ignore[assignment]
 
 
 class LightRAGAdapter:
@@ -231,7 +283,7 @@ class LightRAGAdapter:
         _llm_api_base = llm_api_base
         _llm_api_key = llm_api_key
 
-        async def _llm_func(
+        async def _llm_func_inner(
             prompt: str,
             system_prompt: Optional[str] = None,
             history_messages: list | None = None,
@@ -249,6 +301,17 @@ class LightRAGAdapter:
                 base_url=_llm_api_base,
                 **kwargs,
             )
+
+        # Wrap with Langfuse @observe so each LLM call becomes a child
+        # "generation" span under the parent retrieve_async trace.
+        # When Langfuse is not available the inner function is used directly.
+        if _LANGFUSE_ENABLED and _lf_observe is not None:
+            _llm_func = _lf_observe(
+                name="lightrag-llm-call",
+                as_type="generation",
+            )(_llm_func_inner)
+        else:
+            _llm_func = _llm_func_inner
 
         # --- build async embedding function -------------------------------------
         # AskAny uses a local SentenceTransformer model (e.g. BAAI/bge-m3) for
@@ -320,6 +383,9 @@ class LightRAGAdapter:
             addon_params=addon_params,
         )
 
+        # --- Langfuse: propagate settings-defined keys to env vars ---------------
+        self._setup_langfuse(_settings)
+
         # --- defaults for query calls -------------------------------------------
         self._default_mode = query_mode
         self._top_k = top_k
@@ -356,6 +422,76 @@ class LightRAGAdapter:
                 changed.append(key)
         if changed:
             logger.debug("LightRAGAdapter: set PG env vars: %s", changed)
+
+    @staticmethod
+    def _setup_langfuse(settings) -> None:
+        """Propagate Langfuse credentials from AskAny settings into env vars.
+
+        LightRAG's ``lightrag/llm/openai.py`` reads ``LANGFUSE_PUBLIC_KEY`` and
+        ``LANGFUSE_SECRET_KEY`` at *import time* to decide whether to swap in
+        ``langfuse.openai.AsyncOpenAI``.  We cannot retroactively change that
+        choice here, but we can ensure the keys are set before the first import
+        of LightRAG's LLM module (which happens lazily on first query).
+
+        For AskAny's own adapter-level instrumentation the module-level
+        ``_LANGFUSE_ENABLED`` flag is checked; it was set at import time from
+        the *existing* env vars, so this method is only relevant for runs where
+        the keys are absent from the initial environment but present in
+        ``settings``.
+        """
+        global _LANGFUSE_ENABLED, _langfuse_client
+        if not getattr(settings, "enable_langfuse", False):
+            return
+        pairs = {
+            "LANGFUSE_PUBLIC_KEY": getattr(settings, "langfuse_public_key", None),
+            "LANGFUSE_SECRET_KEY": getattr(settings, "langfuse_secret_key", None),
+            "LANGFUSE_HOST": getattr(settings, "langfuse_host", None),
+        }
+        changed: list[str] = []
+        for key, value in pairs.items():
+            if value and key not in os.environ:
+                os.environ[key] = value
+                changed.append(key)
+        if changed:
+            logger.debug("LightRAGAdapter: set Langfuse env vars: %s", changed)
+        # Re-check activation in case keys were just added from settings
+        if not _LANGFUSE_ENABLED:
+            pub = os.environ.get("LANGFUSE_PUBLIC_KEY", "")
+            sec = os.environ.get("LANGFUSE_SECRET_KEY", "")
+            if pub and sec:
+                try:
+                    from langfuse import get_client as _lf_get_client2
+
+                    _langfuse_client = _lf_get_client2()
+                    _LANGFUSE_ENABLED = True
+                    logger.info(
+                        "Langfuse observability activated via settings for LightRAGAdapter"
+                    )
+                except ImportError:
+                    logger.debug(
+                        "Langfuse keys found but 'langfuse' package not installed; "
+                        "install with: uv add langfuse"
+                    )
+
+    def langfuse_flush(self) -> None:
+        """Block until all buffered Langfuse events have been sent.
+
+        Call this after a batch of queries in a short-lived process (e.g. CLI
+        tools, test harnesses) to ensure traces are not lost when the process
+        exits.
+        """
+        if _LANGFUSE_ENABLED and _langfuse_client is not None:
+            _langfuse_client.flush()
+            logger.debug("LightRAGAdapter: Langfuse events flushed")
+
+    def langfuse_shutdown(self) -> None:
+        """Flush all buffered events and terminate the Langfuse background thread.
+
+        Call this alongside ``finalize()`` at application shutdown.
+        """
+        if _LANGFUSE_ENABLED and _langfuse_client is not None:
+            _langfuse_client.shutdown()
+            logger.info("LightRAGAdapter: Langfuse client shut down")
 
     async def initialize(self) -> None:
         """Open DB connections and create tables.  Must be called before ``retrieve``."""
@@ -487,13 +623,59 @@ class LightRAGAdapter:
             max_total_tokens=self._max_total_tokens,
         )
 
-        try:
-            result = await self._rag.aquery_data(query, param=param)
-        except Exception as exc:
-            logger.warning("LightRAGAdapter: query failed – %s", exc, exc_info=True)
-            return []
-
-        return self._convert_to_nodes(result, query)
+        # ── Langfuse: wrap retrieval in a parent span ──────────────────────
+        # All child LLM calls (already instrumented via @observe on _llm_func)
+        # will be automatically nested under this span when Langfuse is enabled.
+        if _LANGFUSE_ENABLED and _langfuse_client is not None:
+            with _langfuse_client.start_as_current_observation(
+                as_type="span",
+                name="lightrag-retrieve",
+                input={"query": query, "mode": mode or self._default_mode},
+            ) as _span:
+                try:
+                    result = await self._rag.aquery_data(query, param=param)
+                except Exception as exc:
+                    _span.update(metadata={"error": str(exc)})
+                    logger.warning(
+                        "LightRAGAdapter: query failed – %s", exc, exc_info=True
+                    )
+                    return []
+                nodes = self._convert_to_nodes(result, query)
+                _span.update(
+                    output={
+                        "node_count": len(nodes),
+                        "chunk_count": len(
+                            [
+                                n
+                                for n in nodes
+                                if n.node.metadata.get("type") == "lightrag_chunk"
+                            ]
+                        ),
+                        "entity_count": len(
+                            [
+                                n
+                                for n in nodes
+                                if n.node.metadata.get("type") == "lightrag_entity"
+                            ]
+                        ),
+                        "relation_count": len(
+                            [
+                                n
+                                for n in nodes
+                                if n.node.metadata.get("type") == "lightrag_relation"
+                            ]
+                        ),
+                    }
+                )
+                return nodes
+        else:
+            # Langfuse not active – plain execution path (no overhead)
+            try:
+                result = await self._rag.aquery_data(query, param=param)
+            except Exception as exc:
+                logger.warning("LightRAGAdapter: query failed – %s", exc, exc_info=True)
+                return []
+            return self._convert_to_nodes(result, query)
 
     def retrieve(
         self,
@@ -688,6 +870,42 @@ def _get_or_create_loop() -> asyncio.AbstractEventLoop:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         return loop
+
+
+# ---------------------------------------------------------------------------
+# Public helpers for caller-injected Langfuse context
+# ---------------------------------------------------------------------------
+
+
+@contextlib.contextmanager
+def propagate_lightrag_attributes(
+    user_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+    metadata: Optional[dict] = None,
+):
+    """Context manager that propagates user/session context to all Langfuse
+    spans created inside the ``with`` block (including child ``retrieve_async``
+    calls and their nested LLM-call spans).
+
+    Usage::
+
+        with propagate_lightrag_attributes(user_id="u123", session_id="s456"):
+            nodes = await adapter.retrieve_async(query)
+
+    When Langfuse is not enabled this is a no-op context manager with zero
+    overhead.
+    """
+    if _LANGFUSE_ENABLED and _lf_propagate is not None:
+        with _lf_propagate(
+            user_id=user_id,
+            session_id=session_id,
+            tags=tags,
+            metadata=metadata or {},
+        ):
+            yield
+    else:
+        yield
 
 
 # ---------------------------------------------------------------------------

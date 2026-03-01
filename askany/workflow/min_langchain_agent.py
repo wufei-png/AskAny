@@ -3,6 +3,11 @@
 This agent uses tools for RAG retrieval, web search, and local file search.
 """
 
+try:
+    from askany.observability.langfuse_setup import get_langfuse_callback_handler
+except ImportError:
+    get_langfuse_callback_handler = lambda: None  # noqa: E731
+
 import json
 import os
 import re
@@ -758,6 +763,7 @@ def create_agent_with_tools(
     api_key = settings.openai_api_key if settings.openai_api_key else ""
     # Use at least 8192 max_tokens to reduce "Invalid JSON: EOF while parsing" when
     # model outputs long tool_calls or structured response that gets truncated
+    _lf_handler = get_langfuse_callback_handler()
     chat_llm = ChatOpenAI(
         model=settings.openai_model,
         api_key=api_key,
@@ -765,6 +771,7 @@ def create_agent_with_tools(
         temperature=settings.temperature,
         max_tokens=max(settings.output_tokens, 8192),
         timeout=settings.llm_timeout,
+        callbacks=[_lf_handler] if _lf_handler else None,
     )
 
     # Create tools

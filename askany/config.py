@@ -364,12 +364,46 @@ class Settings(BaseSettings):
     mem0_score_threshold: float = 0.1  # Min relevance score to include a memory
     # LLM/embedder for Mem0 (defaults to AskAny's own openai_api_base/model)
     # Mem0 uses an LLM internally to extract/consolidate memories.
-    mem0_llm_provider: str = "openai"  # "openai" works with any OpenAI-compatible endpoint
+    mem0_llm_provider: str = (
+        "openai"  # "openai" works with any OpenAI-compatible endpoint
+    )
     mem0_llm_model: Optional[str] = None  # None → falls back to openai_model
     mem0_llm_api_base: Optional[str] = None  # None → falls back to openai_api_base
     mem0_llm_api_key: Optional[str] = None  # None → falls back to openai_api_key
-    mem0_embedder_provider: str = "huggingface"  # "huggingface" for local sentence-transformers
+    mem0_embedder_provider: str = (
+        "huggingface"  # "huggingface" for local sentence-transformers
+    )
     mem0_embedder_model: Optional[str] = None  # None → falls back to embedding_model
+
+    # ── Langfuse observability / tracing ──────────────────────────────────────
+    # Set enable_langfuse=True and provide keys to activate tracing.
+    # Keys can also be set via LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY env vars;
+    # LightRAG reads these directly from the environment when the langfuse package
+    # is installed, so even without enable_langfuse=True you get per-call OpenAI
+    # tracing.  The AskAny adapter adds higher-level query-trace grouping on top.
+    enable_langfuse: bool = False  # Master switch for Langfuse tracing
+    langfuse_public_key: Optional[str] = None  # LANGFUSE_PUBLIC_KEY
+    langfuse_secret_key: Optional[str] = None  # LANGFUSE_SECRET_KEY
+    langfuse_host: str = (
+        "https://cloud.langfuse.com"  # Self-hosted: http://your-host:3000
+    )
+    langfuse_release: Optional[str] = None  # Optional release/version tag for traces
+    langfuse_debug: bool = False  # Verbose SDK logging (set True when debugging traces)
+
+    # ── RAGAS evaluation metrics ──────────────────────────────────────────────
+    # Requires: pip install ragas   (or add to pyproject.toml)
+    # Scores are pushed into Langfuse traces when both systems are enabled.
+    enable_ragas: bool = False  # Master switch for RAGAS evaluation
+    ragas_sample_rate: float = 1.0  # Fraction of requests to evaluate (0.0–1.0)
+    ragas_metrics: List[str] = [  # Metrics to compute (reference-free only)
+        "faithfulness",
+        "response_relevancy",
+        "context_precision",
+    ]
+    # LLM used by RAGAS evaluators (defaults to openai_* settings when None)
+    ragas_eval_llm_model: Optional[str] = None
+    ragas_eval_llm_api_base: Optional[str] = None
+    ragas_eval_llm_api_key: Optional[str] = None
 
 
 settings = Settings()

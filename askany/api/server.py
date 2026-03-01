@@ -6,6 +6,7 @@ import json
 import time
 import threading
 import uuid
+from contextlib import asynccontextmanager
 from logging import getLogger
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
@@ -244,12 +245,27 @@ def create_app(
     agent_workflow_global = agent_workflow
     workflow_filter_global = workflow_filter
     simple_agent_global = simple_agent
+
+    # ── Lifespan: shutdown hook for Langfuse flush ────────────────────────
+    @asynccontextmanager
+    async def _lifespan(app: FastAPI):
+        yield
+        # Shutdown: flush Langfuse events
+        try:
+            from askany.observability import shutdown_langfuse
+
+            shutdown_langfuse()
+        except ImportError:
+            pass
+        except Exception:
+            logger.exception("Error during Langfuse shutdown")
+
     app = FastAPI(
         title="AskAny API",
         description="OpenAI-compatible API for AskAny RAG system",
         version="0.1.0",
+        lifespan=_lifespan,
     )
-
     # CORS middleware
     app.add_middleware(
         CORSMiddleware,
@@ -649,6 +665,38 @@ def create_app(
             )
             _background_tasks.add(task)
             task.add_done_callback(_background_tasks.discard)
+
+        # ── RAGAS: fire-and-forget evaluation ──
+        try:
+            from askany.observability import evaluate_rag_response
+            from askany.observability.langfuse_setup import get_langfuse_callback_handler
+
+            _lf_handler = get_langfuse_callback_handler()
+            _trace_id = None
+            if _lf_handler is not None:
+                try:
+                    _trace_id = _lf_handler.get_trace_id()
+                except Exception:
+                    pass  # handler may not have a trace yet
+
+            ragas_task = asyncio.create_task(
+                evaluate_rag_response(
+                    trace_id=_trace_id,
+                    user_input=user_query,
+                    response=response_text,
+                    # TODO(observability): Plumb retrieved_contexts from the
+                    # workflow / agent response to enable context-dependent
+                    # RAGAS metrics (faithfulness, context_precision).  Until
+                    # then only response_relevancy is meaningful.
+                    retrieved_contexts=[],
+                )
+            )
+            _background_tasks.add(ragas_task)
+            ragas_task.add_done_callback(_background_tasks.discard)
+        except ImportError:
+            pass  # observability package not installed
+        except Exception:
+            logger.debug("RAGAS evaluation task creation failed", exc_info=True)
 
         return response
 
