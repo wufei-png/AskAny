@@ -54,6 +54,10 @@ AskAny 在 OpenWebUI 中的响应包含以下三个核心部分：
 - **双工作流模式**：人工设计的工作流（更稳定详细，约60秒）和自动 Agent（更快速，约30秒）
 - **FAQ 标签过滤**：支持 @tag 元数据过滤
 - **vLLM 集成**：OpenAI 兼容 API 的快速推理
+- **SSE 流式输出**：`/v1/chat/completions` 支持按 token 流式返回（AgentWorkflow 与简单 Agent），带预校验
+- **LightRAG**（可选）：知识图谱增强文档/FAQ，可配置查询模式（local/global/hybrid/mix）
+- **Mem0**（可选）：跨会话持久化用户记忆；配合 OpenWebUI 时从 `X-OpenWebUI-User-Id` 读取用户身份
+- **可观测性**（可选）：Langfuse 链路追踪与 RAGAS RAG 指标（忠实度、回答相关性、上下文精确度）
 
 ## 技术栈
 
@@ -125,6 +129,9 @@ uv sync
 # 配置环境
 cp .env.example .env
 # 编辑 .env 配置数据库凭据和 API 端点
+
+# 可选：Langfuse + RAGAS 可观测性
+uv sync --extra observability
 ```
 
 ### 数据库设置
@@ -178,7 +185,7 @@ python -m askany.main --check-db
 python -m askany.main --serve
 
 # 服务器提供：
-# - OpenAI 兼容聊天端点：POST /v1/chat/completions
+# - OpenAI 兼容聊天端点：POST /v1/chat/completions（支持 stream: true 的 SSE 流式）
 # - OpenAPI 规范：GET /openapi.json
 # - FAQ 热更新：POST /v1/update_faqs
 # - 健康检查：GET /health
@@ -198,12 +205,17 @@ python -m askany.main --query --query-text "你的问题" --query-type AUTO
 ```
 askany/
 ├── api/                    # FastAPI 服务器和端点
-│   └── server.py          # 主 API 服务器
+│   └── server.py          # 主 API 服务器（聊天 SSE 流式）
 ├── config.py              # 集中配置管理
 ├── ingest/                # 文档入库
 │   ├── vector_store.py    # PostgreSQL + pgvector 管理
 │   ├── json_parser.py     # FAQ JSON 入库
 │   └── markdown_parser.py # Markdown 文档解析
+├── memory/                 # 用户记忆（可选）
+│   └── mem0_adapter.py    # Mem0 持久化用户记忆
+├── observability/         # 追踪与评估（可选）
+│   ├── langfuse_setup.py  # Langfuse 追踪
+│   └── ragas_eval.py      # RAGAS RAG 指标
 ├── prompts/               # 集中提示词管理
 │   ├── prompts_cn.py      # 中文提示词
 │   ├── prompts_en.py      # 英文提示词
@@ -211,7 +223,9 @@ askany/
 ├── rag/                   # RAG 组件
 │   ├── router.py          # 查询路由逻辑
 │   ├── faq_query_engine.py    # FAQ 混合检索
-│   └── rag_query_engine.py    # 文档检索
+│   ├── rag_query_engine.py    # 文档检索
+│   ├── lightrag_adapter.py    # LightRAG 知识图谱（可选）
+│   └── lightrag_ingest.py     # LightRAG 入库
 ├── workflow/              # Agent 工作流
 │   ├── workflow_langgraph.py  # LangGraph 状态机
 │   ├── min_langchain_agent.py # LangChain agent
@@ -232,7 +246,7 @@ askany/
 - 其他用于数据迁移、关键词导出和 HNSW 索引检查的工具脚本
 
 **测试文件 (`test/`):**
-- `test_workflow_client_call.py` - 工作流客户端测试
+- `test_workflow_client_call.py` - 工作流客户端与 SSE 流式测试
 - 各种组件和集成的测试脚本
 
 **常用命令：**
@@ -345,10 +359,18 @@ All settings can be configured in `askany/config.py` or via environment variable
 | `local_file_search_dir` | Local search directory | data/markdown |
 | `storage_dir` | Keyword index storage | key_word_storage |
 
-### Customizing Prompts for Your Knowledge Base
+### 可选：LightRAG、Mem0、可观测性
 
-The prompts in `askany/prompts/prompts_cn.py` (Chinese) and `askany/prompts/prompts_en.py` (English) contain `TODO` placeholders that should be customized for each knowledge base deployment.
+| 模块 | 配置（config.py 或 .env） | 说明 |
+|------|---------------------------|------|
+| **LightRAG** | `enable_lightrag=True`、`lightrag_working_dir`、`lightrag_query_mode` | 启用前需执行 `python -m askany.rag.lightrag_ingest --ingest-markdown --ingest-json` |
+| **Mem0** | `enable_mem0=True`、`mem0_collection_name`、`mem0_top_k` | 在 OpenWebUI 中设置 `ENABLE_FORWARD_USER_INFO_HEADERS=true` 以传递 `X-OpenWebUI-User-Id` |
+| **Langfuse** | `enable_langfuse=True`、`langfuse_public_key`、`langfuse_secret_key` | 安装：`uv sync --extra observability` |
+| **RAGAS** | `enable_ragas=True`、`ragas_sample_rate`、`ragas_metrics` | 与 Langfuse 同时启用时会将分数写入 Langfuse |
 
+### 为知识库定制提示词
+
+`askany/prompts/prompts_cn.py`（中文）和 `askany/prompts/prompts_en.py`（英文）中的提示词包含 `TODO` 占位符，部署时需按知识库定制。
 
 ## API 端点
 
@@ -356,7 +378,7 @@ The prompts in `askany/prompts/prompts_cn.py` (Chinese) and `askany/prompts/prom
 |------|------|------|
 | `/health` | GET | 健康检查 |
 | `/openapi.json` | GET | OpenAPI 规范 |
-| `/v1/chat/completions` | POST | OpenAI 兼容聊天 |
+| `/v1/chat/completions` | POST | OpenAI 兼容聊天（支持 `stream: true` 的 SSE 流式） |
 | `/v1/update_faqs` | POST | FAQ 热更新 |
 
 ## 开发

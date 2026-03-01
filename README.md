@@ -54,6 +54,10 @@ This structured output format ensures traceability and transparency, allowing us
 - **Dual Workflow Modes**: Manual workflow (more stable and detailed, ~60s) and automatic agent (faster, ~30s)
 - **FAQ Tag Filtering**: Support for @tag metadata filtering
 - **vLLM Integration**: Fast inference with OpenAI-compatible API
+- **SSE Streaming**: Token-by-token streaming for `/v1/chat/completions` (AgentWorkflow and simple agent) with pre-validation
+- **LightRAG** (optional): Knowledge graph augmentation for docs/FAQ; configurable query modes (local/global/hybrid/mix)
+- **Mem0** (optional): Persistent cross-session user memory; user ID from `X-OpenWebUI-User-Id` when using OpenWebUI
+- **Observability** (optional): Langfuse tracing and RAGAS RAG metrics (faithfulness, response relevancy, context precision)
 
 ## Technology Stack
 
@@ -125,6 +129,9 @@ uv sync
 # Configure environment
 cp .env.example .env
 # Edit .env with database credentials and API endpoints
+
+# Optional: Langfuse + RAGAS observability
+uv sync --extra observability
 ```
 
 ### Database Setup
@@ -178,7 +185,7 @@ python -m askany.main --check-db
 python -m askany.main --serve
 
 # Server provides:
-# - OpenAI-compatible chat endpoint: POST /v1/chat/completions
+# - OpenAI-compatible chat endpoint: POST /v1/chat/completions (supports stream: true for SSE)
 # - OpenAPI schema: GET /openapi.json
 # - FAQ hot update: POST /v1/update_faqs
 # - Health check: GET /health
@@ -198,12 +205,17 @@ python -m askany.main --query --query-text "your question" --query-type AUTO
 ```
 askany/
 ├── api/                    # FastAPI server and endpoints
-│   └── server.py          # Main API server
+│   └── server.py          # Main API server (SSE streaming for chat)
 ├── config.py              # Centralized configuration
 ├── ingest/                # Document ingestion
 │   ├── vector_store.py    # PostgreSQL + pgvector management
 │   ├── json_parser.py     # FAQ JSON ingestion
 │   └── markdown_parser.py # Markdown document parsing
+├── memory/                 # User memory (optional)
+│   └── mem0_adapter.py    # Mem0 persistent user memory
+├── observability/         # Tracing and evaluation (optional)
+│   ├── langfuse_setup.py  # Langfuse tracing
+│   └── ragas_eval.py      # RAGAS RAG metrics
 ├── prompts/               # Centralized prompt management
 │   ├── prompts_cn.py      # Chinese prompts
 │   ├── prompts_en.py      # English prompts
@@ -211,7 +223,9 @@ askany/
 ├── rag/                   # RAG components
 │   ├── router.py          # Query routing logic
 │   ├── faq_query_engine.py    # FAQ hybrid retrieval
-│   └── rag_query_engine.py    # Documentation retrieval
+│   ├── rag_query_engine.py    # Documentation retrieval
+│   ├── lightrag_adapter.py    # LightRAG knowledge graph (optional)
+│   └── lightrag_ingest.py     # LightRAG ingestion
 ├── workflow/              # Agent workflows
 │   ├── workflow_langgraph.py  # LangGraph state machine
 │   ├── min_langchain_agent.py # LangChain agent
@@ -232,7 +246,7 @@ The project includes utility scripts in `tool/` and test files in `test/`:
 - Other utility scripts for data migration, keyword export, and HNSW index inspection
 
 **Test Files (`test/`):**
-- `test_workflow_client_call.py` - Workflow client tests
+- `test_workflow_client_call.py` - Workflow client and SSE streaming tests
 - Various test scripts for components and integrations
 
 **Common Commands:**
@@ -345,6 +359,15 @@ All settings can be configured in `askany/config.py` or via environment variable
 | `local_file_search_dir` | Local search directory | data/markdown |
 | `storage_dir` | Keyword index storage | key_word_storage |
 
+### Optional: LightRAG, Mem0, Observability
+
+| Area | Config (in `config.py` or `.env`) | Notes |
+|------|-----------------------------------|-------|
+| **LightRAG** | `enable_lightrag=True`, `lightrag_working_dir`, `lightrag_query_mode` | Run `python -m askany.rag.lightrag_ingest --ingest-markdown --ingest-json` before enabling |
+| **Mem0** | `enable_mem0=True`, `mem0_collection_name`, `mem0_top_k` | Set `ENABLE_FORWARD_USER_INFO_HEADERS=true` in OpenWebUI so `X-OpenWebUI-User-Id` is sent |
+| **Langfuse** | `enable_langfuse=True`, `langfuse_public_key`, `langfuse_secret_key` | Install: `uv sync --extra observability` |
+| **RAGAS** | `enable_ragas=True`, `ragas_sample_rate`, `ragas_metrics` | Pushes scores into Langfuse when both enabled |
+
 ### Customizing Prompts for Your Knowledge Base
 
 The prompts in `askany/prompts/prompts_cn.py` (Chinese) and `askany/prompts/prompts_en.py` (English) contain `TODO` placeholders that should be customized for each knowledge base deployment.
@@ -355,7 +378,7 @@ The prompts in `askany/prompts/prompts_cn.py` (Chinese) and `askany/prompts/prom
 |----------|--------|-------------|
 | `/health` | GET | Health check |
 | `/openapi.json` | GET | OpenAPI specification |
-| `/v1/chat/completions` | POST | OpenAI-compatible chat |
+| `/v1/chat/completions` | POST | OpenAI-compatible chat (supports `stream: true` for SSE) |
 | `/v1/update_faqs` | POST | Hot update FAQ entries |
 
 ## Development
