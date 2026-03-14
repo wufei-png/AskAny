@@ -70,9 +70,14 @@ class Mem0Adapter:
             logger.exception("Mem0 search failed for user_id=%s", user_id)
             return []
 
-        results: List[Dict[str, Any]] = (
-            raw.get("results", []) if isinstance(raw, dict) else raw
-        )
+        if not raw:
+            return []
+
+        raw_results = raw.get("results") if isinstance(raw, dict) else raw
+        if not raw_results:
+            return []
+
+        results: List[Dict[str, Any]] = raw_results  # type: ignore[assignment]
         # Filter by score threshold
         results = [r for r in results if r.get("score", 0) >= threshold]
         logger.debug(

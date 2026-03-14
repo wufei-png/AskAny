@@ -32,7 +32,7 @@ logger = getLogger(__name__)
 # Global device variable (set during initialization)
 _device: Optional[str] = None
 
-_background_tasks: set[asyncio.Task] = set()  # prevent GC of fire-and-forget tasks
+_background_tasks: set[asyncio.Task[Any]] = set()  # prevent GC of fire-and-forget tasks
 
 
 def set_device(device: str) -> None:
@@ -669,7 +669,9 @@ def create_app(
         # ── RAGAS: fire-and-forget evaluation ──
         try:
             from askany.observability import evaluate_rag_response
-            from askany.observability.langfuse_setup import get_langfuse_callback_handler
+            from askany.observability.langfuse_setup import (
+                get_langfuse_callback_handler,
+            )
 
             _lf_handler = get_langfuse_callback_handler()
             _trace_id = None
