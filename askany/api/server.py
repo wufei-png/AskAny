@@ -13,7 +13,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
@@ -274,6 +274,19 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Request size limit middleware
+    MAX_REQUEST_SIZE = 10 * 1024 * 1024  # 10MB
+
+    @app.middleware("http")
+    async def limit_request_size(request, call_next):
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > MAX_REQUEST_SIZE:
+            return JSONResponse(
+                status_code=413,
+                content={"error": "Request too large. Maximum size is 10MB."}
+            )
+        return await call_next(request)
 
     # Note: We use AgentWorkflow (LangGraph) directly instead of WorkflowServer/WorkflowClient
     # AgentWorkflow runs in-process and doesn't require a separate HTTP server

@@ -305,7 +305,8 @@ class VectorStoreManager:
             logger.info(
                 f"Setting maintenance_work_mem to {maintenance_work_mem} for faster index creation..."
             )
-            cursor.execute(f"SET maintenance_work_mem = '{maintenance_work_mem}';")
+            # Use parameterized query to prevent SQL injection
+            cursor.execute("SET maintenance_work_mem = %s", [maintenance_work_mem])
             # Note: No commit needed for SET commands, they're session-level
 
             # Build CREATE INDEX statement
