@@ -119,7 +119,17 @@ def ingest_documents(embed_model, llm=None):
             try:
                 print(f"Loading cached docs nodes from {cache_file}...")
                 with open(cache_file, "rb") as f:
-                    docs_docs = pickle.load(f)
+                    try:
+                        docs_docs = pickle.load(f)
+                    except Exception as pickle_err:
+                        logger.warning(f"Pickle load failed: {pickle_err}. Trying JSON...")
+                        # Fallback: try loading as JSON (safer alternative)
+                        import json
+                        f.seek(0)
+                        try:
+                            docs_docs = json.load(f)
+                        except Exception:
+                            raise ValueError("Cache file is neither valid pickle nor JSON")
                 print(f"Loaded {len(docs_docs)} cached Markdown nodes")
                 logger.info(
                     f"[ingest_documents] Loaded {len(docs_docs)} docs nodes from cache: {cache_file}"
