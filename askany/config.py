@@ -1,8 +1,10 @@
 """Configuration management for AskAny."""
 
+import os
+from pathlib import Path
 from typing import List, Literal, Optional
 
-from pydantic import ConfigDict, field_validator
+from pydantic import ConfigDict, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -42,17 +44,62 @@ class Settings(BaseSettings):
         # Default to "cn" if unrecognized
         return "cn"
 
+    @field_validator("postgres_password")
+    @classmethod
+    def validate_password(cls, v: SecretStr) -> SecretStr:
+        """Validate postgres password is set and meets minimum requirements."""
+        password = v.get_secret_value() if isinstance(v, SecretStr) else v
+        if not password:
+            raise ValueError("POSTGRES_PASSWORD environment variable must be set")
+        if len(password) < 8:
+            raise ValueError("POSTGRES_PASSWORD must be at least 8 characters")
+        return v if isinstance(v, SecretStr) else SecretStr(v)
+
+    @field_validator("postgres_port", "api_port", "inner_server_port")
+    @classmethod
+    def validate_port(cls, v: int) -> int:
+        """Validate port is in valid range (1-65535)."""
+        if not 1 <= v <= 65535:
+            raise ValueError(f"Port must be between 1 and 65535, got {v}")
+        return v
+
+    @field_validator("temperature")
+    @classmethod
+    def validate_temperature(cls, v: float) -> float:
+        """Validate temperature is in valid range (0-2)."""
+        if not 0 <= v <= 2:
+            raise ValueError(f"Temperature must be between 0 and 2, got {v}")
+        return v
+
+    @field_validator("top_p")
+    @classmethod
+    def validate_top_p(cls, v: float) -> float:
+        """Validate top_p is in valid range (0-1)."""
+        if not 0 <= v <= 1:
+            raise ValueError(f"top_p must be between 0 and 1, got {v}")
+        return v
+
+    @field_validator("data_dir", "json_dir", "markdown_dir", "local_file_search_dir", "stopwords_dir")
+    @classmethod
+    def validate_path(cls, v: str) -> str:
+        """Validate path does not contain path traversal sequences."""
+        if ".." in v:
+            raise ValueError(f"Path traversal detected in path: {v}")
+        return v
+
     device: str = "cuda"
     # Database
     postgres_host: str = "localhost"
     postgres_port: int = 5432
     postgres_user: str = "wufei"
-    postgres_password: str = "123456"
+    postgres_password: SecretStr = Field(
+        default_factory=lambda: SecretStr(os.getenv("POSTGRES_PASSWORD", ""))
+    )
     postgres_db: str = "askany"
     log_level: str = "DEBUG"
     query_fusion_num_queries: int = 1
     # OpenAI/LLM
-    openai_api_key: Optional[str] = ""
+    openai_api_key: Optional[str] = None
     openai_api_base: Optional[str] = (
         "http://127.0.0.1:8081/v1"  # For vLLM compatibility
     )

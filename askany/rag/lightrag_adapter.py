@@ -593,7 +593,7 @@ class LightRAGAdapter:
             host=_settings.postgres_host,
             port=str(_settings.postgres_port),
             user=_settings.postgres_user,
-            password=_settings.postgres_password,
+            password=_settings.postgres_password.get_secret_value(),
             database=_settings.postgres_db,
         )
 

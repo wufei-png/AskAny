@@ -152,7 +152,7 @@ class Mem0Adapter:
             "provider": "pgvector",
             "config": {
                 "user": settings.postgres_user,
-                "password": settings.postgres_password,
+                "password": settings.postgres_password.get_secret_value(),
                 "host": settings.postgres_host,
                 "port": settings.postgres_port,
                 "dbname": settings.postgres_db,

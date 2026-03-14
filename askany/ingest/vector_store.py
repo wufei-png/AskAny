@@ -145,7 +145,7 @@ class VectorStoreManager:
             host=settings.postgres_host,
             port=settings.postgres_port,
             user=settings.postgres_user,
-            password=settings.postgres_password,
+            password=settings.postgres_password.get_secret_value(),
             database=settings.postgres_db,
         )
 
@@ -351,7 +351,7 @@ class VectorStoreManager:
         self.vector_store = PGVectorStore.from_params(
             database=settings.postgres_db,
             host=settings.postgres_host,
-            password=settings.postgres_password,
+            password=settings.postgres_password.get_secret_value(),
             port=settings.postgres_port,
             user=settings.postgres_user,
             table_name=table_name,
@@ -415,7 +415,7 @@ class VectorStoreManager:
         self.faq_vector_store = PGVectorStore.from_params(
             database=settings.postgres_db,
             host=settings.postgres_host,
-            password=settings.postgres_password,
+            password=settings.postgres_password.get_secret_value(),
             port=settings.postgres_port,
             user=settings.postgres_user,
             table_name=table_name,
@@ -475,7 +475,7 @@ class VectorStoreManager:
         self.docs_vector_store = PGVectorStore.from_params(
             database=settings.postgres_db,
             host=settings.postgres_host,
-            password=settings.postgres_password,
+            password=settings.postgres_password.get_secret_value(),
             port=settings.postgres_port,
             user=settings.postgres_user,
             table_name=table_name,
