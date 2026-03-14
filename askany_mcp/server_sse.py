@@ -32,6 +32,8 @@ router = None
 embed_model = None
 llm = None
 _initialization_error = None
+_initialized = False
+_init_lock = __import__('threading').Lock()
 
 
 def _ensure_initialized():
@@ -178,9 +180,13 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
     if name != "rag_search":
         raise ValueError(f"Unknown tool: {name}")
 
-    query = arguments.get("query")
+    query = arguments.get("query", "").strip()
     if not query:
         raise ValueError("Missing required argument: query")
+    if len(query) > 10000:
+        raise ValueError("Query too long (max 10000 characters)")
+    if len(query) < 1:
+        raise ValueError("Query too short (min 1 character)")
 
     try:
         results = rag_search_query(query, "auto")

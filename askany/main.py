@@ -294,8 +294,8 @@ def initialize_llm():
                     settings.vector_dimension,
                     embed_model.dimension,
                 )
-        except Exception as e:
-            logger.error(
+        except (ImportError, OSError, RuntimeError) as e:
+            logger.warning(
                 "Failed to load SentenceTransformer model %s: %s. Falling back to OpenAI.",
                 settings.embedding_model,
                 e,
@@ -307,6 +307,12 @@ def initialize_llm():
                 model="text-embedding-ada-002",  # Default OpenAI model
             )
             logger.info("Using OpenAI embedding model (fallback)")
+        except Exception as e:
+            logger.error(
+                "Unexpected error loading SentenceTransformer model: %s",
+                e,
+            )
+            raise  # Re-raise unexpected exceptions
     else:
         # Use OpenAI embedding (default or fallback)
         embed_model = OpenAIEmbedding(

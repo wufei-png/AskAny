@@ -23,42 +23,64 @@ logger = logging.getLogger("askany-mcp")
 router = None
 embed_model = None
 llm = None
+_initialization_error = None
+_initialized = False
+_init_lock = __import__('threading').Lock()
+
+
+def _ensure_initialized():
+    """Thread-safe initialization of RAG components."""
+    global router, embed_model, llm, _initialization_error, _initialized
+    
+    if _initialized:
+        return
+    
+    with _init_lock:
+        # Double-check after acquiring lock
+        if _initialized:
+            return
+        
+        if _initialization_error is not None:
+            raise _initialization_error
+        
+        try:
+            from askany.main import initialize_llm, get_device
+            from askany.ingest import VectorStoreManager
+            from askany.rag import create_query_router
+
+            logger.info("Initializing RAG components...")
+
+            # Initialize LLM and embedding model
+            llm, embed_model = initialize_llm()
+            device = get_device()
+
+            # Initialize vector store manager
+            vector_store_manager = VectorStoreManager(embed_model, llm=llm)
+
+            # Initialize indexes
+            try:
+                vector_store_manager.initialize_faq_index()
+                vector_store_manager.initialize_docs_index()
+                logger.info("Initialized separate FAQ and docs indexes")
+            except Exception as e:
+                logger.warning(f"Separate indexes not available: {e}")
+                vector_store_manager.initialize()
+
+            # Create router
+            router = create_query_router(vector_store_manager, llm, embed_model, device)
+            logger.info("RAG components initialized successfully")
+            
+            _initialized = True
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize RAG components: {e}", exc_info=True)
+            _initialization_error = e
+            raise
 
 
 def initialize_rag_components():
     """Initialize RAG components (router, embedding model, LLM)."""
-    global router, embed_model, llm
-
-    try:
-        from askany.main import initialize_llm, get_device
-        from askany.ingest import VectorStoreManager
-        from askany.rag import create_query_router
-
-        logger.info("Initializing RAG components...")
-
-        # Initialize LLM and embedding model
-        llm, embed_model = initialize_llm()
-        device = get_device()
-
-        # Initialize vector store manager
-        vector_store_manager = VectorStoreManager(embed_model, llm=llm)
-
-        # Initialize indexes
-        try:
-            vector_store_manager.initialize_faq_index()
-            vector_store_manager.initialize_docs_index()
-            logger.info("Initialized separate FAQ and docs indexes")
-        except Exception as e:
-            logger.warning(f"Separate indexes not available: {e}")
-            vector_store_manager.initialize()
-
-        # Create router
-        router = create_query_router(vector_store_manager, llm, embed_model, device)
-        logger.info("RAG components initialized successfully")
-
-    except Exception as e:
-        logger.error(f"Failed to initialize RAG components: {e}", exc_info=True)
-        raise
+    _ensure_initialized()
 
 
 def rag_search_query(query: str, query_type: str = "auto") -> list[dict[str, Any]]:
@@ -248,9 +270,13 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
     if name != "rag_search":
         raise ValueError(f"Unknown tool: {name}")
 
-    query = arguments.get("query")
+    query = arguments.get("query", "").strip()
     if not query:
         raise ValueError("Missing required argument: query")
+    if len(query) > 10000:
+        raise ValueError("Query too long (max 10000 characters)")
+    if len(query) < 1:
+        raise ValueError("Query too short (min 1 character)")
 
     try:
         results = rag_search_query(query, "auto")
