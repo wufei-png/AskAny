@@ -39,8 +39,10 @@ import contextlib
 import hashlib
 import logging
 import os
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
+import psycopg2
+from askany.config import settings as _settings
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -62,6 +64,12 @@ except ImportError:  # pragma: no cover
 
 # LlamaIndex imports are already a hard dependency of the project
 from llama_index.core.schema import NodeWithScore, TextNode
+from askany.rag.provenance import (
+    ProvenanceRepository,
+    build_provenance_record,
+    canonicalize_path,
+    compute_source_doc_id,
+)
 
 # ---------------------------------------------------------------------------
 # Langfuse observability – optional dependency.
@@ -394,6 +402,7 @@ class LightRAGAdapter:
         self._chunk_score = chunk_score
         self._entity_score = entity_score
         self._relation_score = relation_score
+        self._provenance_repo = ProvenanceRepository()
 
         self._initialized = False
 
@@ -499,6 +508,7 @@ class LightRAGAdapter:
             return
         if self._initialized:
             return
+        self._provenance_repo.ensure_table()
         await self._rag.initialize_storages()
         from lightrag.kg.shared_storage import initialize_pipeline_status
 
@@ -541,9 +551,10 @@ class LightRAGAdapter:
             return
         if not self._initialized:
             await self.initialize()
-        await self._rag.ainsert(
+        track_id = await self._rag.ainsert(
             texts, file_paths=file_paths, split_by_character=split_by_character
         )
+        self._backfill_chunk_provenance(track_id, file_paths)
 
     def insert(
         self,
@@ -576,6 +587,90 @@ class LightRAGAdapter:
                 texts, file_paths=file_paths, split_by_character=split_by_character
             )
         )
+
+    def _get_db_connection(self):
+        return psycopg2.connect(
+            host=_settings.postgres_host,
+            port=str(_settings.postgres_port),
+            user=_settings.postgres_user,
+            password=_settings.postgres_password,
+            database=_settings.postgres_db,
+        )
+
+    def _backfill_chunk_provenance(
+        self,
+        track_id: Optional[str],
+        file_paths: Optional[str | List[str]],
+    ) -> None:
+        if not track_id or not file_paths:
+            return
+
+        file_path_list = (
+            [file_paths] if isinstance(file_paths, str) else list(file_paths)
+        )
+        if not file_path_list:
+            return
+
+        conn = self._get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT file_path, chunks_list
+                    FROM lightrag_doc_status
+                    WHERE track_id = %s AND file_path = ANY(%s)
+                    """,
+                    (track_id, file_path_list),
+                )
+                chunk_ids_by_file: Dict[str, list[str]] = {
+                    file_path: list(chunks_list or [])
+                    for file_path, chunks_list in cur.fetchall()
+                }
+
+                all_chunk_ids = [
+                    chunk_id
+                    for chunk_ids in chunk_ids_by_file.values()
+                    for chunk_id in chunk_ids
+                ]
+                if not all_chunk_ids:
+                    return
+
+                cur.execute(
+                    """
+                    SELECT id, chunk_order_index, content, file_path
+                    FROM lightrag_doc_chunks
+                    WHERE id = ANY(%s)
+                    ORDER BY file_path, chunk_order_index
+                    """,
+                    (all_chunk_ids,),
+                )
+                rows = cur.fetchall()
+        except Exception as exc:
+            logger.warning(
+                "LightRAGAdapter: provenance backfill query failed – %s", exc
+            )
+            return
+        finally:
+            conn.close()
+
+        hint_by_path: dict[str, int] = {}
+        records = []
+        for chunk_id, chunk_order_index, content, file_path in rows:
+            record = build_provenance_record(
+                retrieval_origin="lightrag",
+                source_kind="lightrag_chunk",
+                origin_id=chunk_id,
+                source_unit_id=chunk_id,
+                file_path=file_path,
+                text=content,
+                hint_start_line=hint_by_path.get(file_path, 1),
+            )
+            if record.end_line is not None:
+                hint_by_path[file_path] = record.end_line + 1
+            records.append(record)
+
+        if records:
+            self._provenance_repo.upsert_records(records)
 
     # ------------------------------------------------------------------
     # Retrieval
@@ -716,6 +811,43 @@ class LightRAGAdapter:
             self.retrieve_async(query, mode=mode, top_k=top_k, chunk_top_k=chunk_top_k)
         )
 
+    def _enrich_node_provenance(
+        self,
+        node: NodeWithScore,
+        *,
+        source_kind: str,
+        origin_id: str,
+    ) -> NodeWithScore:
+        metadata = node.node.metadata
+        metadata["retrieval_origin"] = "lightrag"
+        metadata["source_kind"] = source_kind
+        metadata["origin_id"] = origin_id
+
+        record = self._provenance_repo.get_record("lightrag", source_kind, origin_id)
+        if record:
+            metadata.update({k: v for k, v in record.items() if v is not None})
+            return node
+
+        file_path = metadata.get("file_path") or metadata.get("source", "")
+        content = node.node.text if hasattr(node.node, "text") else ""
+        if source_kind == "lightrag_chunk" and file_path and content:
+            record = build_provenance_record(
+                retrieval_origin="lightrag",
+                source_kind=source_kind,
+                origin_id=origin_id,
+                source_unit_id=origin_id,
+                file_path=file_path,
+                text=content,
+            )
+            metadata.update(record.to_metadata())
+            self._provenance_repo.upsert_records([record])
+            return node
+
+        if file_path:
+            metadata["canonical_path"] = canonicalize_path(file_path)
+            metadata["source_doc_id"] = compute_source_doc_id(file_path)
+        return node
+
     # ------------------------------------------------------------------
     # Conversion: LightRAG → NodeWithScore
     # ------------------------------------------------------------------
@@ -771,7 +903,13 @@ class LightRAGAdapter:
                     "chunk_id": chunk_id,
                 },
             )
-            nodes.append(NodeWithScore(node=node, score=self._chunk_score))
+            nodes.append(
+                self._enrich_node_provenance(
+                    NodeWithScore(node=node, score=self._chunk_score),
+                    source_kind="lightrag_chunk",
+                    origin_id=chunk_id or node.node_id,
+                )
+            )
 
         # ── 2. Entity nodes (KG-derived factual summaries) ────────────────────
         for entity in data.get("entities", []):
@@ -794,9 +932,20 @@ class LightRAGAdapter:
                     "type": "lightrag_entity",
                     "entity_name": name,
                     "entity_type": entity.get("entity_type", ""),
+                    "source_id": entity.get("source_id", ""),
+                    "reference_id": entity.get("reference_id", ""),
                 },
             )
-            nodes.append(NodeWithScore(node=node, score=self._entity_score))
+            entity_origin_id = entity.get("reference_id") or _stable_id(
+                f"entity:{name}"
+            )
+            nodes.append(
+                self._enrich_node_provenance(
+                    NodeWithScore(node=node, score=self._entity_score),
+                    source_kind="lightrag_entity",
+                    origin_id=entity_origin_id,
+                )
+            )
 
         # ── 3. Relationship nodes (KG-derived relational context) ─────────────
         for rel in data.get("relationships", []):
@@ -818,9 +967,20 @@ class LightRAGAdapter:
                     "tgt_id": tgt,
                     "keywords": rel.get("keywords", ""),
                     "weight": rel.get("weight", 1.0),
+                    "source_id": rel.get("source_id", ""),
+                    "reference_id": rel.get("reference_id", ""),
                 },
             )
-            nodes.append(NodeWithScore(node=node, score=self._relation_score))
+            relation_origin_id = rel.get("reference_id") or _stable_id(
+                f"rel:{src}:{tgt}"
+            )
+            nodes.append(
+                self._enrich_node_provenance(
+                    NodeWithScore(node=node, score=self._relation_score),
+                    source_kind="lightrag_relation",
+                    origin_id=relation_origin_id,
+                )
+            )
 
         # ── 4. Fallback: no nodes extracted from structured data ────────────────
         if not nodes:

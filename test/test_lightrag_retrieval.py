@@ -27,6 +27,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
+import pytest_asyncio
 
 from askany.rag.lightrag_adapter import LightRAGAdapter, get_lightrag_adapter
 
@@ -46,10 +47,13 @@ logger = logging.getLogger(__name__)
 TEST_QUERY = lightrag_questions[0]  # cross-component data flow question
 
 
-@pytest.fixture(scope="module")
-def adapter() -> LightRAGAdapter:
-    """Return the module-level singleton adapter."""
-    return get_lightrag_adapter()
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
+async def adapter() -> LightRAGAdapter:
+    """Reuse one adapter on one event loop for the whole module."""
+    adapter = LightRAGAdapter()
+    yield adapter
+    if adapter._initialized:
+        await adapter.finalize()
 
 
 # Use pytest-asyncio's built-in loop management instead of deprecated
@@ -73,18 +77,18 @@ class TestLightRAGAdapter:
             "LightRAG instance is None — is lightrag-hku installed?"
         )
 
-    def test_singleton_identity(self, adapter: LightRAGAdapter):
+    def test_singleton_identity(self):
         """get_lightrag_adapter() should return the same instance."""
-        adapter2 = get_lightrag_adapter()
-        assert adapter is adapter2
+        singleton_before = get_lightrag_adapter()
+        assert get_lightrag_adapter() is singleton_before
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio(loop_scope="module")
     async def test_initialize(self, adapter: LightRAGAdapter):
         """initialize() should succeed (idempotent)."""
         await adapter.initialize()
         assert adapter._initialized is True
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio(loop_scope="module")
     async def test_retrieve_returns_nodes(self, adapter: LightRAGAdapter):
         """A retrieval query should return a non-empty list of NodeWithScore."""
         await adapter.initialize()
@@ -112,7 +116,7 @@ class TestLightRAGAdapter:
                 "lightrag_context",
             ), f"Unexpected type: {metadata['type']}"
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio(loop_scope="module")
     async def test_retrieve_node_metadata_keys(self, adapter: LightRAGAdapter):
         """Chunk nodes should have expected metadata keys."""
         await adapter.initialize()
@@ -149,23 +153,15 @@ class TestLightRAGAdapter:
             assert "src_id" in meta
             assert "tgt_id" in meta
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio(loop_scope="module")
     async def test_retrieve_sync_wrapper(self, adapter: LightRAGAdapter):
         """The synchronous retrieve() wrapper should also work."""
-        # Note: sync wrapper creates its own event loop if needed.
-        # We call initialize first via async, then test the sync path.
         await adapter.initialize()
-
-        # retrieve() is sync — but we're inside an async test, so we run it
-        # in a thread to avoid "event loop already running" issues.
-        loop = asyncio.get_event_loop()
-        nodes = await loop.run_in_executor(None, adapter.retrieve, TEST_QUERY)
+        nodes = adapter.retrieve(TEST_QUERY)
 
         assert isinstance(nodes, list)
-        # May be empty if the sync wrapper has event-loop conflicts;
-        # just verify it doesn't crash.
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio(loop_scope="module")
     async def test_retrieve_multiple_questions(self, adapter: LightRAGAdapter):
         """Run a few lightrag_questions and print results for manual inspection."""
         await adapter.initialize()
@@ -189,7 +185,7 @@ class TestLightRAGAdapter:
             # Not asserting non-empty — some questions may not have hits
             # depending on what's been ingested.
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio(loop_scope="module")
     async def test_finalize(self, adapter: LightRAGAdapter):
         """finalize() should close connections cleanly."""
         await adapter.finalize()

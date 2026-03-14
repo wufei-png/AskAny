@@ -41,6 +41,10 @@ from llama_index.core.schema import NodeWithScore
 from askany.config import settings
 from askany.ingest import VectorStoreManager
 from askany.rag import create_query_router
+from askany.rag.lightrag_merge import (
+    merge_lightrag_with_llamaindex,
+    render_node_with_enrichment,
+)
 from askany.prompts.prompt_manager import get_prompts
 from askany.workflow.LocalFileSearchTool import LocalFileSearchTool
 from askany.workflow.WebSearchTool import WebSearchTool
@@ -211,6 +215,53 @@ def create_rag_tool(
                     cleaned_query, metadata_filters
                 )
 
+        # ── LightRAG knowledge-graph augmentation ──────────────────────────
+        # When enabled, retrieves entity/relationship/chunk nodes from the
+        # LightRAG knowledge graph and merges them with existing results.
+        # This adds cross-document relational context that pure vector search misses.
+        if getattr(settings, "enable_lightrag", False):
+            try:
+                from askany.rag.lightrag_adapter import get_lightrag_adapter
+
+                lightrag_adapter = get_lightrag_adapter()
+                lightrag_nodes = lightrag_adapter.retrieve(
+                    cleaned_query, mode=getattr(settings, "lightrag_query_mode", "mix")
+                )
+                if lightrag_nodes:
+                    logger.debug("LightRAG返回节点数: %d", len(lightrag_nodes))
+                    docs_top_k = getattr(
+                        router.docs_query_engine,
+                        "similarity_top_k",
+                        settings.docs_similarity_top_k,
+                    )
+                    if docs_top_k <= 0:
+                        docs_top_k = max(len(nodes), len(lightrag_nodes))
+                    has_docs_nodes = any(
+                        (
+                            (
+                                node.node.metadata.get("source_kind") == "docs_chunk"
+                                or node.node.metadata.get("type") == "markdown"
+                            )
+                            if hasattr(node.node, "metadata")
+                            else False
+                        )
+                        for node in nodes
+                    )
+                    if nodes and has_docs_nodes:
+                        nodes = merge_lightrag_with_llamaindex(
+                            nodes,
+                            lightrag_nodes,
+                            query=cleaned_query,
+                            top_k=docs_top_k,
+                            local_file_search=local_file_search,
+                            reranker=getattr(router.docs_query_engine, "reranker", None),
+                        )
+                    elif not nodes and query_type_enum != QueryType.FAQ:
+                        nodes = lightrag_nodes[:docs_top_k]
+                    logger.debug("合并LightRAG节点后总节点数: %d", len(nodes))
+            except Exception as e:
+                logger.warning("LightRAG retrieval failed, skipping: %s", e)
+
         # Extract keywords and search local files (synchronized with workflow_langgraph.py:755-789)
         try:
             # Use the pre-initialized keyword_extractor
@@ -256,28 +307,6 @@ def create_rag_tool(
             nodes = _merge_nodes(nodes, keyword_nodes, local_file_search)
             logger.debug("合并关键词搜索结果后节点数: %d", len(nodes))
 
-        # ── LightRAG knowledge-graph augmentation ──────────────────────────
-        # When enabled, retrieves entity/relationship/chunk nodes from the
-        # LightRAG knowledge graph and merges them with existing results.
-        # This adds cross-document relational context that pure vector search misses.
-        if getattr(settings, "enable_lightrag", False):
-            try:
-                from askany.rag.lightrag_adapter import get_lightrag_adapter
-
-                lightrag_adapter = get_lightrag_adapter()
-                lightrag_nodes = lightrag_adapter.retrieve(
-                    cleaned_query, mode=getattr(settings, "lightrag_query_mode", "mix")
-                )
-                if lightrag_nodes:
-                    logger.debug("LightRAG返回节点数: %d", len(lightrag_nodes))
-                    if nodes:
-                        nodes = _merge_nodes(nodes, lightrag_nodes, local_file_search)
-                    else:
-                        nodes = lightrag_nodes
-                    logger.debug("合并LightRAG节点后总节点数: %d", len(nodes))
-            except Exception as e:
-                logger.warning("LightRAG retrieval failed, skipping: %s", e)
-
         # Format nodes as string
         if not nodes:
             return (
@@ -288,11 +317,7 @@ def create_rag_tool(
 
         result_parts = []
         for i, node in enumerate(nodes, 1):
-            content = (
-                node.node.get_content()
-                if hasattr(node.node, "get_content")
-                else node.node.text
-            )
+            content = render_node_with_enrichment(node)
             file_path = (
                 node.node.metadata.get("file_path")
                 or node.node.metadata.get("source")

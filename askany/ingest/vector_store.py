@@ -27,6 +27,7 @@ from askany.ingest.custom_keyword_index import (
     CustomKeywordTableIndex,
     get_global_keyword_extractor,
 )
+from askany.rag.provenance import ProvenanceRepository, build_provenance_record
 
 logger = getLogger(__name__)
 
@@ -116,6 +117,7 @@ class VectorStoreManager:
         self.docs_vector_store: Optional[PGVectorStore] = None
         self.docs_index: Optional[VectorStoreIndex] = None
         self.docs_keyword_index: Optional[KeywordTableIndex] = None
+        self.provenance_repo = ProvenanceRepository()
 
     def _get_hnsw_kwargs(self) -> Optional[Dict[str, Any]]:
         """Get HNSW index configuration.
@@ -656,6 +658,8 @@ class VectorStoreManager:
 
         # Convert documents to nodes if needed, or use nodes directly
         nodes = []
+        provenance_records = []
+        hint_by_path: Dict[str, int] = {}
         for item in documents_or_nodes:
             if isinstance(item, Document):
                 # Convert Document to Node
@@ -683,6 +687,39 @@ class VectorStoreManager:
                 raise TypeError(
                     f"Expected Document or BaseNode, got {type(item).__name__}"
                 )
+
+        self.provenance_repo.ensure_table()
+        for node in nodes:
+            node_id = None
+            if hasattr(node, "id_") and node.id_:
+                node_id = node.id_
+            elif hasattr(node, "node_id") and node.node_id:
+                node_id = node.node_id
+            else:
+                node_id = node.metadata.get("id", "")
+
+            file_path = node.metadata.get("file_path") or node.metadata.get("source", "")
+            if not node.metadata.get("file_path") and file_path:
+                node.metadata["file_path"] = file_path
+
+            hint_start_line = hint_by_path.get(file_path, 1)
+            provenance = build_provenance_record(
+                retrieval_origin="llamaindex",
+                source_kind="docs_chunk",
+                origin_id=node_id,
+                source_unit_id=node.metadata.get("source_unit_id") or node_id,
+                file_path=file_path,
+                text=node.text if hasattr(node, "text") else "",
+                start_line=node.metadata.get("start_line"),
+                end_line=node.metadata.get("end_line"),
+                hint_start_line=hint_start_line,
+            )
+            if provenance.end_line is not None and file_path:
+                hint_by_path[file_path] = provenance.end_line + 1
+            node.metadata.update(provenance.to_metadata())
+            provenance_records.append(provenance)
+
+        self.provenance_repo.upsert_records(provenance_records)
 
         # Process each node: check for existing ID and delete if found
         # Use tqdm for deletion progress

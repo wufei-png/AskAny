@@ -20,6 +20,7 @@ sys.path.insert(0, str(project_root))
 
 from askany.config import settings
 from askany.prompts.prompt_manager import get_prompts
+from askany.rag.lightrag_merge import render_node_with_enrichment
 from askany.workflow.token_control import (
     check_and_truncate_messages,
     truncate_nodes_by_tokens,
@@ -90,11 +91,7 @@ class FinalAnswerGenerator:
             file_path = node.node.metadata.get("file_path") or node.node.metadata.get(
                 "source", "Unknown File"
             )
-            content = (
-                node.node.get_content()
-                if hasattr(node.node, "get_content")
-                else node.node.text
-            )
+            content = render_node_with_enrichment(node)
             context_parts.append(
                 f"### 参考文件路径: {file_path}\n"
                 f"内容:\n"
@@ -338,11 +335,7 @@ class FinalAnswerGenerator:
             file_path = node.node.metadata.get("file_path") or node.node.metadata.get(
                 "source", "Unknown File"
             )
-            content = (
-                node.node.get_content()
-                if hasattr(node.node, "get_content")
-                else node.node.text
-            )
+            content = render_node_with_enrichment(node)
             context_parts.append(
                 f"### 参考文件路径: {file_path}\n"
                 f"内容:\n"
@@ -587,7 +580,7 @@ def extract_docs_references(nodes: List[NodeWithScore]) -> Dict[str, List]:
         node_metadata = node.node.metadata if hasattr(node.node, "metadata") else {}
         node_type = node_metadata.get("type", "")
 
-        if node_type == "markdown":
+        if node_type in {"markdown", "lightrag_chunk"}:
             # Get source file path and line numbers
             source = node_metadata.get("source", "")
             if source and source not in seen_sources:

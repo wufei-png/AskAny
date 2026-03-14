@@ -16,6 +16,8 @@ from llama_index.core.node_parser import MarkdownNodeParser, SemanticSplitterNod
 from llama_index.core.schema import BaseNode
 from tqdm import tqdm
 
+from askany.rag.provenance import build_provenance_record
+
 logger = logging.getLogger(__name__)
 
 # Disable the "> Adding chunk:" debug messages from llama_index.core.node_parser.node_utils
@@ -305,17 +307,31 @@ class MarkdownParser:
 
         # Set node IDs and metadata directly (no need to convert to Document)
         # This avoids redundant conversion: nodes -> documents -> nodes
+        next_hint_line = 1
         for idx, node in enumerate(nodes):
             # Generate unique ID for each node
             # Always use {base_id}_{idx} format for consistency, even for single node files
             # Single node files will have {base_id}_0
             node_id = f"{base_id}_{idx}"
 
+            provenance = build_provenance_record(
+                retrieval_origin="llamaindex",
+                source_kind="docs_chunk",
+                origin_id=node_id,
+                source_unit_id=node_id,
+                file_path=str(file_path),
+                text=node.text,
+                hint_start_line=next_hint_line,
+            )
+            if provenance.end_line is not None:
+                next_hint_line = provenance.end_line + 1
+
             # Merge metadata: base metadata + node metadata + id
             node.metadata = {
                 **metadata,
                 **node.metadata,
                 "id": node_id,  # Add id field to metadata (for vector_store compatibility)
+                **provenance.to_metadata(),
             }
 
             # Set node ID (required for delete_ref_doc to work)

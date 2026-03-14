@@ -123,7 +123,7 @@ All settings are in `askany/config.py` and can be overridden via `.env`.
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `enable_lightrag` | `False` | Master switch. Set to `True` after ingestion. |
+| `enable_lightrag` | `True` | Master switch. Set to `False` to disable LightRAG augmentation. |
 
 ### Query parameters
 
@@ -171,9 +171,9 @@ Graph storage uses `NetworkXStorage` (file-based `.graphml`). KV, vector, and do
 
 2. **Verify ingestion** (see command above)
 
-3. **Enable the flag** in `.env`:
+3. **Optional: override the flag** in `.env` if you need to disable LightRAG:
    ```
-   enable_lightrag=True
+   enable_lightrag=False
    ```
 
 4. **Restart the server**:
@@ -182,6 +182,78 @@ Graph storage uses `NetworkXStorage` (file-based `.graphml`). KV, vector, and do
    ```
 
 LightRAG results will now be merged into `rag_search` tool responses in the agent workflow.
+
+## Research: LightRAG input — extract itself vs use LlamaIndex chunks
+
+**Question:** Should LightRAG do its own chunking and extraction (current), or consume chunks produced by the LlamaIndex pipeline?
+
+### Current behavior (LightRAG extracts itself)
+
+1. **lightrag_ingest.py** reads raw files and passes text to the adapter:
+   - Markdown: `insert_async(texts, file_paths=paths, split_by_character="\n## ")` — coarse split by H2.
+   - JSON FAQs: one "问题: Q\n答案: A" string per entry, no `split_by_character`.
+2. **LightRAG `ainsert()`** then:
+   - Optionally splits each item on `split_by_character`.
+   - Runs its **internal token-based chunker** (`chunk_token_size=800`, `chunk_overlap_token_size=150` from config).
+   - Runs entity/relationship extraction (LLM) on those chunks.
+   - Writes to `LIGHTRAG_*` tables and builds HNSW on `vdb_chunks`, `vdb_entity`, `vdb_relation`.
+
+So “extract itself” means: we do a coarse split (H2 or per-FAQ); LightRAG does **fine-grained chunking + LLM extraction**.
+
+### Alternative: use LlamaIndex chunks
+
+- **LlamaIndex** produces nodes via `MarkdownParser` (`markdown` / `semantic` / `hybrid`) and stores them in the docs vector store (and optional cache).
+- LightRAG exposes **`ainsert_custom_chunks(self, full_text, text_chunks, doc_id=None)`**: you pass pre-chunked strings; LightRAG skips its chunker and only runs entity extraction on `text_chunks`.
+
+So we could:
+- Run the main ingest (or load cached docs nodes), then call `ainsert_custom_chunks(full_text, [node.get_content() for node in nodes], doc_id=...)` in batches so LightRAG uses the same chunks as the main RAG.
+
+### Tradeoffs
+
+| Aspect | LightRAG extracts itself (current) | Use LlamaIndex chunks |
+|--------|-------------------------------------|------------------------|
+| **Chunk boundaries** | 800-token chunks tuned for entity extraction (one concept per chunk; see config comments). | LlamaIndex: structure/semantic/hybrid — often larger sections or semantic segments, tuned for retrieval. |
+| **Consistency** | Two pipelines: different chunk boundaries for vector retrieval vs KG. | One source of chunks for both retrieval and KG. |
+| **Entity quality** | Small chunks reduce mixed topics per chunk → cleaner entities on dense Chinese docs. | Larger or retrieval-oriented chunks can mix topics → noisier entity extraction. |
+| **Ingestion** | Two ingest commands (main + `lightrag_ingest`); same files read twice. | Single parse; could feed same nodes to both stores (or ingest from cache). |
+| **API** | Standard `ainsert()` is the main, supported API. | `insert_custom_chunks` / `ainsert_custom_chunks` may be deprecated (see upstream issues). |
+
+### Recommendation
+
+**Keep LightRAG extracting itself (current design).**
+
+1. **Entity extraction quality:** Config and comments explicitly use 800-token chunks to avoid mixing multiple H2 sections and to get cleaner entities. LlamaIndex chunking is tuned for retrieval (sections/semantic), not for “one concept per chunk.”
+2. **Different goals:** LlamaIndex optimizes for vector/keyword retrieval; LightRAG optimizes for KG extraction. Forcing the same chunks on both would likely hurt one of the two.
+3. **API stability:** Relying on `ainsert_custom_chunks` is riskier if it is deprecated; `ainsert()` is the supported path.
+4. **Clarity:** Two ingest commands (main vs LightRAG) are straightforward; a single pipeline would require refactoring to produce nodes once and fan-out to both stores and to maintain `full_text` per doc for custom chunks.
+
+If you later want a “single pipeline” experiment, you could add an optional path that loads the same cached docs nodes used by the main ingest and feeds their text to `ainsert_custom_chunks` in batches, accepting the tradeoffs above (and checking upstream deprecation status for custom chunks).
+
+---
+
+## Data Management
+
+### Delete all LightRAG data
+
+To clear the knowledge graph and start fresh:
+
+```bash
+rm -rf lightrag_data/
+```
+
+This removes the local graph file (`graph_chunk_entity_relation.graphml`) and cache. PostgreSQL tables (`LIGHTRAG_*`) remain — to drop them:
+
+```bash
+PGPASSWORD=123456 psql -h localhost -U wufei -d askany -c "
+  DROP TABLE IF EXISTS lightrag_doc_status, lightrag_doc_chunks,
+    lightrag_vdb_chunks, lightrag_vdb_entity, lightrag_vdb_relation CASCADE;
+"
+```
+
+After deletion, re-ingest:
+```bash
+python -m askany.rag.lightrag_ingest --ingest-markdown --ingest-json
+```
 
 ## Troubleshooting
 

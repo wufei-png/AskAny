@@ -474,7 +474,7 @@ class RAGQueryEngine:
             node_metadata = node.node.metadata if hasattr(node.node, "metadata") else {}
             node_type = node_metadata.get("type", "")
 
-            if node_type == "markdown":
+            if node_type in {"markdown", "lightrag_chunk"}:
                 # Get source file path
                 source = node_metadata.get("source", "")
                 if source and source not in seen_sources:

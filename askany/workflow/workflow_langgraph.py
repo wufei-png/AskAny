@@ -25,6 +25,7 @@ from askany.ingest.custom_keyword_index import (
     set_global_keyword_extractor,
 )
 from askany.ingest.keyword_extract_wrapper import KeywordExtractorWrapper
+from askany.rag.lightrag_merge import merge_lightrag_with_llamaindex
 from askany.rag.query_parser import parse_query_filters
 from askany.rag.router import QueryRouter, QueryType
 from askany.rerank import SafeReranker
@@ -832,7 +833,37 @@ class AgentWorkflow:
                     mode=getattr(settings, "lightrag_query_mode", "mix"),
                 )
                 if lightrag_nodes:
-                    nodes = self._merge_nodes(nodes, lightrag_nodes)
+                    docs_top_k = getattr(
+                        self.router.docs_query_engine,
+                        "similarity_top_k",
+                        settings.docs_similarity_top_k,
+                    )
+                    if docs_top_k <= 0:
+                        docs_top_k = max(len(nodes), len(lightrag_nodes))
+                    has_docs_nodes = any(
+                        (
+                            (
+                                node.node.metadata.get("source_kind") == "docs_chunk"
+                                or node.node.metadata.get("type") == "markdown"
+                            )
+                            if hasattr(node.node, "metadata")
+                            else False
+                        )
+                        for node in nodes
+                    )
+                    if nodes and has_docs_nodes:
+                        nodes = merge_lightrag_with_llamaindex(
+                            nodes,
+                            lightrag_nodes,
+                            query=cleaned_query,
+                            top_k=docs_top_k,
+                            local_file_search=self.local_file_search,
+                            reranker=getattr(
+                                self.router.docs_query_engine, "reranker", None
+                            ),
+                        )
+                    elif not nodes and query_type != QueryType.FAQ:
+                        nodes = lightrag_nodes[:docs_top_k]
                     logger.debug(
                         "LightRAG KG检索完成 - 合并了 %d 个KG节点, 合并后总节点数: %d",
                         len(lightrag_nodes),

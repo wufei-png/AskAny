@@ -305,12 +305,13 @@ class Settings(BaseSettings):
     # Example: "/workspace/hanlp" (for Docker containers with mounted volumes)
     # hanlp_home: Optional[str] = "/workspace/hanlp"  # HanLP home directory (None = use default ~/.hanlp)
     hanlp_home: Optional[str] = None
+
     deepl_auth_key: Optional[str] = None
 
     # ── LightRAG knowledge-graph integration ────────────────────────────────
     # Set enable_lightrag=True only AFTER you have run:
     #   python -m askany.rag.lightrag_ingest --ingest-markdown --ingest-json
-    enable_lightrag: bool = False  # Master switch for KG augmentation
+    enable_lightrag: bool = True  # Master switch for KG augmentation
 
     # Query mode: "local" | "global" | "hybrid" | "naive" | "mix" | "bypass"
     lightrag_query_mode: str = "mix"
