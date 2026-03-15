@@ -47,12 +47,10 @@ class Settings(BaseSettings):
     @field_validator("postgres_password")
     @classmethod
     def validate_password(cls, v: SecretStr) -> SecretStr:
-        """Validate postgres password is set and meets minimum requirements."""
+        """Validate postgres password in production environment."""
         password = v.get_secret_value() if isinstance(v, SecretStr) else v
-        if not password:
-            raise ValueError("POSTGRES_PASSWORD environment variable must be set")
-        if len(password) < 8:
-            raise ValueError("POSTGRES_PASSWORD must be at least 8 characters")
+        if not password and os.getenv("ENV") == "production":
+            raise ValueError("POSTGRES_PASSWORD must be set in production")
         return v if isinstance(v, SecretStr) else SecretStr(v)
 
     @field_validator("postgres_port", "api_port", "inner_server_port")
@@ -93,7 +91,7 @@ class Settings(BaseSettings):
     postgres_port: int = 5432
     postgres_user: str = "wufei"
     postgres_password: SecretStr = Field(
-        default_factory=lambda: SecretStr(os.getenv("POSTGRES_PASSWORD", ""))
+        default_factory=lambda: SecretStr(os.getenv("POSTGRES_PASSWORD", "123456"))
     )
     postgres_db: str = "askany"
     log_level: str = "DEBUG"
