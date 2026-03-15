@@ -384,3 +384,171 @@ class TestOpenAICompatibility:
 
         first = json.loads(chunks[0][len("data: ") :].strip())
         assert first["choices"][0]["delta"]["role"] == "assistant"
+
+
+# ─── Additional edge case tests ───
+
+
+class TestSseEdgeCases:
+    """Additional edge case tests for SSE streaming."""
+
+    @pytest.mark.asyncio
+    async def test_large_content_chunk(self):
+        """Should handle large content chunks correctly."""
+        large_content = "x" * 10000  # 10KB content
+
+        async def gen() -> AsyncGenerator[str, None]:
+            yield large_content
+
+        chunks = []
+        async for chunk in _sse_generator("m", gen()):
+            chunks.append(chunk)
+
+        # role + content + stop + [DONE]
+        assert len(chunks) == 4
+
+        content_chunk = json.loads(chunks[1][len("data: ") :].strip())
+        assert content_chunk["choices"][0]["delta"]["content"] == large_content
+
+    @pytest.mark.asyncio
+    async def test_special_characters_in_content(self):
+        """Should handle special characters correctly."""
+        special_content = "Hello 世界 🌍\n\t\r\"'{}[]"
+
+        async def gen() -> AsyncGenerator[str, None]:
+            yield special_content
+
+        chunks = []
+        async for chunk in _sse_generator("m", gen()):
+            chunks.append(chunk)
+
+        content_chunk = json.loads(chunks[1][len("data: ") :].strip())
+        assert content_chunk["choices"][0]["delta"]["content"] == special_content
+
+    @pytest.mark.asyncio
+    async def test_unicode_content(self):
+        """Should handle unicode content correctly."""
+        unicode_content = "中文内容 🎉 émojis and Ünicode"
+
+        async def gen() -> AsyncGenerator[str, None]:
+            yield unicode_content
+
+        chunks = []
+        async for chunk in _sse_generator("m", gen()):
+            chunks.append(chunk)
+
+        content_chunk = json.loads(chunks[1][len("data: ") :].strip())
+        assert content_chunk["choices"][0]["delta"]["content"] == unicode_content
+
+    @pytest.mark.asyncio
+    async def test_multiple_rapid_chunks(self):
+        """Should handle many rapid sequential chunks."""
+
+        async def gen() -> AsyncGenerator[str, None]:
+            for i in range(100):
+                yield f"chunk{i},"
+
+        chunks = []
+        async for chunk in _sse_generator("m", gen()):
+            chunks.append(chunk)
+
+        # role + 100 content + stop + [DONE] = 103
+        assert len(chunks) == 103
+
+    @pytest.mark.asyncio
+    async def test_created_timestamp_consistency(self):
+        """All chunks should have consistent created timestamp."""
+
+        async def gen() -> AsyncGenerator[str, None]:
+            yield "a"
+            yield "b"
+
+        chunks = []
+        async for chunk in _sse_generator("m", gen()):
+            chunks.append(chunk)
+
+        timestamps = set()
+        for chunk in chunks:
+            if chunk.startswith("data: {"):
+                payload = json.loads(chunk[len("data: ") :].strip())
+                timestamps.add(payload["created"])
+
+        assert len(timestamps) == 1, "All chunks should have same created timestamp"
+
+    @pytest.mark.asyncio
+    async def test_model_name_echo(self):
+        """Model name should be echoed in all chunks."""
+        test_model = "custom-model-name"
+
+        async def gen() -> AsyncGenerator[str, None]:
+            yield "test"
+
+        chunks = []
+        async for chunk in _sse_generator(test_model, gen()):
+            chunks.append(chunk)
+
+        for chunk in chunks:
+            if chunk.startswith("data: {"):
+                payload = json.loads(chunk[len("data: ") :].strip())
+                assert payload["model"] == test_model
+
+    @pytest.mark.asyncio
+    async def test_chunk_index_always_zero(self):
+        """Choice index should always be 0."""
+
+        async def gen() -> AsyncGenerator[str, None]:
+            yield "content"
+
+        chunks = []
+        async for chunk in _sse_generator("m", gen()):
+            chunks.append(chunk)
+
+        for chunk in chunks:
+            if chunk.startswith("data: {"):
+                payload = json.loads(chunk[len("data: ") :].strip())
+                assert payload["choices"][0]["index"] == 0
+
+
+class TestStreamingEndpointEdgeCases:
+    """Additional edge case tests for streaming endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_stream_with_empty_messages(self):
+        """Should handle empty messages list."""
+        app, _, _ = self._create_test_app()
+
+        with patch("askany.api.server.get_mem0_adapter", return_value=None):
+            from httpx import ASGITransport, AsyncClient
+
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                response = await client.post(
+                    "/v1/chat/completions",
+                    json={
+                        "model": "test-model",
+                        "messages": [],
+                        "stream": True,
+                    },
+                )
+                # Server returns 400 for empty messages (no user message found)
+                assert response.status_code == 400
+
+    def _create_test_app(self):
+        """Create a test app with mocked globals."""
+        from askany.api.server import create_app
+        from askany.rag.router import QueryRouter
+
+        mock_router = MagicMock(spec=QueryRouter)
+        mock_workflow = MagicMock()
+        mock_filter = MagicMock()
+        mock_agent = MagicMock()
+
+        app = create_app(
+            query_router=mock_router,
+            agent_workflow=mock_workflow,
+            workflow_filter=mock_filter,
+            simple_agent=mock_agent,
+        )
+        return app, mock_workflow, mock_agent
