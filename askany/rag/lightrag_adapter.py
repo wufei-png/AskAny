@@ -43,6 +43,7 @@ from typing import Any, Dict, List, Optional
 
 import psycopg2
 from askany.config import settings as _settings
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -417,12 +418,20 @@ class LightRAGAdapter:
         Only sets variables that are not already present in ``os.environ``
         so explicit overrides are preserved.
         """
+
+        def _get_password(value):
+            if hasattr(value, "get_secret_value"):
+                return value.get_secret_value()
+            return str(value)
+
         mapping = {
-            "POSTGRES_HOST": getattr(settings, "postgres_host", "localhost"),
+            "POSTGRES_HOST": str(getattr(settings, "postgres_host", "localhost")),
             "POSTGRES_PORT": str(getattr(settings, "postgres_port", 5432)),
-            "POSTGRES_USER": getattr(settings, "postgres_user", "root"),
-            "POSTGRES_PASSWORD": getattr(settings, "postgres_password", ""),
-            "POSTGRES_DATABASE": getattr(settings, "postgres_db", "askany"),
+            "POSTGRES_USER": str(getattr(settings, "postgres_user", "root")),
+            "POSTGRES_PASSWORD": _get_password(
+                getattr(settings, "postgres_password", "")
+            ),
+            "POSTGRES_DATABASE": str(getattr(settings, "postgres_db", "askany")),
         }
         changed: list[str] = []
         for key, value in mapping.items():
@@ -513,8 +522,69 @@ class LightRAGAdapter:
         from lightrag.kg.shared_storage import initialize_pipeline_status
 
         await initialize_pipeline_status()
+
+        # Ensure NetworkX graph is populated from existing entities
+        await self._ensure_graph_loaded()
+
         self._initialized = True
         logger.info("LightRAGAdapter: storages initialised")
+
+    async def _ensure_graph_loaded(self) -> None:
+        kg = self._rag.chunk_entity_relation_graph
+        entities_vdb = self._rag.entities_vdb
+
+        all_nodes = await kg.get_all_nodes()
+        all_edges = await kg.get_all_edges()
+
+        if len(all_nodes) > 0:
+            logger.debug("NetworkX graph already has nodes, skipping load")
+            return
+
+        sample_entities = await entities_vdb.query("test", top_k=1)
+        if not sample_entities:
+            logger.debug("No entities in vector store, skipping graph load")
+            return
+
+        logger.info("Loading entities into NetworkX graph from PostgreSQL...")
+
+        all_entities = await entities_vdb.query("", top_k=5000)
+
+        if not all_entities:
+            logger.debug("No entities found to load")
+            return
+
+        for entity in all_entities:
+            entity_name = entity.get("entity_name", "")
+            if entity_name:
+                await kg.upsert_node(
+                    entity_name,
+                    {"content": entity_name, "entity_type": "unknown"},
+                )
+
+        logger.info("Loading relations into NetworkX graph...")
+
+        relations_vdb = self._rag.relationships_vdb
+        all_relations = await relations_vdb.query("", top_k=5000)
+
+        loaded_edges = 0
+        for rel in all_relations:
+            src = rel.get("src_id", "")
+            tgt = rel.get("tgt_id", "")
+            if src and tgt:
+                await kg.upsert_edge(
+                    src,
+                    tgt,
+                    {"content": f"{src} -> {tgt}"},
+                )
+                loaded_edges += 1
+
+        await kg.index_done_callback()
+
+        final_nodes = len(await kg.get_all_nodes())
+        final_edges = len(await kg.get_all_edges())
+        logger.info(
+            f"NetworkX graph populated with {final_nodes} nodes, {final_edges} edges"
+        )
 
     async def finalize(self) -> None:
         """Close DB connections.  Call at application shutdown."""

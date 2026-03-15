@@ -359,10 +359,15 @@ def main():
     """Main function."""
 
     logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(message)s",  # Simple format, just the message
-        stream=sys.stderr,  # Output to stderr so it's captured by 2>&1
+        level=logging.WARNING,
+        format="%(message)s",
+        stream=sys.stderr,
     )
+
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
+    logging.getLogger("huggingface").setLevel(logging.WARNING)
 
     import argparse
 
@@ -489,7 +494,9 @@ def main():
             initialize_langfuse(settings)
             initialize_ragas(settings)
         except ImportError:
-            logger.debug("Observability package not available (install with: pip install 'askany[observability]')")
+            logger.debug(
+                "Observability package not available (install with: pip install 'askany[observability]')"
+            )
 
         # Initialize vector store manager (assumes already ingested)
         vector_store_manager = VectorStoreManager(embed_model, llm=llm)
