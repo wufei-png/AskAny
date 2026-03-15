@@ -61,12 +61,16 @@ def initialize_langfuse(settings: "Settings") -> bool:
         return False
 
     # ── 1. Propagate to env vars (LightRAG reads these directly) ──────────
-    os.environ["LANGFUSE_PUBLIC_KEY"] = settings.langfuse_public_key
-    os.environ["LANGFUSE_SECRET_KEY"] = settings.langfuse_secret_key
-    os.environ["LANGFUSE_HOST"] = settings.langfuse_host
-    if settings.langfuse_release:
+    # Only set if not already present (allow env var overrides)
+    if "LANGFUSE_PUBLIC_KEY" not in os.environ:
+        os.environ["LANGFUSE_PUBLIC_KEY"] = settings.langfuse_public_key
+    if "LANGFUSE_SECRET_KEY" not in os.environ:
+        os.environ["LANGFUSE_SECRET_KEY"] = settings.langfuse_secret_key
+    if "LANGFUSE_HOST" not in os.environ:
+        os.environ["LANGFUSE_HOST"] = settings.langfuse_host
+    if settings.langfuse_release and "LANGFUSE_RELEASE" not in os.environ:
         os.environ["LANGFUSE_RELEASE"] = settings.langfuse_release
-    if settings.langfuse_debug:
+    if settings.langfuse_debug and "LANGFUSE_DEBUG" not in os.environ:
         os.environ["LANGFUSE_DEBUG"] = "true"
 
     logger.info(

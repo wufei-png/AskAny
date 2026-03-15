@@ -9,6 +9,7 @@ from askany.observability.langfuse_setup import (
 from askany.observability.ragas_eval import (
     evaluate_rag_response,
     initialize_ragas,
+    shutdown_ragas,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "initialize_langfuse",
     "initialize_ragas",
     "shutdown_langfuse",
+    "shutdown_ragas",
 ]

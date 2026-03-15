@@ -195,6 +195,19 @@ async def evaluate_rag_response(
     return scores
 
 
+def shutdown_ragas() -> None:
+    """Reset RAGAS module-level state.
+
+    Call this during application shutdown to clean up resources.
+    """
+    global _metrics, _evaluator_llm, _initialized, _sample_rate
+    _metrics = {}
+    _evaluator_llm = None
+    _initialized = False
+    _sample_rate = 1.0
+    logger.info("RAGAS shutdown complete")
+
+
 # ── Internal helpers ─────────────────────────────────────────────────────────
 
 

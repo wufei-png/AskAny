@@ -319,6 +319,59 @@ class TestShutdownLangfuse:
         assert mod.get_langfuse_callback_handler() is None
 
 
+class TestInitializeLangfuseEnvVars:
+    """Tests for Langfuse env var handling."""
+
+    def test_does_not_overwrite_existing_env_vars(self):
+        """If env vars already set, initialize_langfuse should NOT overwrite them."""
+        import askany.observability.langfuse_setup as mod
+
+        env_backup = {}
+        for key in ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST"):
+            env_backup[key] = os.environ.pop(key, None)
+
+        try:
+            os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-existing"
+            os.environ["LANGFUSE_SECRET_KEY"] = "sk-existing"
+            os.environ["LANGFUSE_HOST"] = "http://existing-host"
+
+            # Need to re-import to reset _initialized
+            mod._initialized = False
+
+            settings = _make_settings(
+                langfuse_public_key="pk-new",
+                langfuse_secret_key="sk-new",
+                langfuse_host="http://new-host",
+            )
+
+            with patch.dict(
+                "sys.modules",
+                {
+                    "langfuse": MagicMock(),
+                    "langfuse.langchain": MagicMock(),
+                    "opentelemetry": MagicMock(),
+                    "opentelemetry.trace": MagicMock(),
+                    "opentelemetry.exporter.otlp.proto.http.trace_exporter": MagicMock(),
+                    "opentelemetry.sdk.trace": MagicMock(),
+                    "opentelemetry.sdk.trace.export": MagicMock(),
+                    "openinference": MagicMock(),
+                    "openinference.instrumentation": MagicMock(),
+                    "openinference.instrumentation.llama_index": MagicMock(),
+                },
+            ):
+                mod.initialize_langfuse(settings)
+
+            assert os.environ["LANGFUSE_PUBLIC_KEY"] == "pk-existing"
+            assert os.environ["LANGFUSE_SECRET_KEY"] == "sk-existing"
+            assert os.environ["LANGFUSE_HOST"] == "http://existing-host"
+        finally:
+            for key, val in env_backup.items():
+                if val is not None:
+                    os.environ[key] = val
+                else:
+                    os.environ.pop(key, None)
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Tests for askany.observability.ragas_eval
 # ═══════════════════════════════════════════════════════════════════════════
@@ -792,6 +845,41 @@ class TestEvaluateRagResponse:
         assert result["response_relevancy"] == 0.85
 
 
+class TestShutdownRagas:
+    """Tests for shutdown_ragas()."""
+
+    def test_shutdown_resets_initialized_flag(self):
+        import askany.observability.ragas_eval as mod
+
+        mod._initialized = True
+        mod.shutdown_ragas()
+        assert mod._initialized is False
+
+    def test_shutdown_resets_metrics_and_evaluator(self):
+        import askany.observability.ragas_eval as mod
+
+        mock_metric = object()
+        mock_evaluator = object()
+        mod._metrics = {"faithfulness": mock_metric}
+        mod._evaluator_llm = mock_evaluator
+        mod._initialized = True
+        mod._sample_rate = 0.5
+
+        mod.shutdown_ragas()
+
+        assert mod._metrics == {}
+        assert mod._evaluator_llm is None
+        assert mod._sample_rate == 1.0
+
+    def test_shutdown_is_idempotent(self):
+        """shutdown_ragas can be called multiple times without error."""
+        import askany.observability.ragas_eval as mod
+
+        mod.shutdown_ragas()
+        mod.shutdown_ragas()
+        # Should not raise
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Tests for askany.observability.__init__ (re-exports)
 # ═══════════════════════════════════════════════════════════════════════════
@@ -808,6 +896,7 @@ class TestObservabilityPackageExports:
             shutdown_langfuse,
             evaluate_rag_response,
             initialize_ragas,
+            shutdown_ragas,
         )
 
         # All should be callable
@@ -828,6 +917,7 @@ class TestObservabilityPackageExports:
             "shutdown_langfuse",
             "evaluate_rag_response",
             "initialize_ragas",
+            "shutdown_ragas",
         }
         assert set(obs.__all__) == expected
 

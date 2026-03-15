@@ -10,7 +10,7 @@ The metrics functionality in AskAny consists of:
 - `askany/observability/langfuse_setup.py` - Langfuse initialization/shutdown
 - `askany/observability/ragas_eval.py` - RAGAS metrics evaluation
 - `askany/observability/__init__.py` - Package exports
-- `test/test_observability.py` - Comprehensive test suite (53 tests)
+- `test/test_observability.py` - Comprehensive test suite (59 tests)
 
 ---
 
@@ -23,6 +23,21 @@ were not reset to `None`. This caused stale object references to be returned by
 getter functions.
 
 **Fix**: Added reset logic in `shutdown_langfuse()` to set all singletons to `None`.
+
+### 2. langfuse_setup overwriting existing env vars (FIXED)
+**Issue**: `initialize_langfuse()` was unconditionally overwriting `LANGFUSE_*` 
+environment variables, ignoring any pre-existing values set by the user.
+
+**Fix**: Added checks to only set env vars if not already present:
+```python
+if "LANGFUSE_PUBLIC_KEY" not in os.environ:
+    os.environ["LANGFUSE_PUBLIC_KEY"] = settings.langfuse_public_key
+```
+
+### 3. Missing shutdown_ragas() function (FIXED)
+**Issue**: No cleanup function existed for RAGAS module-level state.
+
+**Fix**: Added `shutdown_ragas()` function in `ragas_eval.py` and exported it in `__init__.py`.
 
 ---
 
@@ -55,19 +70,11 @@ ragas_task = asyncio.create_task(
 
 ---
 
-### 2. Missing RAGAS Shutdown Function
+### 2. Missing RAGAS Shutdown Function (RESOLVED)
 
 **Issue**: There's no `shutdown_ragas()` function to clean up RAGAS resources.
 
-**Suggestion**: Add a `shutdown_ragas()` function to reset module-level state:
-```python
-def shutdown_ragas() -> None:
-    global _metrics, _evaluator_llm, _initialized, _sample_rate
-    _metrics = {}
-    _evaluator_llm = None
-    _initialized = False
-    _sample_rate = 1.0
-```
+**Status**: ✅ RESOLVED - Added `shutdown_ragas()` function in `ragas_eval.py`
 
 ---
 
@@ -109,7 +116,7 @@ def shutdown_ragas() -> None:
 ## Summary
 
 ### What's Working Well
-- Comprehensive unit test coverage (53 tests)
+- Comprehensive unit test coverage (59 tests)
 - Graceful handling of missing dependencies
 - Fire-and-forget evaluation pattern doesn't block API responses
 - Proper initialization/idempotency checks
@@ -117,11 +124,13 @@ def shutdown_ragas() -> None:
 
 ### Immediate Actions Recommended
 1. ✅ Bug fix: Reset singletons in shutdown (COMPLETED)
-2. 🔲 Plumb retrieved_contexts from workflow (requires significant changes)
-3. 🔲 Add RAGAS shutdown function (low priority)
-4. 🔲 Add integration tests (medium priority)
+2. ✅ Bug fix: Preserve existing env vars in langfuse_setup (COMPLETED)
+3. ✅ Bug fix: Add shutdown_ragas() function (COMPLETED)
+4. 🔲 Plumb retrieved_contexts from workflow (requires significant changes)
+5. 🔲 Add integration tests (medium priority)
 
 ---
 
 *Generated: 2026-03-16*
+*Updated: 2026-03-16*
 *Review by: Sisyphus Agent*
