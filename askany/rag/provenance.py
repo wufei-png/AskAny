@@ -8,12 +8,15 @@ import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable, List, Optional, TYPE_CHECKING
 
 import psycopg2
 from psycopg2.extras import execute_batch
 
 from askany.config import settings
+
+if TYPE_CHECKING:
+    from llama_index.core.schema import NodeWithScore
 
 logger = logging.getLogger(__name__)
 
@@ -429,3 +432,37 @@ def build_provenance_record(
         content_length=len(text or ""),
     )
 
+
+def enrich_nodes_with_provenance(
+    nodes: List["NodeWithScore"],
+    retrieval_origin: str = "llamaindex",
+    source_kind: str = "docs_chunk",
+) -> List["NodeWithScore"]:
+    if not nodes:
+        return nodes
+
+    repo = ProvenanceRepository()
+    repo.ensure_table()
+
+    for node in nodes:
+        metadata = node.node.metadata if hasattr(node.node, "metadata") else {}
+
+        if metadata.get("source_doc_id") and metadata.get("canonical_path"):
+            continue
+
+        origin_id = metadata.get("id") or metadata.get("origin_id")
+        if not origin_id:
+            continue
+
+        record = repo.get_record(retrieval_origin, source_kind, origin_id)
+        if record:
+            metadata["source_doc_id"] = record.get("source_doc_id")
+            metadata["canonical_path"] = record.get("canonical_path")
+            if record.get("start_line") is not None:
+                metadata["start_line"] = record.get("start_line")
+            if record.get("end_line") is not None:
+                metadata["end_line"] = record.get("end_line")
+
+            node.node.metadata = metadata
+
+    return nodes

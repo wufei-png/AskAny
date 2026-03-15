@@ -14,6 +14,7 @@ from llama_index.core.schema import NodeWithScore
 
 from askany.config import settings
 from askany.rerank import SafeReranker
+from askany.rag.provenance import enrich_nodes_with_provenance
 
 
 class KeywordVectorAppendRetriever(BaseRetriever):
@@ -416,6 +417,8 @@ class RAGQueryEngine:
         # If similarity_top_k is -1, don't truncate
         if self.similarity_top_k > 0:
             nodes = nodes[: self.similarity_top_k]
+
+        nodes = enrich_nodes_with_provenance(nodes, "llamaindex", "docs_chunk")
 
         return nodes
 

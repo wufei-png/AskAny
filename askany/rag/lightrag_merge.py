@@ -538,6 +538,7 @@ def _ensure_node_provenance(
     origin_id = (
         metadata.get("origin_id")
         or metadata.get("chunk_id")
+        or metadata.get("id")
         or getattr(node.node, "node_id", "")
         or getattr(node.node, "id_", "")
     )
