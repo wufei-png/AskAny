@@ -175,7 +175,11 @@ def shutdown_langfuse() -> None:
 
     Call this during application shutdown (e.g. in a FastAPI lifespan handler).
     """
-    global _langfuse_client, _langfuse_callback_handler, _initialized
+    global \
+        _langfuse_client, \
+        _langfuse_callback_handler, \
+        _llamaindex_instrumentor, \
+        _initialized
 
     if _langfuse_callback_handler is not None:
         try:
@@ -191,6 +195,9 @@ def shutdown_langfuse() -> None:
         except Exception:
             logger.exception("Error shutting down Langfuse client")
 
+    _langfuse_client = None
+    _langfuse_callback_handler = None
+    _llamaindex_instrumentor = None
     _initialized = False
 
 

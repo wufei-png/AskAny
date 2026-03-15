@@ -283,6 +283,41 @@ class TestShutdownLangfuse:
         mod.shutdown_langfuse()
         assert mod._initialized is False
 
+    def test_shutdown_resets_singletons_to_none(self):
+        """Verify singletons are reset to None after shutdown."""
+        import askany.observability.langfuse_setup as mod
+
+        mock_client = MagicMock()
+        mock_handler = MagicMock()
+        mock_instrumentor = MagicMock()
+        mod._langfuse_client = mock_client
+        mod._langfuse_callback_handler = mock_handler
+        mod._llamaindex_instrumentor = mock_instrumentor
+        mod._initialized = True
+
+        mod.shutdown_langfuse()
+
+        assert mod._langfuse_client is None
+        assert mod._langfuse_callback_handler is None
+        assert mod._llamaindex_instrumentor is None
+        assert mod._initialized is False
+
+    def test_getters_return_none_after_shutdown(self):
+        """Verify getters return None after shutdown."""
+        import askany.observability.langfuse_setup as mod
+
+        mock_client = MagicMock()
+        mock_handler = MagicMock()
+        mod._langfuse_client = mock_client
+        mod._langfuse_callback_handler = mock_handler
+        mod._initialized = True
+
+        mod.shutdown_langfuse()
+
+        # After shutdown, getters should return None
+        assert mod.get_langfuse_client() is None
+        assert mod.get_langfuse_callback_handler() is None
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Tests for askany.observability.ragas_eval
