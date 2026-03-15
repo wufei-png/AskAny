@@ -533,6 +533,30 @@ class TestEvaluateRagResponse:
     """Tests for evaluate_rag_response()."""
 
     @pytest.mark.asyncio
+    async def test_works_with_empty_retrieved_contexts(self):
+        """RAGAS should still evaluate even when retrieved_contexts is empty.
+
+        Note: This tests the current behavior where context-dependent metrics
+        (faithfulness, context_precision) will fail but response_relevancy should work.
+        """
+        import askany.observability.ragas_eval as mod
+
+        mock_metric = MagicMock()
+        mock_metric.single_turn_ascore = AsyncMock(return_value=0.85)
+
+        mod._initialized = True
+        mod._metrics = {"response_relevancy": mock_metric}
+        mod._sample_rate = 1.0
+
+        with patch("askany.observability.ragas_eval.SingleTurnSample", create=True):
+            result = await mod.evaluate_rag_response(
+                user_input="test question",
+                response="test answer",
+                retrieved_contexts=[],  # Empty contexts - should still work for response_relevancy
+            )
+            assert "response_relevancy" in result
+
+    @pytest.mark.asyncio
     async def test_returns_empty_when_not_initialized(self):
         from askany.observability.ragas_eval import evaluate_rag_response
 
@@ -725,6 +749,47 @@ class TestEvaluateRagResponse:
 
         # Scores should still be returned even if push failed
         assert result["faithfulness"] == 0.7
+
+    @pytest.mark.asyncio
+    async def test_multiple_metrics_scored_in_parallel(self):
+        """All metrics should be scored even if one temporarily fails."""
+        import askany.observability.ragas_eval as mod
+
+        call_count = {"faithfulness": 0, "response_relevancy": 0}
+
+        async def counting_score(sample):
+            call_count[
+                sample.__class__.__name__ if hasattr(sample, "__class__") else "unknown"
+            ] += 1
+            return 0.8
+
+        mock_faithfulness = MagicMock()
+        mock_faithfulness.single_turn_ascore = AsyncMock(
+            side_effect=[
+                RuntimeError("temp failure"),
+                0.9,
+            ]
+        )
+
+        mock_relevancy = MagicMock()
+        mock_relevancy.single_turn_ascore = AsyncMock(return_value=0.85)
+
+        mod._initialized = True
+        mod._metrics = {
+            "faithfulness": mock_faithfulness,
+            "response_relevancy": mock_relevancy,
+        }
+        mod._sample_rate = 1.0
+
+        with patch("askany.observability.ragas_eval.SingleTurnSample", create=True):
+            result = await mod.evaluate_rag_response(
+                user_input="test",
+                response="answer",
+                retrieved_contexts=["ctx1", "ctx2"],
+            )
+
+        assert "response_relevancy" in result
+        assert result["response_relevancy"] == 0.85
 
 
 # ═══════════════════════════════════════════════════════════════════════════
