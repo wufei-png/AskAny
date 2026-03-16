@@ -12,7 +12,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers: create a minimal Settings-like object for testing
 # ---------------------------------------------------------------------------
@@ -301,6 +300,23 @@ class TestShutdownLangfuse:
         assert mod._langfuse_callback_handler is None
         assert mod._llamaindex_instrumentor is None
         assert mod._initialized is False
+
+    def test_shutdown_calls_uninstrument(self):
+        """Verify uninstrument is called on LlamaIndex instrumentor during shutdown."""
+        import askany.observability.langfuse_setup as mod
+
+        mock_client = MagicMock()
+        mock_handler = MagicMock()
+        mock_instrumentor = MagicMock()
+        mod._langfuse_client = mock_client
+        mod._langfuse_callback_handler = mock_handler
+        mod._llamaindex_instrumentor = mock_instrumentor
+        mod._initialized = True
+
+        mod.shutdown_langfuse()
+
+        mock_instrumentor.uninstrument.assert_called_once()
+        assert mod._llamaindex_instrumentor is None
 
     def test_getters_return_none_after_shutdown(self):
         """Verify getters return None after shutdown."""
@@ -890,12 +906,12 @@ class TestObservabilityPackageExports:
 
     def test_all_exports_are_importable(self):
         from askany.observability import (
+            evaluate_rag_response,
             get_langfuse_callback_handler,
             get_langfuse_client,
             initialize_langfuse,
-            shutdown_langfuse,
-            evaluate_rag_response,
             initialize_ragas,
+            shutdown_langfuse,
             shutdown_ragas,
         )
 

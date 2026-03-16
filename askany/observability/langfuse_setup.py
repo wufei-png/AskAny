@@ -117,14 +117,13 @@ def initialize_langfuse(settings: "Settings") -> bool:
 
     # ── 4. LlamaIndex OpenTelemetry instrumentation ───────────────────────
     try:
+        from openinference.instrumentation.llama_index import LlamaIndexInstrumentor
         from opentelemetry import trace
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
             OTLPSpanExporter,
         )
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-
-        from openinference.instrumentation.llama_index import LlamaIndexInstrumentor
 
         # Langfuse accepts OTLP traces on /api/public/otel/v1/traces
         otlp_endpoint = settings.langfuse_host.rstrip("/") + "/api/public/otel"
@@ -198,6 +197,14 @@ def shutdown_langfuse() -> None:
             logger.info("Langfuse client shut down")
         except Exception:
             logger.exception("Error shutting down Langfuse client")
+
+    # Uninstrument LlamaIndex before clearing the reference
+    if _llamaindex_instrumentor is not None:
+        try:
+            _llamaindex_instrumentor.uninstrument()
+            logger.info("LlamaIndex instrumentation removed")
+        except Exception:
+            logger.exception("Error removing LlamaIndex instrumentation")
 
     _langfuse_client = None
     _langfuse_callback_handler = None
