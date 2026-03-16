@@ -240,7 +240,7 @@ class TestMem0Config:
         assert settings.enable_mem0 is False
         assert settings.mem0_collection_name == "askany_mem0"
         assert settings.mem0_top_k == 5
-        assert settings.mem0_score_threshold == 0.1
+        assert settings.mem0_score_threshold == 0.3
         assert settings.mem0_llm_provider == "openai"
         assert settings.mem0_embedder_provider == "huggingface"
 

@@ -3,8 +3,8 @@
 import asyncio
 import base64
 import json
-import time
 import threading
+import time
 import uuid
 from contextlib import asynccontextmanager
 from logging import getLogger
@@ -21,11 +21,11 @@ from starlette.requests import Request
 
 from askany.config import settings
 from askany.ingest import VectorStoreManager
+from askany.memory.mem0_adapter import get_mem0_adapter
 from askany.rag import FAQQueryEngine
 from askany.rag.router import QueryRouter, QueryType
-from askany.workflow.workflow_langgraph import AgentWorkflow, process_parallel_group
 from askany.workflow.workflow_filter import WorkflowFilter
-from askany.memory.mem0_adapter import get_mem0_adapter
+from askany.workflow.workflow_langgraph import AgentWorkflow, process_parallel_group
 
 logger = getLogger(__name__)
 
@@ -284,7 +284,7 @@ def create_app(
         if content_length and int(content_length) > MAX_REQUEST_SIZE:
             return JSONResponse(
                 status_code=413,
-                content={"error": "Request too large. Maximum size is 10MB."}
+                content={"error": "Request too large. Maximum size is 10MB."},
             )
         return await call_next(request)
 
@@ -509,6 +509,13 @@ def create_app(
 
             async def _build_content_stream() -> AsyncGenerator[str, None]:
                 """Build the content-level async generator for the chosen workflow."""
+                # Prepare mem0_qa_context for workflow path
+                mem0_qa_context: List[Dict[str, str]] = []
+                if memory_system_text:
+                    mem0_qa_context = [
+                        {"query": "user_memory_context", "answer": memory_system_text}
+                    ]
+
                 if use_deepsearch and len(user_messages) == 1:
                     # Deepsearch single-query streaming
                     query_type = QueryType.AUTO
@@ -523,8 +530,9 @@ def create_app(
                             query_type = QueryType.DOCS
                         elif "code" in system_content:
                             query_type = QueryType.CODE
+                    # Pass mem0_qa_context to workflow
                     async for chunk in agent_workflow_global.astream_final_answer(
-                        user_query, query_type
+                        user_query, query_type, mem0_qa_context=mem0_qa_context
                     ):
                         yield chunk
                 else:
@@ -630,8 +638,8 @@ def create_app(
 
                 # Invoke simple agent
                 from askany.workflow.min_langchain_agent import (
-                    invoke_with_retry,
                     extract_and_format_response,
+                    invoke_with_retry,
                 )
 
                 result = invoke_with_retry(simple_agent_global, messages_input)
