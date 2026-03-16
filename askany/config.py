@@ -77,7 +77,9 @@ class Settings(BaseSettings):
             raise ValueError(f"top_p must be between 0 and 1, got {v}")
         return v
 
-    @field_validator("data_dir", "json_dir", "markdown_dir", "local_file_search_dir", "stopwords_dir")
+    @field_validator(
+        "data_dir", "json_dir", "markdown_dir", "local_file_search_dir", "stopwords_dir"
+    )
     @classmethod
     def validate_path(cls, v: str) -> str:
         """Validate path does not contain path traversal sequences."""
@@ -407,7 +409,7 @@ class Settings(BaseSettings):
     enable_mem0: bool = False  # Master switch for user memory
     mem0_collection_name: str = "askany_mem0"  # pgvector collection for memories
     mem0_top_k: int = 5  # Max memories to retrieve per query
-    mem0_score_threshold: float = 0.1  # Min relevance score to include a memory
+    mem0_score_threshold: float = 0.3  # Min relevance score (mem0 default: 0.3)
     # LLM/embedder for Mem0 (defaults to AskAny's own openai_api_base/model)
     # Mem0 uses an LLM internally to extract/consolidate memories.
     mem0_llm_provider: str = (
