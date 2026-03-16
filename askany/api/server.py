@@ -165,6 +165,10 @@ def _make_sse_chunk(
 async def _sse_generator(
     model: str,
     stream: AsyncGenerator[str, None],
+    *,
+    mem0_adapter=None,
+    user_id: Optional[str] = None,
+    user_query: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
     """Wrap an async content stream into OpenAI-compatible SSE events.
 
@@ -174,16 +178,19 @@ async def _sse_generator(
     Args:
         model: Model name to echo in each chunk.
         stream: Async generator yielding content strings.
+        mem0_adapter: Optional Mem0Adapter for saving conversation to memory.
+        user_id: Optional user ID for mem0.
+        user_query: Optional user query for mem0.
     """
     chunk_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
-    # First chunk includes role
     first = True
+    collected_content: List[str] = []
     try:
         async for content in stream:
             if not content:
                 continue
+            collected_content.append(content)
             if first:
-                # Send role delta first, then content
                 role_chunk: Dict[str, Any] = {
                     "id": chunk_id,
                     "object": "chat.completion.chunk",
@@ -203,9 +210,13 @@ async def _sse_generator(
     except Exception:
         logger.exception("Error during SSE streaming")
     finally:
-        # Always send stop + [DONE]
         yield _make_sse_chunk(model, finish_reason="stop", chunk_id=chunk_id)
         yield "data: [DONE]\n\n"
+        if mem0_adapter and user_id and user_query and collected_content:
+            response_text = "".join(collected_content)
+            asyncio.create_task(
+                mem0_adapter.save_turn_async(user_query, response_text, user_id)
+            )
 
 
 def create_app(
@@ -555,7 +566,13 @@ def create_app(
                         yield chunk
 
             return StreamingResponse(
-                _sse_generator(request.model, _build_content_stream()),
+                _sse_generator(
+                    request.model,
+                    _build_content_stream(),
+                    mem0_adapter=mem0_adapter if user_id else None,
+                    user_id=user_id,
+                    user_query=user_query,
+                ),
                 media_type="text/event-stream",
                 headers={
                     "Cache-Control": "no-cache",
