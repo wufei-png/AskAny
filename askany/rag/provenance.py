@@ -5,10 +5,11 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable, List, Optional
+from typing import TYPE_CHECKING, Any
 
 import psycopg2
 from psycopg2.extras import execute_batch
@@ -63,8 +64,8 @@ def compute_source_unit_id(
     retrieval_origin: str,
     origin_id: str,
     canonical_path: str,
-    start_line: Optional[int],
-    end_line: Optional[int],
+    start_line: int | None,
+    end_line: int | None,
     text_hash: str,
 ) -> str:
     payload = "|".join(
@@ -88,8 +89,8 @@ class ProvenanceRecord:
     canonical_path: str
     source_doc_id: str
     source_unit_id: str
-    start_line: Optional[int]
-    end_line: Optional[int]
+    start_line: int | None
+    end_line: int | None
     text_hash: str
     content_length: int
 
@@ -261,7 +262,7 @@ class ProvenanceRepository:
 
     def get_record(
         self, retrieval_origin: str, source_kind: str, origin_id: str
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         self.ensure_table()
         conn = self._connect()
         try:
@@ -297,7 +298,7 @@ class ProvenanceRepository:
             "text_hash",
             "content_length",
         ]
-        return dict(zip(keys, row))
+        return dict(zip(keys, row, strict=False))
 
 
 @lru_cache(maxsize=64)
@@ -314,7 +315,7 @@ def _char_index_to_line_number(text: str, index: int) -> int:
 
 def recover_line_range(
     text: str, file_path: str, *, hint_start_line: int = 1
-) -> tuple[Optional[int], Optional[int]]:
+) -> tuple[int | None, int | None]:
     """Recover [start_line, end_line] by locating chunk text inside the source file."""
     canonical_path = canonicalize_path(file_path)
     file_content = _read_file_content(canonical_path)
@@ -359,7 +360,7 @@ def _line_start_offset(text: str, line_number: int) -> int:
 
 def _recover_line_range_by_lines(
     text: str, file_content: str, *, hint_start_line: int
-) -> tuple[Optional[int], Optional[int]]:
+) -> tuple[int | None, int | None]:
     chunk_lines = [line.strip() for line in text.splitlines() if line.strip()]
     file_lines = file_content.splitlines()
     if not chunk_lines or not file_lines:
@@ -399,9 +400,9 @@ def build_provenance_record(
     origin_id: str,
     file_path: str,
     text: str,
-    source_unit_id: Optional[str] = None,
-    start_line: Optional[int] = None,
-    end_line: Optional[int] = None,
+    source_unit_id: str | None = None,
+    start_line: int | None = None,
+    end_line: int | None = None,
     hint_start_line: int = 1,
 ) -> ProvenanceRecord:
     canonical_path = canonicalize_path(file_path)
@@ -434,10 +435,10 @@ def build_provenance_record(
 
 
 def enrich_nodes_with_provenance(
-    nodes: List["NodeWithScore"],
+    nodes: list[NodeWithScore],
     retrieval_origin: str = "llamaindex",
     source_kind: str = "docs_chunk",
-) -> List["NodeWithScore"]:
+) -> list[NodeWithScore]:
     if not nodes:
         return nodes
 

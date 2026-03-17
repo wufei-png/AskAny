@@ -6,7 +6,6 @@ import pickle
 import sys
 import zipfile
 from pathlib import Path
-from typing import Dict, List, Optional, Set
 
 # Add parent directory to path to import askany modules
 # This allows the script to be run directly: python askany/ingest/keyword_extract.py
@@ -66,7 +65,7 @@ class CustomUnpickler(pickle.Unpickler):
             raise
 
 
-def _whitespace_tokenizer(text: str) -> List[str]:
+def _whitespace_tokenizer(text: str) -> list[str]:
     """Tokenize text by splitting on whitespace.
 
     This is a module-level function that can be pickled, used as a tokenizer
@@ -93,8 +92,8 @@ class KeywordExtractorFromTFIDF:
 
     def __init__(
         self,
-        custom_dict_path: Optional[str] = None,
-        max_features: Optional[int] = None,
+        custom_dict_path: str | None = None,
+        max_features: int | None = None,
         min_df: int = 1,
         max_df: float = 0.7,
     ):
@@ -202,13 +201,13 @@ class KeywordExtractorFromTFIDF:
         self.stop_words = self._load_stopwords()
 
         # Store trained documents and their tokenized versions
-        self.documents: List[str] = []
-        self.tokenized_documents: List[str] = []
+        self.documents: list[str] = []
+        self.tokenized_documents: list[str] = []
         self.tfidf_matrix = None
-        self.feature_names: List[str] = []
+        self.feature_names: list[str] = []
 
         # Load domain keywords from word_freq.txt for filtering
-        self.domain_keywords: Dict[str, int] = {}
+        self.domain_keywords: dict[str, int] = {}
         if Path(custom_dict_path).exists():
             self.domain_keywords = load_keywords_and_frequency_from_txt(
                 custom_dict_path
@@ -222,7 +221,7 @@ class KeywordExtractorFromTFIDF:
         self.cache_set = LRUCache(maxsize=500)
         self.cache_list = LRUCache(maxsize=500)
 
-    def _load_stopwords(self) -> Set[str]:
+    def _load_stopwords(self) -> set[str]:
         """Load stopwords from all txt files in the stopwords directory.
 
         Reads all .txt files from the stopwords directory specified in settings,
@@ -254,7 +253,7 @@ class KeywordExtractorFromTFIDF:
 
         for txt_file in txt_files:
             try:
-                with open(txt_file, "r", encoding="utf-8") as f:
+                with open(txt_file, encoding="utf-8") as f:
                     for line in f:
                         word = line.strip()
                         if word:  # Skip empty lines
@@ -348,7 +347,7 @@ class KeywordExtractorFromTFIDF:
             logger.error(f"Error persisting model: {e}")
             raise
 
-    def _tokenize_text(self, text: str, filter_stopwords: bool = True) -> List[str]:
+    def _tokenize_text(self, text: str, filter_stopwords: bool = True) -> list[str]:
         """Tokenize a text using HanLP pipeline.
 
         Args:
@@ -387,7 +386,7 @@ class KeywordExtractorFromTFIDF:
             logger.error(f"Error tokenizing text: {e}")
             return []
 
-    def _find_markdown_files(self, directory: Path) -> List[Path]:
+    def _find_markdown_files(self, directory: Path) -> list[Path]:
         """Find all markdown files in a directory (recursively).
 
         This method uses the same logic as markdown_parser.py:431-471.
@@ -457,7 +456,7 @@ class KeywordExtractorFromTFIDF:
         logger.info(f"Loading {len(markdown_files)} markdown files...")
         for md_file in markdown_files:
             try:
-                with open(md_file, "r", encoding="utf-8") as f:
+                with open(md_file, encoding="utf-8") as f:
                     content = f.read()
                     self.documents.append(content)
                     # Tokenize the document
@@ -491,7 +490,7 @@ class KeywordExtractorFromTFIDF:
             f"{len(self.feature_names)} features"
         )
 
-    def tokenize_text(self, text: str, filter_stopwords: bool = False) -> List[str]:
+    def tokenize_text(self, text: str, filter_stopwords: bool = False) -> list[str]:
         """Tokenize text using HanLP pipeline."""
         return self._tokenize_text(text, filter_stopwords)
 
@@ -502,7 +501,7 @@ class KeywordExtractorFromTFIDF:
         top_k: int = 3,
         min_tfidf_score: float = 0.0,
         filter_by_domain: bool = True,
-    ) -> List[tuple]:
+    ) -> list[tuple]:
         """Extract keywords from a query using the trained TF-IDF model.
 
         Args:
@@ -533,7 +532,7 @@ class KeywordExtractorFromTFIDF:
         # Create list of (keyword, score) pairs
         keyword_scores = [
             (self.feature_names[idx], score)
-            for idx, score in zip(feature_index, scores)
+            for idx, score in zip(feature_index, scores, strict=False)
             if score >= min_tfidf_score
         ]
 
@@ -558,7 +557,7 @@ class KeywordExtractorFromTFIDF:
         top_k: int = 3,
         min_tfidf_score: float = 0.0,
         filter_by_domain: bool = True,
-    ) -> Set[str]:
+    ) -> set[str]:
         """Extract keywords from a query and return as a set.
 
         Args:
@@ -577,7 +576,7 @@ class KeywordExtractorFromTFIDF:
         )
         return {keyword for keyword, _ in keyword_scores}
 
-    def get_document_keywords(self, doc_index: int, top_k: int = 20) -> List[tuple]:
+    def get_document_keywords(self, doc_index: int, top_k: int = 20) -> list[tuple]:
         """Get top keywords for a specific document.
 
         Args:
@@ -604,7 +603,7 @@ class KeywordExtractorFromTFIDF:
         # Create list of (keyword, score) pairs
         keyword_scores = [
             (self.feature_names[idx], score)
-            for idx, score in zip(feature_index, scores)
+            for idx, score in zip(feature_index, scores, strict=False)
         ]
 
         # Sort by score (descending)

@@ -1,7 +1,7 @@
 """Configuration management for AskAny."""
 
 import os
-from typing import List, Literal, Optional
+from typing import Literal
 
 from pydantic import ConfigDict, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings
@@ -98,8 +98,8 @@ class Settings(BaseSettings):
     log_level: str = "DEBUG"
     query_fusion_num_queries: int = 1
     # OpenAI/LLM
-    openai_api_key: Optional[str] = None
-    openai_api_base: Optional[str] = (
+    openai_api_key: str | None = None
+    openai_api_base: str | None = (
         "http://127.0.0.1:8081/v1"  # For vLLM compatibility
     )
     # For vLLM: model name is still required to specify which model to use
@@ -233,7 +233,7 @@ class Settings(BaseSettings):
     # - [0.5, 0.5] (balanced, default)
     # - [0.7, 0.3] (keyword-focused, better for exact matches)
     # - [0.3, 0.7] (vector-focused, better for semantic understanding)
-    faq_ensemble_weights: List[float] = [0.5, 0.5]
+    faq_ensemble_weights: list[float] = [0.5, 0.5]
     docs_similarity_top_k: int = 5  # Similarity top k for docs query engine
     max_nodes_to_llm: int = 30  # Maximum number of nodes to send to LLM
     max_keywords_for_docs: int = 3  # Maximum number of keywords to extract for docs
@@ -251,7 +251,7 @@ class Settings(BaseSettings):
     # - [0.5, 0.5] (balanced, default)
     # - [0.7, 0.3] (keyword-focused, better for exact matches)
     # - [0.3, 0.7] (vector-focused, better for semantic understanding)
-    docs_ensemble_weights: List[float] = [0.5, 0.5]
+    docs_ensemble_weights: list[float] = [0.5, 0.5]
     faq_vector_only_similarity_top_k: int = (
         3  # Similarity top k when FAQ has no keyword index
     )
@@ -335,7 +335,7 @@ class Settings(BaseSettings):
     qa_cache_similarity_threshold: float = 0.95  # Similarity threshold for cache matching (0-1, only used when qa_cache_use_similarity=True)
 
     # CPU resource limits
-    cpu_cores: Optional[int] = None  # Limit CPU cores (None = use all available cores)
+    cpu_cores: int | None = None  # Limit CPU cores (None = use all available cores)
 
     # HanLP Tokenizer settings
     # Options:
@@ -345,14 +345,14 @@ class Settings(BaseSettings):
     #   or extracted directory: "/workspace/models/hanlp/coarse_electra_small"
     #   or extracted directory: "/workspace/models/hanlp/coarse_electra_small"
     # hanlp_tokenizer_path: Optional[str] = "/workspace/hanlp/tok/coarse_electra_small_20220616_012050/coarse_electra_small_20220616_012050"  # Local path to HanLP tokenizer model (None = use default pretrained)
-    hanlp_tokenizer_path: Optional[str] = None
+    hanlp_tokenizer_path: str | None = None
     # HanLP home directory (where models and dependencies are cached)
     # Default: ~/.hanlp (user's home directory)
     # Example: "/workspace/hanlp" (for Docker containers with mounted volumes)
     # hanlp_home: Optional[str] = "/workspace/hanlp"  # HanLP home directory (None = use default ~/.hanlp)
-    hanlp_home: Optional[str] = None
+    hanlp_home: str | None = None
 
-    deepl_auth_key: Optional[str] = None
+    deepl_auth_key: str | None = None
 
     # ── LightRAG knowledge-graph integration ────────────────────────────────
     # Set enable_lightrag=True only AFTER you have run:
@@ -366,13 +366,13 @@ class Settings(BaseSettings):
     lightrag_working_dir: str = "lightrag_data"
 
     # Override LightRAG LLM endpoint (defaults to openai_api_base / openai_model)
-    lightrag_api_base: Optional[str] = None
-    lightrag_api_key: Optional[str] = None
-    lightrag_llm_model: Optional[str] = None
+    lightrag_api_base: str | None = None
+    lightrag_api_key: str | None = None
+    lightrag_llm_model: str | None = None
 
     # Embedding model served by the same endpoint (defaults to embedding_model)
     # LightRAG needs its own embedding table – can reuse the same model
-    lightrag_embedding_model: Optional[str] = None
+    lightrag_embedding_model: str | None = None
     lightrag_embedding_dim: int = 1024  # must match embedding model output dim
 
     # Retrieval budget
@@ -414,13 +414,13 @@ class Settings(BaseSettings):
     mem0_llm_provider: str = (
         "openai"  # "openai" works with any OpenAI-compatible endpoint
     )
-    mem0_llm_model: Optional[str] = None  # None → falls back to openai_model
-    mem0_llm_api_base: Optional[str] = None  # None → falls back to openai_api_base
-    mem0_llm_api_key: Optional[str] = None  # None → falls back to openai_api_key
+    mem0_llm_model: str | None = None  # None → falls back to openai_model
+    mem0_llm_api_base: str | None = None  # None → falls back to openai_api_base
+    mem0_llm_api_key: str | None = None  # None → falls back to openai_api_key
     mem0_embedder_provider: str = (
         "huggingface"  # "huggingface" for local sentence-transformers
     )
-    mem0_embedder_model: Optional[str] = None  # None → falls back to embedding_model
+    mem0_embedder_model: str | None = None  # None → falls back to embedding_model
 
     # ── Langfuse observability / tracing ──────────────────────────────────────
     # Set enable_langfuse=True and provide keys to activate tracing.
@@ -429,12 +429,12 @@ class Settings(BaseSettings):
     # is installed, so even without enable_langfuse=True you get per-call OpenAI
     # tracing.  The AskAny adapter adds higher-level query-trace grouping on top.
     enable_langfuse: bool = False  # Master switch for Langfuse tracing
-    langfuse_public_key: Optional[str] = None  # LANGFUSE_PUBLIC_KEY
-    langfuse_secret_key: Optional[str] = None  # LANGFUSE_SECRET_KEY
+    langfuse_public_key: str | None = None  # LANGFUSE_PUBLIC_KEY
+    langfuse_secret_key: str | None = None  # LANGFUSE_SECRET_KEY
     langfuse_host: str = (
         "https://cloud.langfuse.com"  # Self-hosted: http://your-host:3000
     )
-    langfuse_release: Optional[str] = None  # Optional release/version tag for traces
+    langfuse_release: str | None = None  # Optional release/version tag for traces
     langfuse_debug: bool = False  # Verbose SDK logging (set True when debugging traces)
 
     # ── RAGAS evaluation metrics ──────────────────────────────────────────────
@@ -442,15 +442,15 @@ class Settings(BaseSettings):
     # Scores are pushed into Langfuse traces when both systems are enabled.
     enable_ragas: bool = False  # Master switch for RAGAS evaluation
     ragas_sample_rate: float = 1.0  # Fraction of requests to evaluate (0.0–1.0)
-    ragas_metrics: List[str] = [  # Metrics to compute (reference-free only)
+    ragas_metrics: list[str] = [  # Metrics to compute (reference-free only)
         "faithfulness",
         "response_relevancy",
         "context_precision",
     ]
     # LLM used by RAGAS evaluators (defaults to openai_* settings when None)
-    ragas_eval_llm_model: Optional[str] = None
-    ragas_eval_llm_api_base: Optional[str] = None
-    ragas_eval_llm_api_key: Optional[str] = None
+    ragas_eval_llm_model: str | None = None
+    ragas_eval_llm_api_base: str | None = None
+    ragas_eval_llm_api_key: str | None = None
 
 
 settings = Settings()

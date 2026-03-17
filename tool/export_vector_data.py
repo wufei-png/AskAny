@@ -492,7 +492,7 @@ def main():
     logger.info("=" * 80)
 
     tables_exported = 0
-    for table_type, config_name, actual_name in get_table_names():
+    for table_type, _config_name, actual_name in get_table_names():
         if not check_table_exists(actual_name):
             logger.info(
                 f"ℹ️  Table {actual_name} ({table_type}) does not exist, skipping"

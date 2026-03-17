@@ -8,7 +8,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from llama_index.core import Document
 from llama_index.core.embeddings import BaseEmbedding
@@ -111,7 +111,7 @@ class MarkdownParser:
                 f"Invalid split_mode: {split_mode}. Must be 'markdown', 'semantic', or 'hybrid'"
             )
 
-    def parse_file_return_documents(self, file_path: Path) -> List[Document]:
+    def parse_file_return_documents(self, file_path: Path) -> list[Document]:
         """Parse a Markdown file into Documents.
 
         Args:
@@ -129,7 +129,7 @@ class MarkdownParser:
                 logger.warning(f"Path does not exist or is not a file: {file_path}")
                 return []
 
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             content = f.read()
 
         # Get file modification time for last_updated metadata
@@ -216,7 +216,7 @@ class MarkdownParser:
                 documents = []
         return documents
 
-    def parse_file(self, file_path: Path) -> List[BaseNode]:
+    def parse_file(self, file_path: Path) -> list[BaseNode]:
         """Parse a Markdown file into Nodes.
 
         Args:
@@ -234,7 +234,7 @@ class MarkdownParser:
                 logger.warning(f"Path does not exist or is not a file: {file_path}")
                 return []
 
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             content = f.read()
 
         # Get file modification time for last_updated metadata
@@ -345,7 +345,7 @@ class MarkdownParser:
                 node.metadata["id"] = node_id
         return nodes
 
-    def parse_directory_return_documents(self, directory: Path) -> List[Document]:
+    def parse_directory_return_documents(self, directory: Path) -> list[Document]:
         """Parse all Markdown files in a directory (recursively).
 
         Args:
@@ -438,7 +438,7 @@ class MarkdownParser:
         )
         return documents
 
-    def parse_directory(self, directory: Path) -> List[BaseNode]:
+    def parse_directory(self, directory: Path) -> list[BaseNode]:
         """Parse all Markdown files in a directory (recursively).
 
         Args:
@@ -533,7 +533,7 @@ class MarkdownParser:
 
     def delete_file_documents(
         self, file_path: Path, vector_store_manager
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Delete all documents associated with a Markdown file from vector store.
 
         This method identifies all document IDs that were generated from the given file

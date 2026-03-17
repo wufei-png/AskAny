@@ -3,7 +3,6 @@
 import logging
 import sys
 from pathlib import Path
-from typing import List, Optional
 from urllib.parse import urlparse
 
 import requests
@@ -25,11 +24,11 @@ class WebSearchTool:
     def __init__(
         self,
         max_results: int = 5,
-        api_url: Optional[str] = None,
+        api_url: str | None = None,
         engine: str = "bing",
         chunk_size: int = 512,
         chunk_overlap: int = 128,
-        rerank_top_k: Optional[int] = None,
+        rerank_top_k: int | None = None,
         timeout: int = settings.llm_timeout,
     ):
         """Initialize WebSearchTool.
@@ -55,7 +54,7 @@ class WebSearchTool:
         # Initialize summary generator for token limit handling
         self.summary_generator = SummaryFromLlm()
 
-    def search(self, query: str) -> List[NodeWithScore]:
+    def search(self, query: str) -> list[NodeWithScore]:
         """Search the web for the given query.
 
         Args:

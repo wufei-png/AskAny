@@ -7,9 +7,8 @@ except ImportError:
 
 import logging
 import sys
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
-from typing import Dict, Optional, Tuple
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -29,7 +28,7 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 
-class SummaryMode(str, Enum):
+class SummaryMode(StrEnum):
     """Summary mode enumeration."""
 
     SIMPLE = "simple"  # Mode 1: Direct compression without splitting
@@ -49,7 +48,7 @@ class SummaryFromLlm:
     """Generator for summarizing content based on token limits."""
 
     def __init__(
-        self, llm: Optional[ChatOpenAI] = None, mode: SummaryMode = SummaryMode.AUTO
+        self, llm: ChatOpenAI | None = None, mode: SummaryMode = SummaryMode.AUTO
     ):
         """Initialize SummaryFromLlm.
 
@@ -171,7 +170,7 @@ class SummaryFromLlm:
 
     def _summarize_segment(
         self, segment: str, compression_ratio: float
-    ) -> Tuple[str, Dict]:
+    ) -> tuple[str, dict]:
         """Summarize a single segment with specified compression ratio.
 
         Args:
@@ -245,7 +244,7 @@ class SummaryFromLlm:
 
     def _summarize_simple(
         self, content: str, completion_tokens: int, target_tokens: int
-    ) -> Tuple[str, Dict]:
+    ) -> tuple[str, dict]:
         """Mode 1: Simple mode - directly compress content without splitting.
 
         Args:
@@ -324,7 +323,7 @@ class SummaryFromLlm:
 
     def _summarize_segment_mode(
         self, content: str, completion_tokens: int, target_tokens: int
-    ) -> Tuple[str, Dict]:
+    ) -> tuple[str, dict]:
         """Mode 2: Segment mode - split content into segments for large content.
 
         Args:
@@ -445,7 +444,7 @@ class SummaryFromLlm:
 
     def summarize(
         self, content: str, completion_tokens: int, target_tokens: int
-    ) -> Tuple[str, Dict]:
+    ) -> tuple[str, dict]:
         """Summarize content to meet token limit.
 
         Supports three modes:

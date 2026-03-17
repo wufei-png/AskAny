@@ -1,7 +1,6 @@
 """Safe reranker wrapper that handles edge cases and prevents node loss."""
 
 import logging
-from typing import List, Optional
 
 from llama_index.core.postprocessor import SentenceTransformerRerank
 from llama_index.core.postprocessor.types import BaseNodePostprocessor
@@ -20,10 +19,10 @@ class SafeReranker(BaseNodePostprocessor):
     4. Inherits from BaseNodePostprocessor to be compatible with RetrieverQueryEngine
     """
 
-    reranker: Optional[BaseNodePostprocessor] = None
-    rerank_top_n: Optional[int] = None
+    reranker: BaseNodePostprocessor | None = None
+    rerank_top_n: int | None = None
 
-    def __init__(self, reranker: Optional[BaseNodePostprocessor]):
+    def __init__(self, reranker: BaseNodePostprocessor | None):
         """Initialize SafeReranker.
 
         Args:
@@ -41,9 +40,9 @@ class SafeReranker(BaseNodePostprocessor):
 
     def _postprocess_nodes(
         self,
-        nodes: List[NodeWithScore],
-        query_bundle: Optional[QueryBundle] = None,
-    ) -> List[NodeWithScore]:
+        nodes: list[NodeWithScore],
+        query_bundle: QueryBundle | None = None,
+    ) -> list[NodeWithScore]:
         """Safely postprocess nodes with reranker.
 
         This is the internal implementation called by BaseNodePostprocessor.postprocess_nodes().
@@ -142,8 +141,8 @@ class SafeReranker(BaseNodePostprocessor):
     def create(
         cls,
         top_n: int = -1,
-        device: Optional[str] = None,
-        reranker_model: Optional[str] = None,
+        device: str | None = None,
+        reranker_model: str | None = None,
     ) -> "SafeReranker":
         """Create a SafeReranker instance with underlying reranker.
 
@@ -180,7 +179,7 @@ class SafeReranker(BaseNodePostprocessor):
                     device = "cpu"
                     logger.info("torch not available, using CPU for reranker")
 
-            base_reranker: Optional[BaseNodePostprocessor] = None
+            base_reranker: BaseNodePostprocessor | None = None
 
             if reranker_type == "flag_embedding":
                 # Try to use FlagEmbeddingReranker if available

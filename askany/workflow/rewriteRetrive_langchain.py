@@ -7,7 +7,6 @@ except ImportError:
 
 import sys
 from pathlib import Path
-from typing import Optional
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -51,7 +50,7 @@ SYS_PROMPT = """
 class QueryRewriteGenerator:
     """Generator for rewriting user queries to optimize RAG retrieval."""
 
-    def __init__(self, llm: Optional[ChatOpenAI] = None):
+    def __init__(self, llm: ChatOpenAI | None = None):
         """Initialize QueryRewriteGenerator.
 
         Args:

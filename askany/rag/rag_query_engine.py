@@ -1,6 +1,5 @@
 """RAG query engine for document retrieval and generation."""
 
-from typing import Dict, List, Optional, Tuple
 
 from llama_index.core import KeywordTableIndex, QueryBundle, VectorStoreIndex
 from llama_index.core.llms import LLM
@@ -30,9 +29,9 @@ class KeywordVectorAppendRetriever(BaseRetriever):
         self,
         keyword_retriever: BaseRetriever,
         vector_retriever: BaseRetriever,
-        reranker: Optional[SafeReranker] = None,
+        reranker: SafeReranker | None = None,
         similarity_threshold: float = 0.0,
-        keyword_index: Optional[KeywordTableIndex] = None,
+        keyword_index: KeywordTableIndex | None = None,
         similarity_top_k: int = 5,
     ) -> None:
         """Initialize the retriever.
@@ -53,8 +52,8 @@ class KeywordVectorAppendRetriever(BaseRetriever):
         super().__init__()
 
     def _filter_keyword_nodes_by_limits(
-        self, keyword_nodes: List[NodeWithScore]
-    ) -> List[NodeWithScore]:
+        self, keyword_nodes: list[NodeWithScore]
+    ) -> list[NodeWithScore]:
         """根据文件数量和匹配数量限制过滤关键字节点。
 
         从keyword_index中查找每个节点对应的关键词，按关键词分组。
@@ -92,7 +91,7 @@ class KeywordVectorAppendRetriever(BaseRetriever):
         # with open("node_ids_to_find.txt", "w", encoding="utf-8") as f:  f.write(str(node_ids_to_find))
         # with open("keyword_table.txt", "w", encoding="utf-8") as f:  f.write(str(keyword_table))
         # 只遍历包含这些节点ID的关键词，构建反向映射：node_id -> [keywords]
-        node_to_keywords: Dict[str, List[str]] = {}
+        node_to_keywords: dict[str, list[str]] = {}
         for keyword, node_ids in keyword_table.items():
             # print(f"keyword: {keyword}, node_ids: {node_ids}")
             # 只处理包含我们需要的节点ID的关键词
@@ -103,7 +102,7 @@ class KeywordVectorAppendRetriever(BaseRetriever):
                     node_to_keywords[node_id].append(keyword)
         print("node_to_keywords: ", node_to_keywords)
         # 按关键词分组节点：keyword -> [nodes]
-        keyword_to_nodes: Dict[str, List[NodeWithScore]] = {}
+        keyword_to_nodes: dict[str, list[NodeWithScore]] = {}
         nodes_without_keywords = []
 
         for node in keyword_nodes:
@@ -122,7 +121,7 @@ class KeywordVectorAppendRetriever(BaseRetriever):
         print("keyword_to_nodes: ", keyword_to_nodes)
         # 对每个关键词进行限制检查
         # 使用字典按node_id存储节点，避免重复（一个节点可能对应多个关键词）
-        filtered_nodes_dict: Dict[str, NodeWithScore] = {}
+        filtered_nodes_dict: dict[str, NodeWithScore] = {}
         filtered_keywords = []
 
         for keyword, nodes in keyword_to_nodes.items():
@@ -171,7 +170,7 @@ class KeywordVectorAppendRetriever(BaseRetriever):
 
         return filtered_nodes
 
-    def _retrieve(self, query_bundle: QueryBundle) -> List[NodeWithScore]:
+    def _retrieve(self, query_bundle: QueryBundle) -> list[NodeWithScore]:
         """Retrieve nodes given query."""
         # Get all keyword results (no filtering)
         keyword_nodes = self._keyword_retriever.retrieve(query_bundle)
@@ -222,8 +221,8 @@ class RAGQueryEngine:
         llm: LLM,
         similarity_top_k: int = 5,
         response_mode: ResponseMode = ResponseMode.COMPACT,
-        keyword_index: Optional[KeywordTableIndex] = None,
-        ensemble_weights: Optional[List[float]] = None,
+        keyword_index: KeywordTableIndex | None = None,
+        ensemble_weights: list[float] | None = None,
     ):
         """Initialize RAG query engine.
 
@@ -339,7 +338,7 @@ class RAGQueryEngine:
             )
 
     def query(
-        self, query_str: str, metadata_filters: Optional[Dict[str, str]] = None
+        self, query_str: str, metadata_filters: dict[str, str] | None = None
     ) -> str:
         """Query the RAG system.
 
@@ -368,8 +367,8 @@ class RAGQueryEngine:
         return response_text
 
     def retrieve_with_scores(
-        self, query_str: str, metadata_filters: Optional[Dict[str, str]] = None
-    ) -> Tuple[List, float]:
+        self, query_str: str, metadata_filters: dict[str, str] | None = None
+    ) -> tuple[list, float]:
         """Retrieve relevant documents and return the top score.
 
         Args:
@@ -387,8 +386,8 @@ class RAGQueryEngine:
         return nodes, top_score
 
     def retrieve(
-        self, query_str: str, metadata_filters: Optional[Dict[str, str]] = None
-    ) -> List:
+        self, query_str: str, metadata_filters: dict[str, str] | None = None
+    ) -> list:
         """Retrieve relevant documents without generation.
 
         Args:
@@ -423,7 +422,7 @@ class RAGQueryEngine:
         return nodes
 
     def synthesize_from_nodes(
-        self, query_str: str, nodes: List, context: Optional[str] = None
+        self, query_str: str, nodes: list, context: str | None = None
     ) -> str:
         """Synthesize answer from retrieved nodes with optional context.
 
@@ -459,7 +458,7 @@ class RAGQueryEngine:
 
         return response_text
 
-    def _extract_docs_references(self, nodes: List[NodeWithScore]) -> Dict[str, List]:
+    def _extract_docs_references(self, nodes: list[NodeWithScore]) -> dict[str, list]:
         """Extract document reference information from nodes.
 
         Args:
@@ -507,7 +506,7 @@ class RAGQueryEngine:
             "faq": faq_refs,
         }
 
-    def _format_docs_references(self, references: Dict[str, List]) -> str:
+    def _format_docs_references(self, references: dict[str, list]) -> str:
         """Format document references for display.
 
         Args:
@@ -549,8 +548,8 @@ class RAGQueryEngine:
         return ref_text
 
     def _filter_nodes_by_metadata(
-        self, nodes: List[NodeWithScore], filters: Dict[str, str]
-    ) -> List[NodeWithScore]:
+        self, nodes: list[NodeWithScore], filters: dict[str, str]
+    ) -> list[NodeWithScore]:
         """Filter nodes by metadata criteria.
 
         Args:
@@ -595,8 +594,8 @@ class RAGQueryEngine:
         return filtered_nodes
 
     def _filter_nodes_by_score(
-        self, nodes: List[NodeWithScore], threshold: float
-    ) -> List[NodeWithScore]:
+        self, nodes: list[NodeWithScore], threshold: float
+    ) -> list[NodeWithScore]:
         """Filter nodes by similarity score threshold.
 
         Args:

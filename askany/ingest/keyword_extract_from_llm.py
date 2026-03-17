@@ -4,7 +4,6 @@ import sys
 import textwrap as tw
 from collections import Counter
 from pathlib import Path
-from typing import List, Optional
 
 from openai import OpenAI
 from pydantic import BaseModel, Field
@@ -23,7 +22,7 @@ from cachetools import LRUCache, cachedmethod
 class KeywordExtractionResult(BaseModel):
     """关键词提取结果结构"""
 
-    keywords: List[str] = Field(
+    keywords: list[str] = Field(
         description="提取的关键词列表, 数量不超过指定的最大关键词数量。"
     )
 
@@ -31,7 +30,7 @@ class KeywordExtractionResult(BaseModel):
 class KeywordFilterResult(BaseModel):
     """关键词过滤结果结构"""
 
-    filtered_keywords: List[str] = Field(
+    filtered_keywords: list[str] = Field(
         description="过滤后的关键词列表，只保留比较长的关键词或者特定领域的词，去掉太常见的词语。"
     )
 
@@ -39,7 +38,7 @@ class KeywordFilterResult(BaseModel):
 class KeywordExtractorFromLLM:
     """使用 LLM 进行关键词提取的生成器"""
 
-    def __init__(self, client: Optional[OpenAI] = None, max_keywords: int = 3):
+    def __init__(self, client: OpenAI | None = None, max_keywords: int = 3):
         """初始化 KeywordExtractorFromLLM
 
         Args:
@@ -73,7 +72,7 @@ class KeywordExtractorFromLLM:
         self.cache = LRUCache(maxsize=1024)
 
     @cachedmethod(lambda self: self.cache)
-    def extract_keywords(self, question: str) -> List[str]:
+    def extract_keywords(self, question: str) -> list[str]:
         """从问题中提取关键词
 
         Args:
@@ -171,7 +170,7 @@ class KeywordExtractorFromLLM:
         """
         return f"问题：{question}"
 
-    def filter_keywords(self, keywords: List[str], query: str) -> List[str]:
+    def filter_keywords(self, keywords: list[str], query: str) -> list[str]:
         """过滤关键词，去掉太常见的词语，只保留比较长的关键词或者特定领域的词
 
         Args:
@@ -302,7 +301,7 @@ class KeywordExtractorFromLLM:
 - 操作 语义过于宽泛，与大量场景相关，应过滤掉。
 """)
 
-    def _format_filter_user_message(self, keywords: List[str], query: str) -> str:
+    def _format_filter_user_message(self, keywords: list[str], query: str) -> str:
         """格式化过滤用户消息
 
         Args:

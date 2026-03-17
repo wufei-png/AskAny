@@ -4,7 +4,6 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 from llama_index.core.node_parser import MarkdownNodeParser
 
@@ -20,8 +19,8 @@ class LocalFileSearchTool:
 
     def __init__(
         self,
-        base_path: Optional[str] = None,
-        keyword_extractor: Optional[KeywordExtractorFromTFIDF] = None,
+        base_path: str | None = None,
+        keyword_extractor: KeywordExtractorFromTFIDF | None = None,
     ):
         """Initialize LocalFileSearchTool.
 
@@ -47,9 +46,7 @@ class LocalFileSearchTool:
         else:
             self.keyword_extractor = KeywordExtractorFromTFIDF()
 
-    def find_text_line_range(
-        self, text: str, file_path: str
-    ) -> Optional[Tuple[int, int]]:
+    def find_text_line_range(self, text: str, file_path: str) -> tuple[int, int] | None:
         """
         函数1: 输入一段文本和本地文件路径，提取该文本在该文件的第几行到第几行。
 
@@ -68,7 +65,7 @@ class LocalFileSearchTool:
             return None
 
         try:
-            with open(full_path, "r", encoding="utf-8") as f:
+            with open(full_path, encoding="utf-8") as f:
                 lines = f.readlines()
 
             # 提取文本的第一行和最后一行
@@ -109,8 +106,8 @@ class LocalFileSearchTool:
         line_num: int,
         expand_mode: str = settings.expand_context_mode,
         expand_ratio: float = settings.expand_context_ratio,
-        expand_lines: Optional[int] = None,
-    ) -> Optional[Dict[str, any]]:
+        expand_lines: int | None = None,
+    ) -> dict[str, any] | None:
         """
         直接使用已知的行号来扩展上下文，而不需要重新查找文本。
 
@@ -164,7 +161,7 @@ class LocalFileSearchTool:
                 "content": content,
             }
 
-    def get_file_line_count(self, file_path: str) -> Optional[int]:
+    def get_file_line_count(self, file_path: str) -> int | None:
         """获取文件的总行数。
 
         Args:
@@ -178,7 +175,7 @@ class LocalFileSearchTool:
             return None
 
         try:
-            with open(full_path, "r", encoding="utf-8") as f:
+            with open(full_path, encoding="utf-8") as f:
                 lines = f.readlines()
             return len(lines)
         except Exception as e:
@@ -187,7 +184,7 @@ class LocalFileSearchTool:
 
     def get_file_content_by_lines(
         self, file_path: str, start_line: int, end_line: int
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         函数2: 根据文件路径和第一行和最后一行行号，返回对应内容。
 
@@ -204,7 +201,7 @@ class LocalFileSearchTool:
             return None
 
         try:
-            with open(full_path, "r", encoding="utf-8") as f:
+            with open(full_path, encoding="utf-8") as f:
                 lines = f.readlines()
 
             # 确保行号在有效范围内
@@ -224,8 +221,8 @@ class LocalFileSearchTool:
             return None
 
     def _filter_results_by_tokens(
-        self, results: List[Dict[str, any]], max_tokens: int
-    ) -> List[Dict[str, any]]:
+        self, results: list[dict[str, any]], max_tokens: int
+    ) -> list[dict[str, any]]:
         """根据 token 限制过滤结果列表。
 
         Args:
@@ -264,8 +261,8 @@ class LocalFileSearchTool:
         return filtered_results
 
     def _filter_all_results_by_tokens(
-        self, all_results: Dict[str, List[Dict[str, any]]], max_tokens: int
-    ) -> Dict[str, List[Dict[str, any]]]:
+        self, all_results: dict[str, list[dict[str, any]]], max_tokens: int
+    ) -> dict[str, list[dict[str, any]]]:
         """根据 token 限制过滤所有关键字的结果（整体估算）。
 
         Args:
@@ -323,8 +320,8 @@ class LocalFileSearchTool:
         return filtered_results
 
     def _filter_keywords_by_limits(
-        self, all_results: Dict[str, List[Dict[str, any]]]
-    ) -> Dict[str, List[Dict[str, any]]]:
+        self, all_results: dict[str, list[dict[str, any]]]
+    ) -> dict[str, list[dict[str, any]]]:
         """根据文件数量和匹配数量限制过滤关键词结果。
 
         如果某个关键词命中了超过 one_keyword_max_file_num 的文件，
@@ -379,8 +376,8 @@ class LocalFileSearchTool:
         file_path: str,
         expand_mode: str = settings.expand_context_mode,
         expand_ratio: float = settings.expand_context_ratio,
-        expand_lines: Optional[int] = None,
-    ) -> Optional[Dict[str, any]]:
+        expand_lines: int | None = None,
+    ) -> dict[str, any] | None:
         """
         函数3: 找到 chunk 所在位置 → 扩展上下文。
 
@@ -446,11 +443,11 @@ class LocalFileSearchTool:
     ##TODO cache the search results
     def search_by_keywords(
         self,
-        keywords: List[str],
+        keywords: list[str],
         expand_mode: str = settings.expand_context_mode,
         expand_ratio: float = settings.expand_context_ratio,
-        expand_lines: Optional[int] = None,
-    ) -> Dict[str, List[Dict[str, any]]]:
+        expand_lines: int | None = None,
+    ) -> dict[str, list[dict[str, any]]]:
         """
         函数4: 根据关键字本地搜索。
 
@@ -491,16 +488,16 @@ class LocalFileSearchTool:
 
         # 只遍历所有文件一次
         # 用于统计每个keyword在所有文件中的总出现次数
-        keyword_total_frequency: Dict[str, int] = {keyword: 0 for keyword in keywords}
+        keyword_total_frequency: dict[str, int] = {keyword: 0 for keyword in keywords}
 
         for file_path in self.markdown_files:
             try:
-                with open(file_path, "r", encoding="utf-8") as f:
+                with open(file_path, encoding="utf-8") as f:
                     lines = f.readlines()
 
                 # 查找包含任何关键字的行及其匹配的关键字
                 # 使用字典存储：行号 -> 匹配的关键字列表
-                matching_lines_keywords: Dict[int, List[str]] = {}
+                matching_lines_keywords: dict[int, list[str]] = {}
                 file_path_str = str(file_path)
 
                 for i, line in enumerate(lines, start=1):
@@ -586,8 +583,8 @@ class LocalFileSearchTool:
         return results
 
     def _search_by_sliding_windows(
-        self, tokens: List[str]
-    ) -> Optional[Dict[str, List[Dict[str, any]]]]:
+        self, tokens: list[str]
+    ) -> dict[str, list[dict[str, any]]] | None:
         """
         核心函数：使用滑动窗口搜索关键字。
 
@@ -680,7 +677,7 @@ class LocalFileSearchTool:
 
         # 计算每个file_path的所有命中keyword的词频总和
         # 每个keyword在所有文件中的总词频是固定的，可以从任意一个结果中获取
-        for file_path, info in file_path_info.items():
+        for _file_path, info in file_path_info.items():
             total_freq = 0
             for keyword_str in info["matched_keywords"]:
                 # 从search_results中获取该keyword的词频（所有文件中的总词频）
@@ -701,7 +698,7 @@ class LocalFileSearchTool:
         # 按照排序后的顺序组织结果
         final_results = {}
         max_num = settings.docs_similarity_top_k
-        for file_path, info in sorted_file_paths:
+        for _file_path, info in sorted_file_paths:
             # 只返回最大window_size的keywords的结果
             for keyword_str in best_keyword_strs:
                 if keyword_str in info["results_by_keyword"]:
@@ -717,8 +714,8 @@ class LocalFileSearchTool:
         return final_results
 
     def search_keyword_using_binary_algorithm(
-        self, keywords: List[str]
-    ) -> Dict[str, List[Dict[str, any]]]:
+        self, keywords: list[str]
+    ) -> dict[str, list[dict[str, any]]]:
         """
         函数5: 使用滑动窗口算法搜索关键字。
 
@@ -737,7 +734,7 @@ class LocalFileSearchTool:
         window_results = self._search_by_sliding_windows(keywords)
         if window_results is not None:
             # 辅助函数：检查搜索结果是否为空
-            def _has_results(search_results: Dict[str, List[Dict[str, any]]]) -> bool:
+            def _has_results(search_results: dict[str, list[dict[str, any]]]) -> bool:
                 """检查搜索结果是否非空"""
                 return any(results for results in search_results.values())
 
@@ -754,8 +751,8 @@ class LocalFileSearchTool:
         return {}
 
     def _merge_overlapping_results(
-        self, results: List[Dict[str, any]]
-    ) -> List[Dict[str, any]]:
+        self, results: list[dict[str, any]]
+    ) -> list[dict[str, any]]:
         """合并同一文件中重叠的结果。
 
         Args:
@@ -768,7 +765,7 @@ class LocalFileSearchTool:
             return results
 
         # 按文件路径分组
-        file_groups: Dict[str, List[Dict[str, any]]] = {}
+        file_groups: dict[str, list[dict[str, any]]] = {}
         for result in results:
             file_path = result.get("file_path")
             if file_path not in file_groups:
@@ -833,8 +830,8 @@ class LocalFileSearchTool:
         return deduplicated_results
 
     def _deduplicate_by_filename_and_content(
-        self, results: List[Dict[str, any]]
-    ) -> List[Dict[str, any]]:
+        self, results: list[dict[str, any]]
+    ) -> list[dict[str, any]]:
         """去除相同文件名和相同内容的结果，只保留第一个。
 
         Args:
@@ -927,7 +924,7 @@ class LocalFileSearchTool:
 
     def _expand_markdown_block(
         self, file_path: str, start_line: int, end_line: int
-    ) -> Optional[Dict[str, any]]:
+    ) -> dict[str, any] | None:
         """扩展markdown块：找到包含指定行的完整markdown块。
 
         Args:
@@ -943,7 +940,7 @@ class LocalFileSearchTool:
             return None
 
         try:
-            with open(full_path, "r", encoding="utf-8") as f:
+            with open(full_path, encoding="utf-8") as f:
                 content = f.read()
                 lines = content.split("\n")
 
@@ -1036,8 +1033,8 @@ class LocalFileSearchTool:
             }
 
     def _get_node_line_range(
-        self, node, lines: List[str]
-    ) -> Tuple[Optional[int], Optional[int]]:
+        self, node, lines: list[str]
+    ) -> tuple[int | None, int | None]:
         """获取节点在原始文件中的行号范围。
 
         Args:
@@ -1080,7 +1077,7 @@ class LocalFileSearchTool:
 
         return (start_line, end_line)
 
-    def _find_markdown_files(self, directory: Path) -> List[Path]:
+    def _find_markdown_files(self, directory: Path) -> list[Path]:
         """查找目录下所有markdown文件。
 
         Args:
@@ -1103,7 +1100,7 @@ class LocalFileSearchTool:
 
             # 查找所有.md和.markdown文件
             # 使用 walk 方式遍历，这样可以处理符号链接
-            for root, dirs, files in os.walk(directory, followlinks=True):
+            for root, _dirs, files in os.walk(directory, followlinks=True):
                 root_path = Path(root)
                 for file in files:
                     if file.endswith((".md", ".markdown")):

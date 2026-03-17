@@ -3,4 +3,4 @@ llama_index/
 models/
 **/__pycache__/
 HanLP
-/HanLP/
+/HanLP/log.log

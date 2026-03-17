@@ -1,10 +1,9 @@
 """Query parser for extracting metadata filters from queries."""
 
 import re
-from typing import Dict, Optional, Tuple
 
 
-def parse_query_filters(query: Optional[str]) -> Tuple[str, Dict[str, str]]:
+def parse_query_filters(query: str | None) -> tuple[str, dict[str, str]]:
     """Parse query to extract metadata filters and clean query text.
 
     Supports filter syntax: @tag key=value or @tag key="value with spaces"

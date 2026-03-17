@@ -22,7 +22,7 @@ def main():
     print("=" * 80)
 
     llm, embed_model = initialize_llm()
-    Settings().device
+    _ = Settings().device
 
     vector_store_manager = VectorStoreManager(embed_model, llm=llm)
     vector_store_manager.initialize_faq_index()

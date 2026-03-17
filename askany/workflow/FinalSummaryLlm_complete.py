@@ -2,7 +2,6 @@
 
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 from llama_index.core.schema import NodeWithScore
 from openai import OpenAI
@@ -27,7 +26,7 @@ class FinalSummaryResponse(BaseModel):
     )
 
 
-def format_final_answer_input(query: str, nodes: List[NodeWithScore]) -> str:
+def format_final_answer_input(query: str, nodes: list[NodeWithScore]) -> str:
     """格式化输入用于生成最终答案。
 
     Args:
@@ -64,8 +63,8 @@ def format_final_answer_input(query: str, nodes: List[NodeWithScore]) -> str:
 
 
 def generate_final_answer_complete(
-    query: str, nodes: List[NodeWithScore], client: OpenAI
-) -> Tuple[str, Optional[str]]:
+    query: str, nodes: list[NodeWithScore], client: OpenAI
+) -> tuple[str, str | None]:
     """生成最终答案（使用 completion 接口，不使用 structured output）。
 
     使用普通的 chat.completions.create 接口，直接返回模型生成的文本内容，
@@ -190,7 +189,7 @@ def generate_final_answer_complete(
     )
 
 
-def extract_docs_references(nodes: List[NodeWithScore]) -> Dict[str, List]:
+def extract_docs_references(nodes: list[NodeWithScore]) -> dict[str, list]:
     """Extract document reference information from nodes.
 
     Args:
@@ -239,7 +238,7 @@ def extract_docs_references(nodes: List[NodeWithScore]) -> Dict[str, List]:
     }
 
 
-def format_docs_references(references: Dict[str, List]) -> str:
+def format_docs_references(references: dict[str, list]) -> str:
     """Format document references for display.
 
     Args:

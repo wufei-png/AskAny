@@ -9,8 +9,8 @@ Tests cover:
 
 import json
 import sys
+from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import AsyncGenerator
 from unittest.mock import MagicMock, patch
 
 import pytest

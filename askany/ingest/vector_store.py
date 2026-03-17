@@ -6,7 +6,7 @@ import tempfile
 import time
 from logging import getLogger
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import psycopg2
 from llama_index.core import (
@@ -105,21 +105,21 @@ class VectorStoreManager:
         self.embedding_model = embedding_model
         self.llm = llm
         # Legacy single index (for backward compatibility)
-        self.vector_store: Optional[PGVectorStore] = None
-        self.index: Optional[VectorStoreIndex] = None
-        self.keyword_index: Optional[KeywordTableIndex] = None
+        self.vector_store: PGVectorStore | None = None
+        self.index: VectorStoreIndex | None = None
+        self.keyword_index: KeywordTableIndex | None = None
 
         # Separate indexes for FAQ and docs
-        self.faq_vector_store: Optional[PGVectorStore] = None
-        self.faq_index: Optional[VectorStoreIndex] = None
-        self.faq_keyword_index: Optional[KeywordTableIndex] = None
+        self.faq_vector_store: PGVectorStore | None = None
+        self.faq_index: VectorStoreIndex | None = None
+        self.faq_keyword_index: KeywordTableIndex | None = None
 
-        self.docs_vector_store: Optional[PGVectorStore] = None
-        self.docs_index: Optional[VectorStoreIndex] = None
-        self.docs_keyword_index: Optional[KeywordTableIndex] = None
+        self.docs_vector_store: PGVectorStore | None = None
+        self.docs_index: VectorStoreIndex | None = None
+        self.docs_keyword_index: KeywordTableIndex | None = None
         self.provenance_repo = ProvenanceRepository()
 
-    def _get_hnsw_kwargs(self) -> Optional[Dict[str, Any]]:
+    def _get_hnsw_kwargs(self) -> dict[str, Any] | None:
         """Get HNSW index configuration.
 
         Returns:
@@ -339,7 +339,7 @@ class VectorStoreManager:
             if conn:
                 conn.close()
 
-    def initialize(self, table_name: Optional[str] = None) -> None:
+    def initialize(self, table_name: str | None = None) -> None:
         """Initialize the vector store connection.
 
         Args:
@@ -370,7 +370,7 @@ class VectorStoreManager:
             insert_batch_size=insert_batch_size,
         )
 
-    def add_documents(self, documents: List[Document]) -> None:
+    def add_documents(self, documents: list[Document]) -> None:
         """Add documents to the vector store.
 
         Args:
@@ -394,7 +394,7 @@ class VectorStoreManager:
 
         return self.index
 
-    def get_keyword_index(self) -> Optional[KeywordTableIndex]:
+    def get_keyword_index(self) -> KeywordTableIndex | None:
         """Get the keyword table index.
 
         Returns:
@@ -403,7 +403,7 @@ class VectorStoreManager:
         # Return FAQ keyword index if available, otherwise legacy keyword index
         return self.faq_keyword_index or self.keyword_index
 
-    def initialize_faq_index(self, table_name: Optional[str] = None) -> None:
+    def initialize_faq_index(self, table_name: str | None = None) -> None:
         """Initialize FAQ-specific vector store and index.
 
         Args:
@@ -463,7 +463,7 @@ class VectorStoreManager:
 
         self.load_faq_keyword_index()
 
-    def initialize_docs_index(self, table_name: Optional[str] = None) -> None:
+    def initialize_docs_index(self, table_name: str | None = None) -> None:
         """Initialize docs-specific vector store and index.
 
         Args:
@@ -520,7 +520,7 @@ class VectorStoreManager:
 
         self.load_docs_keyword_index()
 
-    def _documents_to_nodes(self, documents: List[Document]) -> List:
+    def _documents_to_nodes(self, documents: list[Document]) -> list:
         """Convert Documents to Nodes without splitting.
 
         FAQ documents should not be split (one FAQ item = one Document = one Node).
@@ -558,7 +558,7 @@ class VectorStoreManager:
 
         return nodes
 
-    def add_faq_documents(self, documents: List[Document]) -> None:
+    def add_faq_documents(self, documents: list[Document]) -> None:
         """Add FAQ documents to the FAQ vector store.
 
         Before inserting, checks if documents with the same ID already exist.
@@ -635,8 +635,8 @@ class VectorStoreManager:
 
     def add_docs_nodes(
         self,
-        documents_or_nodes: List[Union[Document, BaseNode]],
-        batch_size: Optional[int] = None,
+        documents_or_nodes: list[Document | BaseNode],
+        batch_size: int | None = None,
         auto_create_index: bool = False,
     ) -> None:
         """Add docs documents or nodes to the docs vector store.
@@ -660,7 +660,7 @@ class VectorStoreManager:
         # Convert documents to nodes if needed, or use nodes directly
         nodes = []
         provenance_records = []
-        hint_by_path: Dict[str, int] = {}
+        hint_by_path: dict[str, int] = {}
         for item in documents_or_nodes:
             if isinstance(item, Document):
                 # Convert Document to Node
@@ -906,7 +906,7 @@ class VectorStoreManager:
         logger.info("HNSW index for FAQ vector store created successfully")
 
     def create_faq_keyword_index(
-        self, documents: List[Document], persist: bool = True, llm=None
+        self, documents: list[Document], persist: bool = True, llm=None
     ) -> KeywordTableIndex:
         """Create a keyword table index for FAQ documents.
 
@@ -1049,7 +1049,7 @@ class VectorStoreManager:
 
     def create_docs_keyword_index(
         self,
-        documents_or_nodes: List[Union[Document, BaseNode]],
+        documents_or_nodes: list[Document | BaseNode],
         persist: bool = True,
         llm=None,
     ) -> KeywordTableIndex:
@@ -1207,7 +1207,7 @@ class VectorStoreManager:
         self.docs_keyword_index = keyword_index
         return keyword_index
 
-    def load_docs_keyword_index(self) -> Optional[KeywordTableIndex]:
+    def load_docs_keyword_index(self) -> KeywordTableIndex | None:
         """Load docs keyword index from persisted storage.
 
         Returns:
@@ -1318,7 +1318,7 @@ class VectorStoreManager:
             )
             return None
 
-    def load_faq_keyword_index(self) -> Optional[KeywordTableIndex]:
+    def load_faq_keyword_index(self) -> KeywordTableIndex | None:
         """Load FAQ keyword index from persisted storage.
 
         Returns:
@@ -1427,7 +1427,7 @@ class VectorStoreManager:
             )
             return None
 
-    def get_faq_index(self) -> Optional[VectorStoreIndex]:
+    def get_faq_index(self) -> VectorStoreIndex | None:
         """Get the FAQ vector store index.
 
         Returns:
@@ -1435,7 +1435,7 @@ class VectorStoreManager:
         """
         return self.faq_index
 
-    def get_docs_index(self) -> Optional[VectorStoreIndex]:
+    def get_docs_index(self) -> VectorStoreIndex | None:
         """Get the docs vector store index.
 
         Returns:
@@ -1443,7 +1443,7 @@ class VectorStoreManager:
         """
         return self.docs_index
 
-    def get_faq_keyword_index(self) -> Optional[KeywordTableIndex]:
+    def get_faq_keyword_index(self) -> KeywordTableIndex | None:
         """Get the FAQ keyword table index.
 
         Returns:
@@ -1451,7 +1451,7 @@ class VectorStoreManager:
         """
         return self.faq_keyword_index
 
-    def get_docs_keyword_index(self) -> Optional[KeywordTableIndex]:
+    def get_docs_keyword_index(self) -> KeywordTableIndex | None:
         """Get the docs keyword table index.
 
         Returns:
@@ -1461,8 +1461,8 @@ class VectorStoreManager:
 
     def _rebuild_faq_keyword_index(
         self,
-        new_documents: List[Document],
-        json_dir: Optional[Path],
+        new_documents: list[Document],
+        json_dir: Path | None,
         json_parser,  # JSONParser instance
     ) -> None:
         """Rebuild FAQ keyword index with all FAQs (existing + new).
@@ -1507,8 +1507,8 @@ class VectorStoreManager:
         self.create_faq_keyword_index(deduplicated_docs, persist=True, llm=keyword_llm)
 
     def update_faqs(
-        self, faq_items: List[Dict], json_dir: Optional[Path] = None
-    ) -> Dict[str, Any]:
+        self, faq_items: list[dict], json_dir: Path | None = None
+    ) -> dict[str, Any]:
         """Update FAQs with new/updated items.
 
         This method supports hot updates:

@@ -36,7 +36,7 @@ def visualize_graphml(graphml_path: str, max_nodes: int = 200):
 
     # Sample edges
     print("\n=== Sample Edges (first 10) ===")
-    for i, (src, tgt, data) in enumerate(G.edges(data=True)):
+    for i, (src, tgt, _data) in enumerate(G.edges(data=True)):
         if i >= 10:
             break
         print(f"  {src} -> {tgt}")

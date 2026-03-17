@@ -34,7 +34,6 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +57,7 @@ class LightRAGIngestor:
         self._adapter = LightRAGAdapter()
         self._batch_size = batch_size
 
-    async def __aenter__(self) -> "LightRAGIngestor":
+    async def __aenter__(self) -> LightRAGIngestor:
         await self._adapter.initialize()
         return self
 
@@ -129,8 +128,8 @@ class LightRAGIngestor:
             logger.warning("No JSON files found in %s", directory)
             return 0
 
-        texts: List[str] = []
-        paths: List[str] = []
+        texts: list[str] = []
+        paths: list[str] = []
         count = 0
 
         for fpath in json_files:
@@ -157,7 +156,7 @@ class LightRAGIngestor:
 # ---------------------------------------------------------------------------
 
 
-def _read_batch(files: List[Path]) -> Tuple[List[str], List[str]]:
+def _read_batch(files: list[Path]) -> tuple[list[str], list[str]]:
     texts, paths = [], []
     for f in files:
         try:
@@ -170,7 +169,7 @@ def _read_batch(files: List[Path]) -> Tuple[List[str], List[str]]:
     return texts, paths
 
 
-def _parse_json_faq(path: Path) -> List[str]:
+def _parse_json_faq(path: Path) -> list[str]:
     """Return formatted FAQ strings from a JSON FAQ file."""
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))

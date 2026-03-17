@@ -9,7 +9,6 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -32,7 +31,7 @@ FORBIDDEN_CHARS_PATTERN = re.compile(r"[\x00]")
 class RelevantResult(BaseModel):
     """分析结果的数据结构。"""
 
-    relevant_file_paths: List[str] = Field(  # TODO maybe return score？
+    relevant_file_paths: list[str] = Field(  # TODO maybe return score？
         description="与用户问题相关的文件路径列表。如果没有任何内容相关，请返回空列表。",
         default_factory=list,
     )
@@ -47,7 +46,7 @@ class RelevantResult(BaseModel):
 
     @field_validator("relevant_file_paths", mode="after")
     @classmethod
-    def validate_and_check_existence(cls, paths: List[str]) -> List[str]:
+    def validate_and_check_existence(cls, paths: list[str]) -> list[str]:
         """校验路径是否符合语法，并检查文件在机器上是否真实存在。"""
         existing_paths = []
         non_existing_paths = []
@@ -91,13 +90,13 @@ class RelevantResult(BaseModel):
 class NoRelevantResult(BaseModel):
     """处理没有任何相关文档的情况时的分析结果。"""
 
-    missing_info_keywords: List[str] = Field(
+    missing_info_keywords: list[str] = Field(
         description="如果关键字有缺失，参考已经有的关键词，生成不同于已有的，用于搜索的缺失或不同角度的关键字列表。",
         default_factory=list,
     )
 
     # 关键优化：问题分解（Sub-Queries）而不是简单的关键词
-    sub_queries: List[str] = Field(
+    sub_queries: list[str] = Field(
         description="如果问题可以拆解，检查原问题是否可以拆解为若干子问题，这些子问题必须按逻辑上的依赖性排序，先解决前面的问题，再依据前问题答案解决后面的问题。",
         default_factory=list,
     )
@@ -115,7 +114,7 @@ class NoRelevantResult(BaseModel):
 class NoRelevantResultWithoutSubQueries(BaseModel):
     """处理没有任何相关文档的情况时的分析结果（不包含子问题，用于子问题workflow中）。"""
 
-    missing_info_keywords: List[str] = Field(
+    missing_info_keywords: list[str] = Field(
         description="如果关键字有缺失，参考已经有的关键词，生成不同于已有的，用于搜索的缺失或不同角度的关键字列表。",
         default_factory=list,
     )
@@ -133,7 +132,7 @@ class NoRelevantResultWithoutSubQueries(BaseModel):
 class GenerateKeywords(BaseModel):
     """生成关键词。"""
 
-    missing_info_keywords: List[str] = Field(
+    missing_info_keywords: list[str] = Field(
         description="参考已经有的关键词，生成不同于已有的，用于搜索的缺失或不同角度的关键字列表。",
         default_factory=list,
     )
@@ -142,7 +141,7 @@ class GenerateKeywords(BaseModel):
 class RelevanceAnalyzer:
     """Analyzer for relevance and completeness checking using LangChain."""
 
-    def __init__(self, llm: Optional[ChatOpenAI] = None):
+    def __init__(self, llm: ChatOpenAI | None = None):
         """Initialize RelevanceAnalyzer.
 
         Args:
@@ -209,7 +208,7 @@ class RelevanceAnalyzer:
         )
 
     def _format_structured_input(
-        self, query: str, nodes: List[NodeWithScore], keywords: List[str]
+        self, query: str, nodes: list[NodeWithScore], keywords: list[str]
     ) -> str:
         """格式化输入用于分析相关性和完整性。
 
@@ -245,8 +244,8 @@ class RelevanceAnalyzer:
     def analyze_relevance_and_completeness(
         self,
         query: str,
-        nodes: List[NodeWithScore],
-        keywords: List[str],
+        nodes: list[NodeWithScore],
+        keywords: list[str],
     ) -> RelevantResult:
         """使用LLM分析相关性和完整性。
 
@@ -361,8 +360,8 @@ class RelevanceAnalyzer:
                     raise
 
     def filter_relevant_nodes(
-        self, nodes: List[NodeWithScore], relevant_file_paths: List[str]
-    ) -> List[NodeWithScore]:
+        self, nodes: list[NodeWithScore], relevant_file_paths: list[str]
+    ) -> list[NodeWithScore]:
         """过滤出与相关文件路径匹配的节点。
 
         Args:
@@ -403,7 +402,7 @@ class RelevanceAnalyzer:
 
         return filtered_nodes
 
-    def _format_no_relevant_input(self, query: str, keywords: List[str]) -> str:
+    def _format_no_relevant_input(self, query: str, keywords: list[str]) -> str:
         """格式化输入用于分析没有任何相关文档的情况。
 
         Args:
@@ -419,7 +418,7 @@ class RelevanceAnalyzer:
     def analyze_no_relevant(
         self,
         query: str,
-        keywords: List[str],
+        keywords: list[str],
     ) -> NoRelevantResult:
         """使用LLM分析没有任何相关文档的情况，生成搜索策略。
 
@@ -501,7 +500,7 @@ class RelevanceAnalyzer:
         return result
 
     def _format_no_relevant_without_sub_queries_input(
-        self, query: str, keywords: List[str]
+        self, query: str, keywords: list[str]
     ) -> str:
         """格式化输入用于分析没有任何相关文档的情况（不包含子问题）。
 
@@ -517,7 +516,7 @@ class RelevanceAnalyzer:
             query=query, keywords=keywords
         )
 
-    def _format_simple_keywords_input(self, query: str, keywords: List[str]) -> str:
+    def _format_simple_keywords_input(self, query: str, keywords: list[str]) -> str:
         """格式化输入用于简化关键词生成（避免任务过重）。
 
         Args:
@@ -530,7 +529,7 @@ class RelevanceAnalyzer:
         prompts = get_prompts()
         return prompts.simple_keywords_task.format(query=query, keywords=keywords)
 
-    def _generate_keywords_simple(self, query: str, keywords: List[str]) -> List[str]:
+    def _generate_keywords_simple(self, query: str, keywords: list[str]) -> list[str]:
         """使用简化的提示词生成关键词（避免任务过重）。
 
         Args:
@@ -586,7 +585,7 @@ class RelevanceAnalyzer:
     def analyze_no_relevant_without_sub_queries(
         self,
         query: str,
-        keywords: List[str],
+        keywords: list[str],
     ) -> NoRelevantResultWithoutSubQueries:
         """使用LLM分析没有任何相关文档的情况，生成搜索策略（不包含子问题，用于子问题workflow中）。
 
@@ -674,8 +673,8 @@ class RelevanceAnalyzer:
 # Export functions for backward compatibility
 def analyze_relevance_and_completeness(
     query: str,
-    nodes: List[NodeWithScore],
-    keywords: List[str],
+    nodes: list[NodeWithScore],
+    keywords: list[str],
     client=None,  # Deprecated, kept for backward compatibility
 ) -> RelevantResult:
     """Backward compatibility wrapper."""
@@ -685,7 +684,7 @@ def analyze_relevance_and_completeness(
 
 def analyze_no_relevant(
     query: str,
-    keywords: List[str],
+    keywords: list[str],
     client=None,  # Deprecated, kept for backward compatibility
 ) -> NoRelevantResult:
     """Backward compatibility wrapper."""
@@ -695,7 +694,7 @@ def analyze_no_relevant(
 
 def analyze_no_relevant_without_sub_queries(
     query: str,
-    keywords: List[str],
+    keywords: list[str],
     client=None,  # Deprecated, kept for backward compatibility
 ) -> NoRelevantResultWithoutSubQueries:
     """Backward compatibility wrapper."""

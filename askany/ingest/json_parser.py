@@ -3,7 +3,7 @@
 import json
 from logging import getLogger
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from llama_index.core import Document
 from llama_index.core.node_parser import SimpleNodeParser
@@ -31,7 +31,7 @@ class JSONParser:
 
     def parse_file(
         self, file_path: Path, show_progress: bool = False
-    ) -> List[Document]:
+    ) -> list[Document]:
         """Parse a JSON FAQ file into Documents.
 
         Args:
@@ -41,7 +41,7 @@ class JSONParser:
         Returns:
             List of Document objects
         """
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             data = json.load(f)
 
         documents = []
@@ -82,7 +82,7 @@ class JSONParser:
 
         return documents
 
-    def _item_to_document(self, item: Dict[str, Any], source_path: Path) -> Document:
+    def _item_to_document(self, item: dict[str, Any], source_path: Path) -> Document:
         """Convert a FAQ item to a Document.
 
         Args:
@@ -143,7 +143,7 @@ class JSONParser:
 
     def parse_directory(
         self, directory: Path, show_progress: bool = True
-    ) -> List[Document]:
+    ) -> list[Document]:
         """Parse all JSON files in a directory.
 
         Args:

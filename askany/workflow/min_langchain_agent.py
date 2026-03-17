@@ -12,8 +12,9 @@ import json
 import os
 import re
 import sys
+from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import Any
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
@@ -75,7 +76,7 @@ class FinalSummaryResponse(BaseModel):
         description="Based on all provided reference content, if the content is relevant and complete, answer the user's question in natural, fluent paragraphs. If the context is insufficient to answer the question, return 'Reference content is insufficient to answer the question'. / 根据提供的所有参考内容，如果内容相关且完整，则以自然、流畅的段落形式，完整回答用户的问题。如果上下文不足以回答问题，请返回'参考内容不足以回答问题'。",
     )
 
-    references: List[str] = Field(
+    references: list[str] = Field(
         description="Reference content list. If reference is a web link, use the web link directly. If it's a local file, use the file path. If there's a line number, add it like: README.md (line: 177-181) / 参考内容列表, 参考内容如果为网页链接，直接用网页链接，如果是本地文件，用文件路径，如果有行号加上行号如：README.md (行号: 177-181)",
         default=[],
     )
@@ -335,9 +336,9 @@ def create_rag_tool(
 
 
 def _search_results_to_nodes(
-    search_results: Dict[str, List[Dict[str, Any]]],
+    search_results: dict[str, list[dict[str, Any]]],
     local_file_search: LocalFileSearchTool,
-) -> List[NodeWithScore]:
+) -> list[NodeWithScore]:
     """Convert search results to nodes (synchronized with workflow_langgraph.py:1773-1800)."""
     nodes = []
     logger.debug("开始转换搜索结果为节点 - 关键词数: %d", len(search_results))
@@ -366,10 +367,10 @@ def _search_results_to_nodes(
 
 
 def _merge_nodes(
-    existing_nodes: List[NodeWithScore],
-    new_nodes: List[NodeWithScore],
+    existing_nodes: list[NodeWithScore],
+    new_nodes: list[NodeWithScore],
     local_file_search: LocalFileSearchTool,
-) -> List[NodeWithScore]:
+) -> list[NodeWithScore]:
     """Merge nodes with strict overlap checking (simplified version of workflow_langgraph.py:1802-1951).
 
     Merge logic:
@@ -392,7 +393,7 @@ def _merge_nodes(
         return []
 
     # 按文件名分组，同时收集没有文件路径的节点
-    file_name_groups: Dict[str, List[NodeWithScore]] = {}
+    file_name_groups: dict[str, list[NodeWithScore]] = {}
     nodes_without_path = []
 
     for node in all_nodes:
@@ -411,7 +412,7 @@ def _merge_nodes(
     skipped_count = 0
 
     # 对每个文件名组进行处理
-    for file_name, nodes in file_name_groups.items():
+    for _file_name, nodes in file_name_groups.items():
         if len(nodes) == 1:
             # 只有一个节点，直接添加
             merged_results.append(nodes[0])
@@ -562,7 +563,7 @@ def _get_overlap_content(
     end_line: int,
     node: NodeWithScore,
     local_file_search: LocalFileSearchTool,
-) -> Optional[str]:
+) -> str | None:
     """Get content for overlap range from file or node (simplified version)."""
     try:
         # Try to get from file first
@@ -635,7 +636,7 @@ def create_local_file_search_tools(local_file_search_instance: LocalFileSearchTo
     prompts = get_prompts()
 
     @tool(description=prompts.local_file_search_description)
-    def search_local_files_by_keywords(keywords: List[str]) -> str:
+    def search_local_files_by_keywords(keywords: list[str]) -> str:
         """Local file search tool."""
         # Use keywords directly as a list
         keyword_list = [k.strip() for k in keywords if k and k.strip()]
@@ -947,7 +948,7 @@ def format_agent_response_with_references(response_content: str) -> str:
     return response_content
 
 
-def extract_all_tool_calls(result: dict) -> List[dict]:
+def extract_all_tool_calls(result: dict) -> list[dict]:
     """Extract all tool_calls from all AIMessages in the result.
 
     Args:
@@ -1151,7 +1152,7 @@ def write_result_to_file(
     # Load existing array or start with empty list
     if result_path.exists():
         try:
-            with open(result_path, "r", encoding="utf-8") as f:
+            with open(result_path, encoding="utf-8") as f:
                 data = json.load(f)
         except json.JSONDecodeError:
             data = []
@@ -1196,7 +1197,7 @@ def answer_test(query_list=None, multi_turn_conversations=None):
         # logger.info("Starting Single Question Tests")
         # logger.info("=" * 80)
 
-        for i, question in enumerate(query_list, 1):
+        for _i, question in enumerate(query_list, 1):
             # logger.info(f"\n[Question {i}/{len(query_list)}]")
             # logger.info("=" * 80)
             # logger.info(f"Query: {question}")
@@ -1253,7 +1254,7 @@ def answer_test(query_list=None, multi_turn_conversations=None):
         # logger.info("Starting Multi-Turn Conversation Tests")
         # logger.info("=" * 80)
 
-        for conv_idx, conversation in enumerate(multi_turn_conversations, 1):
+        for _conv_idx, conversation in enumerate(multi_turn_conversations, 1):
             # logger.info(f"\n[Conversation {conv_idx}/{len(multi_turn_conversations)}]")
             # logger.info("=" * 80)
             # logger.info(f"Conversation Type: {conversation.get('type', 'Unknown')}")
@@ -1262,7 +1263,7 @@ def answer_test(query_list=None, multi_turn_conversations=None):
             # Initialize conversation state
             messages = []
 
-            for turn_idx, turn in enumerate(conversation.get("turns", []), 1):
+            for _turn_idx, turn in enumerate(conversation.get("turns", []), 1):
                 user_message = turn.get("user", "")
                 # logger.info(f"\n--- Turn {turn_idx} ---")
                 # logger.info(f"User: {user_message}")

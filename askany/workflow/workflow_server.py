@@ -1,7 +1,6 @@
 """Workflow server wrapper for AgentWorkflow (LangGraph)."""
 
 from logging import getLogger
-from typing import Optional
 
 from askany.rag.router import QueryType
 from askany.workflow.workflow_langgraph import AgentWorkflow
@@ -12,8 +11,8 @@ logger = getLogger(__name__)
 async def run_workflow_via_client(
     agent_workflow: AgentWorkflow,
     query: str,
-    query_type: Optional[QueryType] = None,
-    context: Optional[dict] = None,
+    query_type: QueryType | None = None,
+    context: dict | None = None,
 ) -> str:
     """Run workflow using AgentWorkflow directly.
 

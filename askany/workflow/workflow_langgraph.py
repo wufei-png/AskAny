@@ -8,9 +8,10 @@ except ImportError:
 import json
 import os
 import re
+from collections.abc import AsyncGenerator
 from datetime import datetime
 from logging import FileHandler, Formatter, getLogger
-from typing import Any, AsyncGenerator, Dict, List, Literal, Optional, Tuple, TypedDict
+from typing import Any, Literal, Optional, TypedDict
 
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
@@ -92,11 +93,11 @@ if debug:
 
 async def process_parallel_group(
     agent_workflow: "AgentWorkflow",
-    parallel_group: List[str],
+    parallel_group: list[str],
     query_type: QueryType,
     *,
-    mem0_qa_context: Optional[List[Dict[str, str]]] = None,
-) -> Tuple[str, List["NodeWithScore"]]:
+    mem0_qa_context: list[dict[str, str]] | None = None,
+) -> tuple[str, list["NodeWithScore"]]:
     """Process a parallel group (may contain multiple related questions that need serial processing).
     处理一个并行组（可能包含多个相关问题需要串行处理）。
 
@@ -144,8 +145,8 @@ async def process_parallel_group(
         # Multiple related questions, process serially, put previous answer in outer_previous_qa_context
         # 多个相关问题，串行处理，将上一个问题的答案放到outer_previous_qa_context中
         logger.debug("并行组包含 %d 个相关问题，串行处理", len(parallel_group))
-        outer_previous_qa_context: List[Dict[str, str]] = list(_mem0_ctx)
-        all_nodes: List["NodeWithScore"] = []
+        outer_previous_qa_context: list[dict[str, str]] = list(_mem0_ctx)
+        all_nodes: list[NodeWithScore] = []
 
         for idx, sub_query in enumerate(parallel_group):
             logger.debug(
@@ -346,7 +347,7 @@ class AgentState(TypedDict):
     # Input
     query: str
     query_type: QueryType
-    metadata_filters: Optional[Dict[str, str]]  # Metadata filters extracted from query
+    metadata_filters: dict[str, str] | None  # Metadata filters extracted from query
 
     # Direct answer check
     can_direct_answer: bool
@@ -357,30 +358,30 @@ class AgentState(TypedDict):
     web_or_rag_result_cached: bool  # Flag indicating if web_or_rag_result is already cached from workflow_filter
 
     # RAG retrieval
-    nodes: List[NodeWithScore]
-    keywords: List[str]
+    nodes: list[NodeWithScore]
+    keywords: list[str]
 
     # Analysis
-    analysis: Optional[RelevantResult]
+    analysis: RelevantResult | None
     iteration: int
 
     # Sub-problem handling
-    no_relevant_result: Optional[NoRelevantResult]
-    current_sub_query: Optional[str]
-    inner_previous_qa_context: List[
-        Dict[str, str]
+    no_relevant_result: NoRelevantResult | None
+    current_sub_query: str | None
+    inner_previous_qa_context: list[
+        dict[str, str]
     ]  # List of {"query": str, "answer": str}
-    outer_previous_qa_context: List[
-        Dict[str, str]
+    outer_previous_qa_context: list[
+        dict[str, str]
     ]  # List of {"query": str, "answer": str}
     is_inner_sub_query_workflow: bool
     is_outer_sub_query_workflow: bool
 
     # Final output
-    result: Optional[str]
+    result: str | None
 
     # Middle results for visualization
-    middle_results: List[Dict[str, Any]]  # List of middle result dictionaries
+    middle_results: list[dict[str, Any]]  # List of middle result dictionaries
 
     no_complete_answer: bool  # Whether to return no complete answer
 
@@ -395,7 +396,7 @@ class AgentWorkflow:
         self,
         router: QueryRouter,
         llm: LLM,
-        base_path: Optional[str] = None,
+        base_path: str | None = None,
         workflow_client: Optional["WorkflowClient"] = None,
         web_search_tool: Optional["WebSearchTool"] = None,
         local_file_search: Optional["LocalFileSearchTool"] = None,
@@ -1826,7 +1827,7 @@ class AgentWorkflow:
         self,
         no_relevant_result: NoRelevantResult | NoRelevantResultWithoutSubQueries,
         query: str,
-    ) -> List[NodeWithScore]:
+    ) -> list[NodeWithScore]:
         """并发检索：missing_info_keywords用原来的检索，hypothetical_answer用docs_query_engine.retrieve。"""
 
         def search_by_keywords():
@@ -1900,9 +1901,9 @@ class AgentWorkflow:
 
     def _qa_context_to_nodes(
         self,
-        outer_qa_context: List[Dict[str, str]],
-        inner_qa_context: List[Dict[str, str]],
-    ) -> List[NodeWithScore]:
+        outer_qa_context: list[dict[str, str]],
+        inner_qa_context: list[dict[str, str]],
+    ) -> list[NodeWithScore]:
         """Convert Q&A context lists to NodeWithScore objects.
 
         Generates nodes in the format:
@@ -1959,8 +1960,8 @@ class AgentWorkflow:
         return nodes
 
     def _search_results_to_nodes(
-        self, search_results: Dict[str, List[Dict[str, any]]]
-    ) -> List[NodeWithScore]:
+        self, search_results: dict[str, list[dict[str, any]]]
+    ) -> list[NodeWithScore]:
         """Convert search results to nodes."""
         nodes = []
         logger.debug("开始转换搜索结果为节点 - 关键词数: %d", len(search_results))
@@ -1989,10 +1990,10 @@ class AgentWorkflow:
 
     def _merge_nodes(
         self,
-        existing_nodes: List[NodeWithScore],
-        new_nodes: List[NodeWithScore],
-        third_nodes: List[NodeWithScore] = None,
-    ) -> List[NodeWithScore]:
+        existing_nodes: list[NodeWithScore],
+        new_nodes: list[NodeWithScore],
+        third_nodes: list[NodeWithScore] = None,
+    ) -> list[NodeWithScore]:
         """Merge nodes with strict overlap checking.
 
         Merge logic:
@@ -2019,7 +2020,7 @@ class AgentWorkflow:
             return []
 
         # 按文件名分组，同时收集没有文件路径的节点
-        file_name_groups: Dict[str, List[NodeWithScore]] = {}
+        file_name_groups: dict[str, list[NodeWithScore]] = {}
         nodes_without_path = []
 
         for node in all_nodes:
@@ -2040,7 +2041,7 @@ class AgentWorkflow:
         skipped_count = 0
 
         # 对每个文件名组进行处理
-        for file_name, nodes in file_name_groups.items():
+        for _file_name, nodes in file_name_groups.items():
             if len(nodes) == 1:
                 # 只有一个节点，直接添加
                 merged_results.append(nodes[0])
@@ -2190,7 +2191,7 @@ class AgentWorkflow:
 
     def _get_overlap_content(
         self, file_path: str, overlap_start: int, overlap_end: int, node: NodeWithScore
-    ) -> Optional[str]:
+    ) -> str | None:
         """获取重叠行的内容。
 
         Args:
@@ -2242,7 +2243,7 @@ class AgentWorkflow:
             logger.debug("获取重叠内容失败: %s", e)
             return None
 
-    def _extract_keywords_from_query(self, query: str) -> Tuple[List[str], List[str]]:
+    def _extract_keywords_from_query(self, query: str) -> tuple[list[str], list[str]]:
         """Extract keywords from query using KeywordExtractorWrapper.
 
         Args:

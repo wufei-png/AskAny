@@ -1,9 +1,8 @@
 """Query router for different query types."""
 
 from copy import deepcopy
-from enum import Enum
+from enum import StrEnum
 from logging import getLogger
-from typing import Dict, List, Optional, Union
 
 from llama_index.core.schema import NodeWithScore, TextNode
 
@@ -39,7 +38,7 @@ def get_device() -> str:
     return device
 
 
-class QueryType(str, Enum):
+class QueryType(StrEnum):
     """Query type enumeration."""
 
     AUTO = "auto"
@@ -54,7 +53,7 @@ class QueryRouter:
     def __init__(
         self,
         docs_query_engine: RAGQueryEngine,
-        faq_query_engine: Optional[Union[FAQQueryEngine, RAGQueryEngine]] = None,
+        faq_query_engine: FAQQueryEngine | RAGQueryEngine | None = None,
     ):
         """Initialize query router.
 
@@ -93,7 +92,7 @@ class QueryRouter:
             return self.docs_query_engine.query(cleaned_query, metadata_filters)
 
     def _route_auto(
-        self, query: str, metadata_filters: Optional[Dict[str, str]] = None
+        self, query: str, metadata_filters: dict[str, str] | None = None
     ) -> str:
         """Smart auto routing with FAQ score checking and docs enhancement.
 
@@ -175,8 +174,8 @@ class QueryRouter:
         )
 
     def _mark_faq_nodes_with_low_reliability(
-        self, faq_nodes: List[NodeWithScore], score: float
-    ) -> List[NodeWithScore]:
+        self, faq_nodes: list[NodeWithScore], score: float
+    ) -> list[NodeWithScore]:
         """Mark FAQ nodes with low reliability prefix.
 
         Args:
@@ -296,7 +295,7 @@ def create_query_router(
     vector_store_manager: VectorStoreManager,
     llm,
     _embed_model,
-    device: Optional[str] = None,
+    device: str | None = None,
 ):
     """Create query router with initialized engines.
 

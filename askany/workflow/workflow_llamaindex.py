@@ -2,7 +2,7 @@
 
 import re
 from logging import getLogger
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 from llama_index.core import QueryBundle
 from llama_index.core.llms import LLM
@@ -56,29 +56,29 @@ logger = getLogger(__name__)
 class RAGRetrievalEvent(Event):
     """RAG检索事件。"""
 
-    nodes: List[NodeWithScore]
-    keywords: List[str]
+    nodes: list[NodeWithScore]
+    keywords: list[str]
 
 
 class AnalysisEvent(Event):
     """分析事件。"""
 
     analysis: RelevantResult
-    nodes: List[NodeWithScore]
-    keywords: List[str]
+    nodes: list[NodeWithScore]
+    keywords: list[str]
 
 
 class KeywordSearchEvent(Event):
     """关键词搜索事件。"""
 
-    search_results: Dict[str, List[Dict[str, any]]]
-    new_nodes: List[NodeWithScore]
+    search_results: dict[str, list[dict[str, any]]]
+    new_nodes: list[NodeWithScore]
 
 
 class ContextExpansionEvent(Event):
     """上下文扩展事件。"""
 
-    expanded_nodes: List[NodeWithScore]
+    expanded_nodes: list[NodeWithScore]
 
 
 class SubQueryWorkflowEvent(Event):
@@ -91,7 +91,7 @@ class SubQueryWorkflowEvent(Event):
 class NoRelevantSearchEvent(Event):
     """无相关文档时的搜索事件。"""
 
-    nodes: List[NodeWithScore]
+    nodes: list[NodeWithScore]
 
 
 class DirectAnswerEvent(Event):
@@ -120,7 +120,7 @@ class AgentWorkflowLlama(Workflow):
         self,
         router: QueryRouter,
         llm: LLM,
-        base_path: Optional[str] = None,
+        base_path: str | None = None,
         workflow_client: Optional["WorkflowClient"] = None,
         num_concurrent_runs: int = settings.num_concurrent_runs,
     ):
@@ -865,8 +865,8 @@ class AgentWorkflowLlama(Workflow):
     # Helper methods
 
     def _search_results_to_nodes(
-        self, search_results: Dict[str, List[Dict[str, any]]]
-    ) -> List[NodeWithScore]:
+        self, search_results: dict[str, list[dict[str, any]]]
+    ) -> list[NodeWithScore]:
         """Convert search results to nodes."""
         nodes = []
         logger.debug("开始转换搜索结果为节点 - 关键词数: %d", len(search_results))
@@ -893,8 +893,8 @@ class AgentWorkflowLlama(Workflow):
         return nodes
 
     def _merge_nodes(
-        self, existing_nodes: List[NodeWithScore], new_nodes: List[NodeWithScore]
-    ) -> List[NodeWithScore]:
+        self, existing_nodes: list[NodeWithScore], new_nodes: list[NodeWithScore]
+    ) -> list[NodeWithScore]:
         """Merge nodes, avoiding duplicates."""
         merged = list(existing_nodes)
         logger.debug(
@@ -932,7 +932,7 @@ class AgentWorkflowLlama(Workflow):
         )
         return merged
 
-    def _extract_keywords_from_query(self, query: str) -> List[str]:
+    def _extract_keywords_from_query(self, query: str) -> list[str]:
         """Extract keywords from query using KeywordExtractorWrapper.
 
         Args:
@@ -966,7 +966,7 @@ class AgentWorkflowLlama(Workflow):
             logger.debug("简单提取关键词完成 - 关键词数: %d", len(keywords))
             return keywords
 
-    def _create_reranker(self) -> Optional[BaseNodePostprocessor]:
+    def _create_reranker(self) -> BaseNodePostprocessor | None:
         """创建reranker实例（与FAQQueryEngine使用同一个实例）。
 
         Returns:

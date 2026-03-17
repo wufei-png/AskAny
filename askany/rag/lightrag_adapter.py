@@ -39,7 +39,7 @@ import contextlib
 import hashlib
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import psycopg2
 
@@ -137,11 +137,11 @@ class LightRAGAdapter:
     def __init__(
         self,
         *,
-        working_dir: Optional[str] = None,
-        llm_model: Optional[str] = None,
-        llm_api_base: Optional[str] = None,
-        llm_api_key: Optional[str] = None,
-        embedding_model: Optional[str] = None,
+        working_dir: str | None = None,
+        llm_model: str | None = None,
+        llm_api_base: str | None = None,
+        llm_api_key: str | None = None,
+        embedding_model: str | None = None,
         embedding_dim: int = 1024,
         embedding_max_tokens: int = 8192,
         kv_storage: str = "PGKVStorage",
@@ -157,14 +157,14 @@ class LightRAGAdapter:
         relation_score: float = 0.45,
         # ── Chunking (controls entity extraction granularity) ──────────────
         # Smaller chunks → fewer mixed topics per chunk → cleaner entities.
-        chunk_token_size: Optional[int] = None,
-        chunk_overlap_token_size: Optional[int] = None,
+        chunk_token_size: int | None = None,
+        chunk_overlap_token_size: int | None = None,
         # ── Entity extraction ─────────────────────────────────────────────
-        entity_extract_max_gleaning: Optional[int] = None,
+        entity_extract_max_gleaning: int | None = None,
         # ── Summary ───────────────────────────────────────────────────────
-        summary_max_tokens: Optional[int] = None,
+        summary_max_tokens: int | None = None,
         # ── Addon params (language, entity_types) ─────────────────────────
-        addon_params: Optional[dict] = None,
+        addon_params: dict | None = None,
     ) -> None:
         """
         Parameters
@@ -217,7 +217,7 @@ class LightRAGAdapter:
             uses a Chinese-optimised default with DevOps entity types.
         """
         if not _LIGHTRAG_AVAILABLE:
-            self._rag: Optional["LightRAG"] = None
+            self._rag: LightRAG | None = None
             return
 
         # --- resolve settings ---------------------------------------------------
@@ -296,7 +296,7 @@ class LightRAGAdapter:
 
         async def _llm_func_inner(
             prompt: str,
-            system_prompt: Optional[str] = None,
+            system_prompt: str | None = None,
             history_messages: list | None = None,
             keyword_extraction: bool = False,
             **kwargs,
@@ -332,11 +332,11 @@ class LightRAGAdapter:
 
         try:
             from sentence_transformers import SentenceTransformer as _ST
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
                 "sentence-transformers is required for LightRAG embedding. "
                 "Install with: uv add sentence-transformers"
-            )
+            ) from e
 
         _embed_model_name = embedding_model
         _device = getattr(_settings, "device", "cpu")
@@ -347,7 +347,7 @@ class LightRAGAdapter:
         )
         _st_model = _ST(_embed_model_name, device=_device)
 
-        async def _embed_func(texts: List[str]) -> np.ndarray:
+        async def _embed_func(texts: list[str]) -> np.ndarray:
             """Embed texts using local SentenceTransformer model.
 
             LightRAG's EmbeddingFunc expects ``func(texts) -> np.ndarray``
@@ -602,9 +602,9 @@ class LightRAGAdapter:
 
     async def insert_async(
         self,
-        texts: str | List[str],
-        file_paths: Optional[str | List[str]] = None,
-        split_by_character: Optional[str] = None,
+        texts: str | list[str],
+        file_paths: str | list[str] | None = None,
+        split_by_character: str | None = None,
     ) -> None:
         """Insert one or more documents into the LightRAG knowledge graph.
 
@@ -630,9 +630,9 @@ class LightRAGAdapter:
 
     def insert(
         self,
-        texts: str | List[str],
-        file_paths: Optional[str | List[str]] = None,
-        split_by_character: Optional[str] = None,
+        texts: str | list[str],
+        file_paths: str | list[str] | None = None,
+        split_by_character: str | None = None,
     ) -> None:
         """Synchronous wrapper around :meth:`insert_async`."""
         try:
@@ -671,8 +671,8 @@ class LightRAGAdapter:
 
     def _backfill_chunk_provenance(
         self,
-        track_id: Optional[str],
-        file_paths: Optional[str | List[str]],
+        track_id: str | None,
+        file_paths: str | list[str] | None,
     ) -> None:
         if not track_id or not file_paths:
             return
@@ -694,7 +694,7 @@ class LightRAGAdapter:
                     """,
                     (track_id, file_path_list),
                 )
-                chunk_ids_by_file: Dict[str, list[str]] = {
+                chunk_ids_by_file: dict[str, list[str]] = {
                     file_path: list(chunks_list or [])
                     for file_path, chunks_list in cur.fetchall()
                 }
@@ -727,7 +727,7 @@ class LightRAGAdapter:
 
         hint_by_path: dict[str, int] = {}
         records = []
-        for chunk_id, chunk_order_index, content, file_path in rows:
+        for chunk_id, _chunk_order_index, content, file_path in rows:
             record = build_provenance_record(
                 retrieval_origin="lightrag",
                 source_kind="lightrag_chunk",
@@ -752,10 +752,10 @@ class LightRAGAdapter:
         self,
         query: str,
         *,
-        mode: Optional[str] = None,
-        top_k: Optional[int] = None,
-        chunk_top_k: Optional[int] = None,
-    ) -> List[NodeWithScore]:
+        mode: str | None = None,
+        top_k: int | None = None,
+        chunk_top_k: int | None = None,
+    ) -> list[NodeWithScore]:
         """Retrieve relevant nodes from LightRAG and return as ``NodeWithScore`` list.
 
         Parameters
@@ -848,10 +848,10 @@ class LightRAGAdapter:
         self,
         query: str,
         *,
-        mode: Optional[str] = None,
-        top_k: Optional[int] = None,
-        chunk_top_k: Optional[int] = None,
-    ) -> List[NodeWithScore]:
+        mode: str | None = None,
+        top_k: int | None = None,
+        chunk_top_k: int | None = None,
+    ) -> list[NodeWithScore]:
         """Synchronous wrapper around :meth:`retrieve_async`.
 
         Detects whether an event loop is already running (e.g. inside
@@ -924,7 +924,7 @@ class LightRAGAdapter:
     # Conversion: LightRAG → NodeWithScore
     # ------------------------------------------------------------------
 
-    def _convert_to_nodes(self, result: dict, query: str) -> List[NodeWithScore]:
+    def _convert_to_nodes(self, result: dict, query: str) -> list[NodeWithScore]:
         """Convert ``aquery_data()`` dict result to ``NodeWithScore`` list.
 
         ``aquery_data()`` returns::
@@ -942,7 +942,7 @@ class LightRAGAdapter:
                 "metadata": {...},
             }
         """
-        nodes: List[NodeWithScore] = []
+        nodes: list[NodeWithScore] = []
 
         # aquery_data() returns a dict directly – no need for hasattr checks.
         if not isinstance(result, dict):
@@ -1111,10 +1111,10 @@ def _get_or_create_loop() -> asyncio.AbstractEventLoop:
 
 @contextlib.contextmanager
 def propagate_lightrag_attributes(
-    user_id: Optional[str] = None,
-    session_id: Optional[str] = None,
-    tags: Optional[List[str]] = None,
-    metadata: Optional[dict] = None,
+    user_id: str | None = None,
+    session_id: str | None = None,
+    tags: list[str] | None = None,
+    metadata: dict | None = None,
 ):
     """Context manager that propagates user/session context to all Langfuse
     spans created inside the ``with`` block (including child ``retrieve_async``
@@ -1144,7 +1144,7 @@ def propagate_lightrag_attributes(
 # Module-level singleton (lazy-initialised)
 # ---------------------------------------------------------------------------
 
-_adapter_instance: Optional[LightRAGAdapter] = None
+_adapter_instance: LightRAGAdapter | None = None
 
 
 def get_lightrag_adapter() -> LightRAGAdapter:

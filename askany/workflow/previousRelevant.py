@@ -7,7 +7,6 @@ except ImportError:
 
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
@@ -22,7 +21,7 @@ from askany.config import settings
 class PreviousRelevantResponse(BaseModel):
     """RAG Workflow 最终输出的结构。"""
 
-    relevant_qa_indexes: List[int] = Field(
+    relevant_qa_indexes: list[int] = Field(
         description="历史qa中相关的qa对话的下标列表,如果没有相关的,返回空列表"
     )
 
@@ -30,7 +29,7 @@ class PreviousRelevantResponse(BaseModel):
 class PreviousRelevantor:
     """Generator for final answers using LangChain."""
 
-    def __init__(self, llm: Optional[ChatOpenAI] = None):
+    def __init__(self, llm: ChatOpenAI | None = None):
         """Initialize PreviousRelevantor.
 
         Args:

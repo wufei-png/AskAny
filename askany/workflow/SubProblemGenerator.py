@@ -3,7 +3,6 @@
 import re
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 from openai import OpenAI
 from pydantic import BaseModel, Field
@@ -23,7 +22,7 @@ class SubProblemStructure(BaseModel):
     子问题结构：二级列表，第一级为并行执行的问题组，第二级为串行执行的相关问题。
     """
 
-    parallel_groups: List[List[str]] = Field(
+    parallel_groups: list[list[str]] = Field(
         description="子问题列表",
         default_factory=list,
     )
@@ -35,7 +34,7 @@ class SubProblemStructure(BaseModel):
 class SubProblemGenerator:
     """Generator for decomposing user queries into sub-problems."""
 
-    def __init__(self, client: Optional[OpenAI] = None):
+    def __init__(self, client: OpenAI | None = None):
         """Initialize SubProblemGenerator.
 
         Args:

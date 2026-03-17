@@ -6,8 +6,8 @@ except ImportError:
     get_langfuse_callback_handler = lambda: None  # noqa: E731
 
 import sys
+from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import AsyncGenerator, Dict, List, Optional, Tuple
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -33,7 +33,7 @@ class FinalSummaryResponse(BaseModel):
     summary_answer: str = Field(
         description="根据提供的所有参考内容，如果内容相关且完整，则以自然、流畅的段落形式，完整回答用户的问题。如果上下文不足以回答问题，请返回'参考内容不足以回答问题'。",
     )
-    reasoning: Optional[str] = Field(
+    reasoning: str | None = Field(
         description="简要解释回答的依据和推理过程",
         default=None,
     )
@@ -42,7 +42,7 @@ class FinalSummaryResponse(BaseModel):
 class FinalAnswerGenerator:
     """Generator for final answers using LangChain."""
 
-    def __init__(self, llm: Optional[ChatOpenAI] = None):
+    def __init__(self, llm: ChatOpenAI | None = None):
         """Initialize FinalAnswerGenerator.
 
         Args:
@@ -75,7 +75,7 @@ class FinalAnswerGenerator:
         # 不再使用 structured output，直接使用 completion 接口
         # 这样可以避免 structured output 可能带来的问题（如换行符问题）
 
-    def _format_final_answer_input(self, query: str, nodes: List[NodeWithScore]) -> str:
+    def _format_final_answer_input(self, query: str, nodes: list[NodeWithScore]) -> str:
         """格式化输入用于生成最终答案。
 
         Args:
@@ -107,8 +107,8 @@ class FinalAnswerGenerator:
             return prompts.final_answer_task.format(query=query, context=context)
 
     def generate_final_answer(
-        self, query: str, nodes: List[NodeWithScore]
-    ) -> Tuple[str, Optional[str]]:
+        self, query: str, nodes: list[NodeWithScore]
+    ) -> tuple[str, str | None]:
         """生成最终答案。
 
         Args:
@@ -229,7 +229,7 @@ class FinalAnswerGenerator:
         return (summary_answer, reasoning)
 
     async def generate_final_answer_stream(
-        self, query: str, nodes: List[NodeWithScore]
+        self, query: str, nodes: list[NodeWithScore]
     ) -> AsyncGenerator[str, None]:
         """Stream the final answer token-by-token.
 
@@ -318,7 +318,7 @@ class FinalAnswerGenerator:
                 raise
 
     def _format_not_complete_answer_input(
-        self, query: str, nodes: List[NodeWithScore]
+        self, query: str, nodes: list[NodeWithScore]
     ) -> str:
         """格式化输入用于生成不完整答案。
 
@@ -351,8 +351,8 @@ class FinalAnswerGenerator:
             return prompts.not_complete_answer_task.format(query=query, context=context)
 
     def generate_not_complete_answer(
-        self, query: str, nodes: List[NodeWithScore]
-    ) -> Tuple[str, Optional[str]]:
+        self, query: str, nodes: list[NodeWithScore]
+    ) -> tuple[str, str | None]:
         """生成不完整答案（基于不完整的资料）。
 
         Args:
@@ -473,7 +473,7 @@ class FinalAnswerGenerator:
         return (summary_answer, reasoning)
 
     async def generate_not_complete_answer_stream(
-        self, query: str, nodes: List[NodeWithScore]
+        self, query: str, nodes: list[NodeWithScore]
     ) -> AsyncGenerator[str, None]:
         """Stream the not-complete answer token-by-token.
 
@@ -562,7 +562,7 @@ class FinalAnswerGenerator:
                 raise
 
 
-def extract_docs_references(nodes: List[NodeWithScore]) -> Dict[str, List]:
+def extract_docs_references(nodes: list[NodeWithScore]) -> dict[str, list]:
     """Extract document reference information from nodes.
 
     Args:
@@ -619,7 +619,7 @@ def extract_docs_references(nodes: List[NodeWithScore]) -> Dict[str, List]:
     }
 
 
-def format_docs_references(references: Dict[str, List]) -> str:
+def format_docs_references(references: dict[str, list]) -> str:
     """Format document references for display.
 
     Args:
@@ -675,9 +675,9 @@ def format_docs_references(references: Dict[str, List]) -> str:
 # Export function for backward compatibility
 def generate_final_answer(
     query: str,
-    nodes: List[NodeWithScore],
+    nodes: list[NodeWithScore],
     client=None,  # Deprecated, kept for backward compatibility
-) -> Tuple[str, Optional[str]]:
+) -> tuple[str, str | None]:
     """Backward compatibility wrapper."""
     generator = FinalAnswerGenerator()
     return generator.generate_final_answer(query, nodes)

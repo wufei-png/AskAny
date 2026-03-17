@@ -8,7 +8,6 @@ import logging
 import re
 import sys
 from pathlib import Path
-from typing import Optional
 
 from llama_index.core.schema import QueryBundle
 
@@ -35,7 +34,7 @@ class WorkflowFilterResult:
         have_result: bool,
         need_web_search: bool,
         need_rag_search: bool,
-        result: Optional[str] = None,
+        result: str | None = None,
     ):
         """Initialize WorkflowFilterResult.
 
@@ -64,8 +63,8 @@ class WorkflowFilter:
         direct_answer_generator: DirectAnswerGenerator,
         web_or_rag_generator: WebOrRagAnswerGenerator,
         final_answer_generator: FinalAnswerGenerator,
-        web_search_tool: Optional[WebSearchTool] = None,
-        reranker: Optional[SafeReranker] = None,
+        web_search_tool: WebSearchTool | None = None,
+        reranker: SafeReranker | None = None,
     ):
         """Initialize WorkflowFilter.
 

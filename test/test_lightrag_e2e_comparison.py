@@ -119,7 +119,7 @@ def _write_comparison(
 ) -> None:
     """Write side-by-side comparison to JSON file."""
     comparison = []
-    for b, a in zip(baseline, augmented):
+    for b, a in zip(baseline, augmented, strict=False):
         comparison.append(
             {
                 "question": b["question"],
@@ -152,7 +152,7 @@ def _print_summary(baseline: list[dict], augmented: list[dict]) -> None:
     total_base = 0.0
     total_aug = 0.0
 
-    for b, a in zip(baseline, augmented):
+    for b, a in zip(baseline, augmented, strict=False):
         q_short = (
             b["question"][:57] + "..." if len(b["question"]) > 57 else b["question"]
         )

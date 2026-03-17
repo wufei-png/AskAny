@@ -34,7 +34,7 @@ from askany.rag.router import QueryType
 def load_faq_data(faq_json_path: str):
     """Load FAQ data from JSON file."""
     try:
-        with open(faq_json_path, "r", encoding="utf-8") as f:
+        with open(faq_json_path, encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
         print(f"⚠️  Error loading FAQ data: {e}")

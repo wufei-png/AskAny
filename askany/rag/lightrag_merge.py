@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import logging
 from collections import defaultdict
-from typing import Any, Optional
+from typing import Any
 
 from llama_index.core import QueryBundle
 from llama_index.core.schema import NodeWithScore
@@ -78,7 +78,7 @@ def merge_lightrag_with_llamaindex(
     top_k: int,
     local_file_search,
     reranker=None,
-    provenance_repo: Optional[ProvenanceRepository] = None,
+    provenance_repo: ProvenanceRepository | None = None,
 ) -> list[NodeWithScore]:
     """Keep overlapped LlamaIndex chunks first and rerank the remainder pool."""
     if not lightrag_nodes:
@@ -338,7 +338,7 @@ def _choose_primary_match(
 
 def _calculate_overlap(
     survivor: NodeWithScore, chunk: NodeWithScore, *, local_file_search
-) -> Optional[dict[str, Any]]:
+) -> dict[str, Any] | None:
     survivor_meta = _metadata(survivor)
     chunk_meta = _metadata(chunk)
 
@@ -431,7 +431,7 @@ def _build_overlap_metrics(
 
 def _resolve_range_with_local_search(
     node: NodeWithScore, local_file_search
-) -> Optional[tuple[int, int]]:
+) -> tuple[int, int] | None:
     metadata = _metadata(node)
     file_path = metadata.get("file_path") or metadata.get("source")
     if not file_path:

@@ -3,7 +3,7 @@
 import re
 import sys
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Optional
 
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
@@ -32,10 +32,10 @@ class KeywordExtractorWrapper:
         self,
         llm_client: Optional = None,
         llm_max_keywords: int = 2,
-        tfidf_extractor: Optional[KeywordExtractorFromTFIDF] = None,
+        tfidf_extractor: KeywordExtractorFromTFIDF | None = None,
         priority: str = "llm",
-        topn: Optional[int] = None,
-        embed_model: Optional[BaseEmbedding] = None,
+        topn: int | None = None,
+        embed_model: BaseEmbedding | None = None,
     ):
         """初始化 KeywordExtractorWrapper
 
@@ -61,7 +61,7 @@ class KeywordExtractorWrapper:
         self.cache = LRUCache(maxsize=1024)
         self.embed_model = embed_model
         # Cache for custom keywords embeddings
-        self._custom_embeddings_cache: Optional[np.ndarray] = None
+        self._custom_embeddings_cache: np.ndarray | None = None
 
     def GetKeywordExtractorFromTFIDF(self) -> KeywordExtractorFromTFIDF:
         return self.tfidf_extractor
@@ -89,8 +89,8 @@ class KeywordExtractorWrapper:
         return self._custom_embeddings_cache
 
     def _filter_by_custom_similarity(
-        self, keywords: List[str], query: str
-    ) -> Tuple[List[str], List[str]]:
+        self, keywords: list[str], query: str
+    ) -> tuple[list[str], list[str]]:
         """根据与 custom 关键词的相似度过滤关键词
 
         如果关键词与 KNOWLEDGE_EMBEDDING_KEYWORDS 中任意一个的相似度超过阈值，
@@ -140,8 +140,8 @@ class KeywordExtractorWrapper:
         return matched_keywords, remaining_keywords
 
     def _filter_duplicate_and_substring_keywords(
-        self, keywords: List[str]
-    ) -> List[str]:
+        self, keywords: list[str]
+    ) -> list[str]:
         """过滤关键词列表：先去除小写重复，再去除子串
 
         1. 首先过滤掉小写后一样的字符，只保留小写的
@@ -186,7 +186,7 @@ class KeywordExtractorWrapper:
 
         return filtered
 
-    def _expand_keywords_with_separators(self, keywords: List[str]) -> List[str]:
+    def _expand_keywords_with_separators(self, keywords: list[str]) -> list[str]:
         """处理关键词，对非中文的关键词生成分隔符变体
 
         - 如果包含空格，生成用-和_拼接的新词
@@ -239,7 +239,7 @@ class KeywordExtractorWrapper:
                 expanded.append(nospace_keyword)
         return list(set(expanded))
 
-    def _expand_keywords_with_numbers(self, keywords: List[str]) -> List[str]:
+    def _expand_keywords_with_numbers(self, keywords: list[str]) -> list[str]:
         """处理关键词，对包含数字或中文数字的关键词生成数字转换变体
 
         - 如果包含阿拉伯数字（0-9），生成将数字转换为中文数字的变体
@@ -300,7 +300,7 @@ class KeywordExtractorWrapper:
         return list(set(expanded))
 
     @cachedmethod(lambda self: self.cache)
-    def extract_keywords(self, query: str) -> Tuple[List[str], List[str]]:
+    def extract_keywords(self, query: str) -> tuple[list[str], list[str]]:
         """从查询中提取关键词，合并 LLM 和 TF-IDF 的结果
 
         Args:

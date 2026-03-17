@@ -10,17 +10,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from askany.config import settings
 
 logger = logging.getLogger(__name__)
 
 # Lazy singleton — initialised on first access via get_mem0_adapter()
-_adapter_instance: Optional["Mem0Adapter"] = None
+_adapter_instance: Mem0Adapter | None = None
 
 
-def get_mem0_adapter() -> Optional["Mem0Adapter"]:
+def get_mem0_adapter() -> Mem0Adapter | None:
     """Return the global Mem0Adapter singleton, or None if mem0 is disabled."""
     global _adapter_instance
     if not settings.enable_mem0:
@@ -54,9 +54,9 @@ class Mem0Adapter:
         query: str,
         user_id: str,
         *,
-        top_k: Optional[int] = None,
-        score_threshold: Optional[float] = None,
-    ) -> List[Dict[str, Any]]:
+        top_k: int | None = None,
+        score_threshold: float | None = None,
+    ) -> list[dict[str, Any]]:
         """Search memories relevant to *query* for a specific user.
 
         Returns a list of dicts, each containing at least ``{"memory": str, "score": float}``.
@@ -77,7 +77,7 @@ class Mem0Adapter:
         if not raw_results:
             return []
 
-        results: List[Dict[str, Any]] = raw_results  # type: ignore[assignment]
+        results: list[dict[str, Any]] = raw_results  # type: ignore[assignment]
         # Filter by score threshold
         results = [r for r in results if r.get("score", 0) >= threshold]
         logger.debug(
@@ -125,7 +125,7 @@ class Mem0Adapter:
     # ── memory → prompt text ────────────────────────────────────────────────
 
     @staticmethod
-    def format_memories_as_system_text(memories: List[Dict[str, Any]]) -> str:
+    def format_memories_as_system_text(memories: list[dict[str, Any]]) -> str:
         """Format a list of memory dicts into a system-message text block.
 
         Example output:
@@ -145,10 +145,10 @@ class Mem0Adapter:
     # ── config builder ──────────────────────────────────────────────────────
 
     @staticmethod
-    def _build_config() -> Dict[str, Any]:
+    def _build_config() -> dict[str, Any]:
         """Build the ``mem0.Memory.from_config`` dict from AskAny settings."""
         # --- Vector store: reuse existing PostgreSQL / pgvector ---
-        vector_store_cfg: Dict[str, Any] = {
+        vector_store_cfg: dict[str, Any] = {
             "provider": "pgvector",
             "config": {
                 "user": settings.postgres_user,
@@ -166,7 +166,7 @@ class Mem0Adapter:
         llm_api_base = settings.mem0_llm_api_base or settings.openai_api_base
         llm_api_key = settings.mem0_llm_api_key or settings.openai_api_key
 
-        llm_cfg: Dict[str, Any] = {
+        llm_cfg: dict[str, Any] = {
             "provider": settings.mem0_llm_provider,
             "config": {
                 "model": llm_model,
@@ -189,7 +189,7 @@ class Mem0Adapter:
 
         # --- Embedder ---
         embedder_model = settings.mem0_embedder_model or settings.embedding_model
-        embedder_cfg: Dict[str, Any] = {
+        embedder_cfg: dict[str, Any] = {
             "provider": settings.mem0_embedder_provider,
             "config": {
                 "model": embedder_model,
@@ -199,7 +199,7 @@ class Mem0Adapter:
         if settings.mem0_embedder_provider == "huggingface":
             embedder_cfg["config"]["model_kwargs"] = {"trust_remote_code": True}
 
-        config: Dict[str, Any] = {
+        config: dict[str, Any] = {
             "vector_store": vector_store_cfg,
             "llm": llm_cfg,
             "embedder": embedder_cfg,

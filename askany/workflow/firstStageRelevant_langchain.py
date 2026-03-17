@@ -8,7 +8,7 @@ except ImportError:
 import re
 import sys
 from pathlib import Path
-from typing import Optional, cast
+from typing import cast
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -67,8 +67,8 @@ class DirectAnswerGenerator:
 
     def __init__(
         self,
-        llm: Optional[ChatOpenAI] = None,
-        keyword_extractor: Optional[KeywordExtractorFromTFIDF] = None,
+        llm: ChatOpenAI | None = None,
+        keyword_extractor: KeywordExtractorFromTFIDF | None = None,
     ):
         """Initialize DirectAnswerGenerator.
 
@@ -179,8 +179,8 @@ class WebOrRagAnswerGenerator:
 
     def __init__(
         self,
-        llm: Optional[ChatOpenAI] = None,
-        keyword_extractor: Optional[KeywordExtractorFromTFIDF] = None,
+        llm: ChatOpenAI | None = None,
+        keyword_extractor: KeywordExtractorFromTFIDF | None = None,
     ):
         """Initialize WebOrRagAnswerGenerator.
 

@@ -1,7 +1,6 @@
 """Token control utilities for LLM API calls."""
 
 import logging
-from typing import List
 
 from llama_index.core.schema import NodeWithScore
 
@@ -28,10 +27,10 @@ def estimate_tokens(text: str) -> int:
 
 
 def truncate_nodes_by_tokens(
-    nodes: List[NodeWithScore],
+    nodes: list[NodeWithScore],
     max_tokens: int,
     reserve_for_prompt: int = 1000,
-) -> tuple[List[NodeWithScore], int, bool]:
+) -> tuple[list[NodeWithScore], int, bool]:
     """Truncate nodes list to fit within token limit.
 
     Args:
@@ -162,9 +161,9 @@ def truncate_text_by_tokens(text: str, max_tokens: int) -> tuple[str, bool]:
 
 
 def check_and_truncate_messages(
-    messages: List[dict],
+    messages: list[dict],
     max_tokens: int,
-) -> tuple[List[dict], int, bool]:
+) -> tuple[list[dict], int, bool]:
     """Check and truncate messages to fit within token limit.
 
     Args:

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 import random
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from askany.config import Settings
@@ -27,8 +27,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # ── Module-level state ───────────────────────────────────────────────────────
-_metrics: Dict[str, object] = {}
-_evaluator_llm: Optional[object] = None
+_metrics: dict[str, object] = {}
+_evaluator_llm: object | None = None
 _initialized: bool = False
 _sample_rate: float = 1.0
 
@@ -36,7 +36,7 @@ _sample_rate: float = 1.0
 # ── Public API ───────────────────────────────────────────────────────────────
 
 
-def initialize_ragas(settings: "Settings") -> bool:
+def initialize_ragas(settings: Settings) -> bool:
     """Initialize RAGAS metrics and evaluator LLM.
 
     Must be called after ``initialize_langfuse`` (scores are pushed to Langfuse).
@@ -117,11 +117,11 @@ def initialize_ragas(settings: "Settings") -> bool:
 
 async def evaluate_rag_response(
     *,
-    trace_id: Optional[str] = None,
+    trace_id: str | None = None,
     user_input: str,
     response: str,
-    retrieved_contexts: List[str],
-) -> Dict[str, float]:
+    retrieved_contexts: list[str],
+) -> dict[str, float]:
     """Score a single RAG response and push results to Langfuse.
 
     This is designed to be called as a fire-and-forget background task:
@@ -144,7 +144,7 @@ async def evaluate_rag_response(
         logger.debug("RAGAS: skipped by sampling (rate=%.2f)", _sample_rate)
         return {}
 
-    scores: Dict[str, float] = {}
+    scores: dict[str, float] = {}
 
     try:
         from ragas import SingleTurnSample
@@ -211,12 +211,12 @@ def shutdown_ragas() -> None:
 # ── Internal helpers ─────────────────────────────────────────────────────────
 
 
-def _get_metric_classes() -> Dict[str, type]:
+def _get_metric_classes() -> dict[str, type]:
     """Return a mapping of normalised metric name → RAGAS metric class.
 
     Supports both the v0.4 ``collections`` API and the legacy ``metrics`` API.
     """
-    classes: Dict[str, type] = {}
+    classes: dict[str, type] = {}
 
     # Try v0.4+ collections API first (preferred – avoids deprecation warnings)
     try:

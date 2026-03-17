@@ -1,7 +1,7 @@
 """Utility functions for keyword extraction and loading."""
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, Set
+from typing import TYPE_CHECKING
 
 from askany.config import settings
 
@@ -114,7 +114,7 @@ def export_keywords_to_word_freq(
         print("⚠️  Docs keyword index not found")
 
 
-def load_keywords_from_txt(txt_file: str) -> Set[str]:
+def load_keywords_from_txt(txt_file: str) -> set[str]:
     """Load keywords from a txt file, ignoring frequencies.
 
     Reads a txt file where each line contains "keyword frequency" or just "keyword",
@@ -135,7 +135,7 @@ def load_keywords_from_txt(txt_file: str) -> Set[str]:
         return keywords
 
     try:
-        with open(txt_path, "r", encoding="utf-8") as f:
+        with open(txt_path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
@@ -164,7 +164,7 @@ def load_keywords_from_txt(txt_file: str) -> Set[str]:
         return keywords
 
 
-def load_keywords_and_frequency_from_txt(txt_file: str) -> Dict[str, int]:
+def load_keywords_and_frequency_from_txt(txt_file: str) -> dict[str, int]:
     """Load keywords and frequencies from a txt file.
 
     Handles multi-word keywords (e.g., "block scanner 2" -> keyword is "block scanner", frequency is 2).
@@ -184,7 +184,7 @@ def load_keywords_and_frequency_from_txt(txt_file: str) -> Dict[str, int]:
         return keywords_and_frequency
 
     try:
-        with open(txt_path, "r", encoding="utf-8") as f:
+        with open(txt_path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:

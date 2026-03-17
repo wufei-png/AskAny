@@ -1,7 +1,6 @@
 """FAQ query engine with KeywordTableIndex and VectorStoreIndex ensemble."""
 
 from logging import getLogger
-from typing import Dict, List, Optional, Tuple
 
 from llama_index.core import KeywordTableIndex, QueryBundle, VectorStoreIndex
 from llama_index.core.llms import LLM
@@ -29,9 +28,9 @@ class FAQQueryEngine:
         llm: LLM,
         similarity_top_k: int = 5,
         response_mode: ResponseMode = ResponseMode.COMPACT,
-        reranker_model: Optional[str] = None,
-        ensemble_weights: List[float] = None,
-        device: Optional[str] = None,
+        reranker_model: str | None = None,
+        ensemble_weights: list[float] = None,
+        device: str | None = None,
     ):
         """Initialize FAQ query engine.
 
@@ -133,7 +132,7 @@ class FAQQueryEngine:
         )
 
     def query(
-        self, query_str: str, metadata_filters: Optional[Dict[str, str]] = None
+        self, query_str: str, metadata_filters: dict[str, str] | None = None
     ) -> str:
         """Query the FAQ system.
 
@@ -161,8 +160,8 @@ class FAQQueryEngine:
         return response_text
 
     def retrieve(
-        self, query_str: str, metadata_filters: Optional[Dict[str, str]] = None
-    ) -> List:
+        self, query_str: str, metadata_filters: dict[str, str] | None = None
+    ) -> list:
         """Retrieve relevant documents without generation.
 
         Args:
@@ -192,8 +191,8 @@ class FAQQueryEngine:
         return nodes
 
     def retrieve_with_scores(
-        self, query_str: str, metadata_filters: Optional[Dict[str, str]] = None
-    ) -> Tuple[List, float]:
+        self, query_str: str, metadata_filters: dict[str, str] | None = None
+    ) -> tuple[list, float]:
         """Retrieve relevant documents and return the top score.
 
         Args:
@@ -210,7 +209,7 @@ class FAQQueryEngine:
         top_score = nodes[0].score if nodes and nodes[0].score is not None else 0.0
         return nodes, top_score
 
-    def synthesize_from_nodes(self, query_str: str, nodes: List) -> str:
+    def synthesize_from_nodes(self, query_str: str, nodes: list) -> str:
         """Synthesize answer from retrieved nodes without re-retrieving.
 
         Args:
@@ -234,8 +233,8 @@ class FAQQueryEngine:
         return response_text
 
     def _extract_faq_references(
-        self, nodes: List[NodeWithScore]
-    ) -> List[Dict[str, str]]:
+        self, nodes: list[NodeWithScore]
+    ) -> list[dict[str, str]]:
         """Extract FAQ reference information from nodes.
 
         Args:
@@ -277,7 +276,7 @@ class FAQQueryEngine:
 
         return references
 
-    def _format_faq_references(self, references: List[Dict[str, str]]) -> str:
+    def _format_faq_references(self, references: list[dict[str, str]]) -> str:
         """Format FAQ references for display.
 
         Args:
@@ -305,8 +304,8 @@ class FAQQueryEngine:
         return ref_text
 
     def _filter_nodes_by_metadata(
-        self, nodes: List[NodeWithScore], filters: Dict[str, str]
-    ) -> List[NodeWithScore]:
+        self, nodes: list[NodeWithScore], filters: dict[str, str]
+    ) -> list[NodeWithScore]:
         """Filter nodes by metadata criteria.
 
         Args:
@@ -351,8 +350,8 @@ class FAQQueryEngine:
         return filtered_nodes
 
     def _filter_nodes_by_score(
-        self, nodes: List[NodeWithScore], threshold: float
-    ) -> List[NodeWithScore]:
+        self, nodes: list[NodeWithScore], threshold: float
+    ) -> list[NodeWithScore]:
         """Filter nodes by similarity score threshold.
 
         Args:

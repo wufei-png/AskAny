@@ -1,4 +1,3 @@
-# encoding=utf-8
 import jieba
 
 jieba.enable_paddle()  # 启动paddle模式。 0.40版之后开始支持，早期版本不支持

@@ -6,10 +6,11 @@ import json
 import threading
 import time
 import uuid
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from logging import getLogger
 from pathlib import Path
-from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
+from typing import Any
 
 import httpx
 import uvicorn
@@ -31,7 +32,7 @@ from askany.workflow.workflow_langgraph import AgentWorkflow, process_parallel_g
 logger = getLogger(__name__)
 
 # Global device variable (set during initialization)
-_device: Optional[str] = None
+_device: str | None = None
 
 _background_tasks: set[asyncio.Task[Any]] = set()  # prevent GC of fire-and-forget tasks
 
@@ -76,9 +77,9 @@ class ChatMessage(BaseModel):
 
 class ChatCompletionRequest(BaseModel):
     model: str = "gpt-3.5-turbo"
-    messages: List[ChatMessage]
+    messages: list[ChatMessage]
     temperature: float = settings.temperature
-    max_tokens: Optional[int] = None
+    max_tokens: int | None = None
     stream: bool = False
 
 
@@ -93,26 +94,26 @@ class ChatCompletionResponse(BaseModel):
     object: str = "chat.completion"
     created: int
     model: str
-    choices: List[ChatCompletionChoice]
-    usage: Dict[str, int]
+    choices: list[ChatCompletionChoice]
+    usage: dict[str, int]
 
 
 class OpenAPISchema(BaseModel):
     """OpenAPI schema for open-webui compatibility."""
 
     openapi: str = "3.0.0"
-    info: Dict[str, Any]
-    servers: List[Dict[str, str]]
-    paths: Dict[str, Any]
-    components: Dict[str, Any]
+    info: dict[str, Any]
+    servers: list[dict[str, str]]
+    paths: dict[str, Any]
+    components: dict[str, Any]
 
 
 # Global variables (will be initialized in startup)
-router: Optional[QueryRouter] = None
-vector_store_manager: Optional[VectorStoreManager] = None
+router: QueryRouter | None = None
+vector_store_manager: VectorStoreManager | None = None
 llm = None
 embed_model = None
-agent_workflow_global: Optional[AgentWorkflow] = None
+agent_workflow_global: AgentWorkflow | None = None
 simple_agent_global = None  # Simple agent (min_langchain_agent) instance
 update_lock = threading.Lock()  # Lock for thread-safe updates
 
@@ -130,14 +131,14 @@ class UpdateFAQsResponse(BaseModel):
     message: str
     inserted: int  # Number of new FAQs inserted
     updated: int  # Number of existing FAQs updated
-    errors: List[str]  # List of error messages
+    errors: list[str]  # List of error messages
 
 
 def _make_sse_chunk(
     model: str,
-    content: Optional[str] = None,
-    finish_reason: Optional[str] = None,
-    chunk_id: Optional[str] = None,
+    content: str | None = None,
+    finish_reason: str | None = None,
+    chunk_id: str | None = None,
 ) -> str:
     """Build a single SSE data line in OpenAI chat.completion.chunk format.
 
@@ -150,7 +151,7 @@ def _make_sse_chunk(
     Returns:
         A complete SSE line ``data: {json}\n\n``.
     """
-    delta: Dict[str, Any] = {}
+    delta: dict[str, Any] = {}
     if content is not None:
         delta["content"] = content
     chunk = {
@@ -168,8 +169,8 @@ async def _sse_generator(
     stream: AsyncGenerator[str, None],
     *,
     mem0_adapter=None,
-    user_id: Optional[str] = None,
-    user_query: Optional[str] = None,
+    user_id: str | None = None,
+    user_query: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Wrap an async content stream into OpenAI-compatible SSE events.
 
@@ -185,14 +186,14 @@ async def _sse_generator(
     """
     chunk_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
     first = True
-    collected_content: List[str] = []
+    collected_content: list[str] = []
     try:
         async for content in stream:
             if not content:
                 continue
             collected_content.append(content)
             if first:
-                role_chunk: Dict[str, Any] = {
+                role_chunk: dict[str, Any] = {
                     "id": chunk_id,
                     "object": "chat.completion.chunk",
                     "created": int(time.time()),
@@ -222,11 +223,11 @@ async def _sse_generator(
 
 def create_app(
     query_router: QueryRouter,
-    vstore_manager: Optional[VectorStoreManager] = None,
+    vstore_manager: VectorStoreManager | None = None,
     _llm=None,
     _embed_model=None,
-    agent_workflow: Optional[AgentWorkflow] = None,
-    workflow_filter: Optional[WorkflowFilter] = None,
+    agent_workflow: AgentWorkflow | None = None,
+    workflow_filter: WorkflowFilter | None = None,
     simple_agent=None,
 ) -> FastAPI:
     """Create FastAPI application.
@@ -486,9 +487,9 @@ def create_app(
         )
 
         # ── Mem0: extract user identity & retrieve memories ──
-        user_id: Optional[str] = raw_request.headers.get("x-openwebui-user-id")
+        user_id: str | None = raw_request.headers.get("x-openwebui-user-id")
         mem0_adapter = get_mem0_adapter()
-        memory_system_text: Optional[str] = None
+        memory_system_text: str | None = None
         if user_id and mem0_adapter:
             memories = mem0_adapter.search(user_query, user_id)
             if memories:
@@ -523,7 +524,7 @@ def create_app(
             async def _build_content_stream() -> AsyncGenerator[str, None]:
                 """Build the content-level async generator for the chosen workflow."""
                 # Prepare mem0_qa_context for workflow path
-                mem0_qa_context: List[Dict[str, str]] = []
+                mem0_qa_context: list[dict[str, str]] = []
                 if memory_system_text:
                     mem0_qa_context = [
                         {"query": "user_memory_context", "answer": memory_system_text}
@@ -550,7 +551,7 @@ def create_app(
                         yield chunk
                 else:
                     # Simple agent streaming
-                    mem0_messages: List[Dict[str, str]] = []
+                    mem0_messages: list[dict[str, str]] = []
                     if memory_system_text:
                         mem0_messages = [
                             {"role": "system", "content": memory_system_text}
@@ -609,13 +610,13 @@ def create_app(
             # - Multiple unrelated questions: parallel processing
             # - Multiple related questions: serial processing with context accumulation
             # Inject Mem0 memory context into workflow as previous QA context
-            mem0_qa_context: List[Dict[str, str]] = []
+            mem0_qa_context: list[dict[str, str]] = []
             if memory_system_text:
                 mem0_qa_context = [
                     {"query": "user_memory_context", "answer": memory_system_text}
                 ]
 
-            retrieved_nodes: List["NodeWithScore"] = []
+            retrieved_nodes: list[NodeWithScore] = []
 
             try:
                 response_text, retrieved_nodes = await process_query_with_subproblems(
@@ -633,7 +634,7 @@ def create_app(
                 # For workflow errors, return 500 with error details
                 raise HTTPException(
                     status_code=500, detail=f"Workflow execution failed: {error_msg}"
-                )
+                ) from e
         else:
             # Use simple agent (min_langchain_agent)
             if simple_agent_global is None:
@@ -672,7 +673,7 @@ def create_app(
                 raise HTTPException(
                     status_code=500,
                     detail=f"Simple agent execution failed: {error_msg}",
-                )
+                ) from e
         logger.info(
             "Chat response model=%s characters=%d\n%s",
             request.model,
@@ -783,7 +784,7 @@ def create_app(
                     raise HTTPException(
                         status_code=400,
                         detail=f"Failed to decode base64 JSON: {str(e)}",
-                    )
+                    ) from e
 
                 # Ensure faq_data is a list
                 if isinstance(faq_data, dict):
@@ -846,8 +847,8 @@ async def process_query_with_subproblems(
     user_query: str,
     query_type: QueryType,
     *,
-    mem0_qa_context: Optional[List[Dict[str, str]]] = None,
-) -> Tuple[str, List["NodeWithScore"]]:
+    mem0_qa_context: list[dict[str, str]] | None = None,
+) -> tuple[str, list["NodeWithScore"]]:
     """处理用户查询，支持子问题分解和并行/串行处理。
 
     首先使用 WorkflowFilter 尝试直接回答或通过网络搜索回答。
@@ -1003,11 +1004,11 @@ app = FastAPI()
 
 def run_server(
     query_router: QueryRouter,
-    vector_store_manager: Optional[VectorStoreManager] = None,
+    vector_store_manager: VectorStoreManager | None = None,
     llm=None,
     embed_model=None,
-    agent_workflow: Optional[AgentWorkflow] = None,
-    workflow_filter: Optional[WorkflowFilter] = None,
+    agent_workflow: AgentWorkflow | None = None,
+    workflow_filter: WorkflowFilter | None = None,
     simple_agent=None,
 ):
     """Run the API server.

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-# coding=utf-8
 """Main entry point for AskAny application."""
 
 # Set stdout/stderr encoding to UTF-8 FIRST, before any imports
@@ -41,7 +39,6 @@ except (AttributeError, OSError):
 import logging
 import multiprocessing
 import os
-from typing import Optional
 
 # Configure logging for OpenAI client to reduce verbose output
 # Set OpenAI client logging to WARNING level to reduce noise
@@ -78,7 +75,7 @@ from askany.workflow.workflow_langgraph import AgentWorkflow
 logger = getLogger(__name__)
 
 
-def limit_cpu_cores(num_cores: Optional[int] = None) -> None:
+def limit_cpu_cores(num_cores: int | None = None) -> None:
     """Limit CPU cores used by the process.
 
     This function:

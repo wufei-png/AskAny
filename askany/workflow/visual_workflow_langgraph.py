@@ -2,7 +2,6 @@
 
 import sys
 from pathlib import Path
-from typing import Optional
 
 # Add project root directory to path to import askany modules
 project_root = Path(__file__).parent.parent.parent
@@ -12,9 +11,9 @@ from askany.workflow.workflow_langgraph import AgentWorkflow  # noqa: E402
 
 
 def visualize_workflow(
-    workflow: Optional[AgentWorkflow] = None,
+    workflow: AgentWorkflow | None = None,
     output_format: str = "mermaid",
-    output_file: Optional[str] = None,
+    output_file: str | None = None,
     show_in_browser: bool = False,
 ) -> str:
     """Visualize the LangGraph workflow.

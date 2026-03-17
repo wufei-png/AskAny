@@ -1,7 +1,6 @@
 """vLLM integration for OpenAI-compatible LLM endpoints."""
 
 from logging import getLogger
-from typing import Optional
 
 import httpx
 from llama_index.core.base.llms.types import LLMMetadata, MessageRole
@@ -12,7 +11,7 @@ from askany.config import settings
 logger = getLogger(__name__)
 
 
-def get_first_available_model(api_base: str) -> Optional[str]:
+def get_first_available_model(api_base: str) -> str | None:
     """Get the first available model from vLLM API.
 
     Args:

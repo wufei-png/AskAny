@@ -1,12 +1,12 @@
 """Module for recording and formatting middle results from workflow nodes."""
 
-from enum import Enum
-from typing import Any, Dict, List
+from enum import StrEnum
+from typing import Any
 
 from askany.config import settings
 
 
-class NodeType(str, Enum):
+class NodeType(StrEnum):
     """Node type enumeration for workflow nodes."""
 
     DIRECT_ANSWER_CHECK = "direct_answer_check"
@@ -23,7 +23,7 @@ class MiddleResultRecorder:
 
     @staticmethod
     def record_direct_answer_check(
-        middle_results: List[Dict[str, Any]], can_direct_answer: bool
+        middle_results: list[dict[str, Any]], can_direct_answer: bool
     ) -> None:
         """Record direct answer check node result.
 
@@ -43,7 +43,7 @@ class MiddleResultRecorder:
 
     @staticmethod
     def record_web_or_rag_check(
-        middle_results: List[Dict[str, Any]],
+        middle_results: list[dict[str, Any]],
         need_web_search: bool,
         need_rag_search: bool,
     ) -> None:
@@ -67,8 +67,8 @@ class MiddleResultRecorder:
 
     @staticmethod
     def record_rag_retrieval(
-        middle_results: List[Dict[str, Any]],
-        keywords: List[str],
+        middle_results: list[dict[str, Any]],
+        keywords: list[str],
         nodes_count: int,
     ) -> None:
         """Record RAG retrieval node result.
@@ -91,8 +91,8 @@ class MiddleResultRecorder:
 
     @staticmethod
     def record_analyze_relevance(
-        middle_results: List[Dict[str, Any]],
-        relevant_file_paths: List[str],
+        middle_results: list[dict[str, Any]],
+        relevant_file_paths: list[str],
         is_complete: bool,
     ) -> None:
         """Record analyze relevance node result.
@@ -115,9 +115,9 @@ class MiddleResultRecorder:
 
     @staticmethod
     def record_process_no_relevant(
-        middle_results: List[Dict[str, Any]],
-        missing_info_keywords: List[str],
-        sub_queries: List[str],
+        middle_results: list[dict[str, Any]],
+        missing_info_keywords: list[str],
+        sub_queries: list[str],
         hypothetical_answer: str,
     ) -> None:
         """Record process no relevant node result.
@@ -142,8 +142,8 @@ class MiddleResultRecorder:
 
     @staticmethod
     def record_process_sub_query(
-        middle_results: List[Dict[str, Any]],
-        all_qa_context: List[Dict[str, str]],
+        middle_results: list[dict[str, Any]],
+        all_qa_context: list[dict[str, str]],
     ) -> None:
         """Record process sub query node result.
 
@@ -163,7 +163,7 @@ class MiddleResultRecorder:
 
     @staticmethod
     def record_expand_context(
-        middle_results: List[Dict[str, Any]],
+        middle_results: list[dict[str, Any]],
         expanded_nodes_count: int,
     ) -> None:
         """Record expand context node result.
@@ -184,7 +184,7 @@ class MiddleResultRecorder:
 
     @staticmethod
     def format_middle_results(
-        middle_results: List[Dict[str, Any]], final_answer: str
+        middle_results: list[dict[str, Any]], final_answer: str
     ) -> str:
         """Format middle results and final answer into a single string.
 
@@ -213,7 +213,7 @@ class MiddleResultRecorder:
         return "\n\n".join(formatted_parts)
 
     @staticmethod
-    def _format_node_data(node_type: str, data: Dict[str, Any]) -> str:
+    def _format_node_data(node_type: str, data: dict[str, Any]) -> str:
         """Format node data based on node type.
 
         Args:

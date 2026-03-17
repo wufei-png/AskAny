@@ -147,7 +147,7 @@ def import_table_from_schema_and_data(
 
         # Import schema
         logger.info(f"Importing schema from {schema_file}...")
-        with open(schema_file, "r", encoding="utf-8") as f:
+        with open(schema_file, encoding="utf-8") as f:
             schema_sql = f.read()
             # Remove CREATE EXTENSION statements (we handle that separately)
             schema_sql = "\n".join(
@@ -165,7 +165,7 @@ def import_table_from_schema_and_data(
             logger.info(f"Importing data from {data_file}...")
             import csv
 
-            with open(data_file, "r", encoding="utf-8") as f:
+            with open(data_file, encoding="utf-8") as f:
                 reader = csv.DictReader(f)
                 batch_size = 1000
                 batch = []
@@ -261,7 +261,7 @@ def import_sequences(sequences_file: Path) -> bool:
         )
         cur = conn.cursor()
 
-        with open(sequences_file, "r", encoding="utf-8") as f:
+        with open(sequences_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("--"):
@@ -291,7 +291,7 @@ def load_metadata(input_dir: Path) -> dict:
         return {}
 
     try:
-        with open(metadata_file, "r", encoding="utf-8") as f:
+        with open(metadata_file, encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
         logger.error(f"❌ Error loading metadata: {e}")
@@ -448,7 +448,7 @@ def main():
         )
         cur = conn.cursor()
 
-        for table_type, table_name in tables_to_import:
+        for _table_type, table_name in tables_to_import:
             try:
                 cur.execute(f"SELECT COUNT(*) FROM {table_name};")
                 count = cur.fetchone()[0]

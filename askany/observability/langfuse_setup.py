@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from askany.config import Settings
@@ -21,16 +21,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # ── Module-level singletons ──────────────────────────────────────────────────
-_langfuse_client: Optional[object] = None
-_langfuse_callback_handler: Optional[object] = None
-_llamaindex_instrumentor: Optional[object] = None
+_langfuse_client: object | None = None
+_langfuse_callback_handler: object | None = None
+_llamaindex_instrumentor: object | None = None
 _initialized: bool = False
 
 
 # ── Public API ───────────────────────────────────────────────────────────────
 
 
-def initialize_langfuse(settings: "Settings") -> bool:
+def initialize_langfuse(settings: Settings) -> bool:
     """Bootstrap Langfuse tracing for all three frameworks.
 
     1. Sets ``LANGFUSE_*`` env vars so LightRAG picks them up natively.

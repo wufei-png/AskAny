@@ -1,6 +1,6 @@
 """Custom KeywordTableIndex and KeywordTableGPTRetriever with KeywordExtractorWrapper support."""
 
-from typing import Any, List, Optional, Set, Union
+from typing import Any
 
 from llama_index.core import KeywordTableIndex
 from llama_index.core.indices.keyword_table.base import BaseKeywordTableIndex
@@ -14,10 +14,10 @@ from askany.config import settings
 from askany.ingest.keyword_extract_wrapper import KeywordExtractorWrapper
 
 # Global KeywordExtractorWrapper instance (singleton pattern)
-_global_keyword_extractor: Optional[KeywordExtractorWrapper] = None
+_global_keyword_extractor: KeywordExtractorWrapper | None = None
 
 
-def get_global_keyword_extractor() -> Optional[KeywordExtractorWrapper]:
+def get_global_keyword_extractor() -> KeywordExtractorWrapper | None:
     """Get the global KeywordExtractorWrapper instance."""
     return _global_keyword_extractor
 
@@ -33,15 +33,15 @@ class CustomKeywordTableIndex(KeywordTableIndex):
 
     def __init__(
         self,
-        nodes: Optional[list] = None,
-        objects: Optional[list] = None,
-        index_struct: Optional[Any] = None,
-        llm: Optional[LLM] = None,
-        keyword_extract_template: Optional[BasePromptTemplate] = None,
+        nodes: list | None = None,
+        objects: list | None = None,
+        index_struct: Any | None = None,
+        llm: LLM | None = None,
+        keyword_extract_template: BasePromptTemplate | None = None,
         max_keywords_per_chunk: int = 10,
         use_async: bool = False,
         show_progress: bool = False,
-        keyword_extractor: Optional[KeywordExtractorWrapper] = None,
+        keyword_extractor: KeywordExtractorWrapper | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize CustomKeywordTableIndex.
@@ -77,12 +77,12 @@ class CustomKeywordTableIndex(KeywordTableIndex):
             f"CustomKeywordTableIndex initialized with keyword extractor: {self._keyword_extractor}"
         )
 
-    def _extract_keywords(self, text: str) -> Set[str]:
+    def _extract_keywords(self, text: str) -> set[str]:
         """Extract keywords from text using KeywordExtractorWrapper."""
         keywords, _ = self._keyword_extractor.extract_keywords(text)
         return set(keywords)
 
-    async def _async_extract_keywords(self, text: str) -> Set[str]:
+    async def _async_extract_keywords(self, text: str) -> set[str]:
         """Extract keywords from text using KeywordExtractorWrapper (async)."""
         # KeywordExtractorWrapper.extract_keywords is sync, so we just call it
         keywords, _ = self._keyword_extractor.extract_keywords(text)
@@ -90,7 +90,7 @@ class CustomKeywordTableIndex(KeywordTableIndex):
 
     def as_retriever(
         self,
-        retriever_mode: Union[str, Any] = "default",
+        retriever_mode: str | Any = "default",
         **kwargs: Any,
     ) -> Any:
         """Create a retriever from this index.
@@ -124,12 +124,12 @@ class CustomKeywordTableGPTRetriever(KeywordTableGPTRetriever):
     def __init__(
         self,
         index: BaseKeywordTableIndex,
-        keyword_extract_template: Optional[BasePromptTemplate] = None,
-        query_keyword_extract_template: Optional[BasePromptTemplate] = None,
+        keyword_extract_template: BasePromptTemplate | None = None,
+        query_keyword_extract_template: BasePromptTemplate | None = None,
         max_keywords_per_query: int = 3,
         num_chunks_per_query: int = 10,
-        llm: Optional[LLM] = None,
-        keyword_extractor: Optional[KeywordExtractorWrapper] = None,
+        llm: LLM | None = None,
+        keyword_extractor: KeywordExtractorWrapper | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize CustomKeywordTableGPTRetriever.
@@ -160,7 +160,7 @@ class CustomKeywordTableGPTRetriever(KeywordTableGPTRetriever):
             **kwargs,
         )
 
-    def _get_keywords(self, query_str: str) -> List[str]:
+    def _get_keywords(self, query_str: str) -> list[str]:
         """Extract keywords from query using KeywordExtractorWrapper."""
         keywords, _ = self._keyword_extractor.extract_keywords(query_str)
         # Limit to max_keywords_per_query
