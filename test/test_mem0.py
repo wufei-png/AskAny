@@ -342,3 +342,142 @@ class TestMem0E2E:
             await adapter.save_turn_async(
                 "What is 2+2?", "2+2 equals 4.", user_id=user_id
             )
+
+    def test_e2e_add_then_search(self):
+        """E2E test: add 记忆 → search 能正确召回.
+
+        运行方式:
+            python -m pytest test/test_mem0.py::TestMem0E2E::test_e2e_add_then_search -v -s
+
+        依赖:
+            - PostgreSQL + pgvector 可用
+            - vLLM (或 OpenAI) endpoint 可用
+            - mem0ai 包已安装
+        """
+        import time
+
+        import askany.memory.mem0_adapter as mem0_module
+
+        # 重置 singleton 确保使用新配置
+        mem0_module._adapter_instance = None
+
+        with patch("askany.memory.mem0_adapter.settings") as mock_settings:
+            mock_settings.enable_mem0 = True
+            mock_settings.mem0_top_k = 5
+            mock_settings.mem0_score_threshold = 0.1
+            mock_settings.postgres_user = "wufei"
+            mock_settings.postgres_password = MagicMock()
+            mock_settings.postgres_password.get_secret_value.return_value = "123456"
+            mock_settings.postgres_host = "localhost"
+            mock_settings.postgres_port = 5432
+            mock_settings.postgres_db = "askany"
+            # 使用独立 collection 避免污染
+            mock_settings.mem0_collection_name = "askany_mem0_test_e2e_search"
+            mock_settings.vector_dimension = 1024
+            mock_settings.openai_model = (
+                "/net/ai02/data/xlzhong/wufei/models/Qwen3-14B-AWQ/"
+            )
+            mock_settings.openai_api_base = "http://127.0.0.1:8081/v1"
+            mock_settings.openai_api_key = "dummy"
+            mock_settings.mem0_llm_model = None
+            mock_settings.mem0_llm_api_base = None
+            mock_settings.mem0_llm_api_key = None
+            mock_settings.mem0_llm_provider = "openai"
+            mock_settings.embedding_model = "BAAI/bge-m3"
+            mock_settings.mem0_embedder_model = None
+            mock_settings.mem0_embedder_provider = "huggingface"
+
+            from askany.memory.mem0_adapter import get_mem0_adapter
+
+            adapter = get_mem0_adapter()
+            if adapter is None:
+                pytest.skip("Mem0 not enabled")
+
+            user_id = "test_e2e_search_user"
+
+            # 1. 添加记忆
+            adapter.save_turn(
+                "I love coding in Python and prefer dark roast coffee",
+                "Great, I've noted your preferences!",
+                user_id=user_id,
+            )
+
+            # 等待向量写入 (mem0 异步写入)
+            time.sleep(2)
+
+            # 2. 搜索相关记忆 - 验证能召回
+            results = adapter.search("What does user like?", user_id=user_id)
+
+            # 3. 验证
+            print(f"\n[E2E Search] Query: 'What does user like?'")
+            print(f"[E2E Search] Results: {results}")
+
+            assert len(results) > 0, "Should find at least one memory"
+
+            # 检查是否包含相关内容 (语义匹配可能不精确，但应该能找到)
+            memories_text = " ".join(r.get("memory", "") for r in results).lower()
+            # Python/coding 可能被提取为 "likes programming" 或类似
+            # 至少应该有一些相关词汇
+            has_relevant = any(
+                word in memories_text
+                for word in ["python", "coding", "coffee", "prefers", "love"]
+            )
+            assert has_relevant, f"Should find relevant memory, got: {results}"
+
+    def test_e2e_search_returns_correct_format(self):
+        """E2E test: search 返回正确的格式.
+
+        验证 search 返回的 dict 包含必要字段.
+        """
+        import time
+
+        import askany.memory.mem0_adapter as mem0_module
+
+        mem0_module._adapter_instance = None
+
+        with patch("askany.memory.mem0_adapter.settings") as mock_settings:
+            mock_settings.enable_mem0 = True
+            mock_settings.mem0_top_k = 5
+            mock_settings.mem0_score_threshold = 0.1
+            mock_settings.postgres_user = "wufei"
+            mock_settings.postgres_password = MagicMock()
+            mock_settings.postgres_password.get_secret_value.return_value = "123456"
+            mock_settings.postgres_host = "localhost"
+            mock_settings.postgres_port = 5432
+            mock_settings.postgres_db = "askany"
+            mock_settings.mem0_collection_name = "askany_mem0_test_e2e_format"
+            mock_settings.vector_dimension = 1024
+            mock_settings.openai_model = (
+                "/net/ai02/data/xlzhong/wufei/models/Qwen3-14B-AWQ/"
+            )
+            mock_settings.openai_api_base = "http://127.0.0.1:8081/v1"
+            mock_settings.openai_api_key = "dummy"
+            mock_settings.mem0_llm_model = None
+            mock_settings.mem0_llm_api_base = None
+            mock_settings.mem0_llm_api_key = None
+            mock_settings.mem0_llm_provider = "openai"
+            mock_settings.embedding_model = "BAAI/bge-m3"
+            mock_settings.mem0_embedder_model = None
+            mock_settings.mem0_embedder_provider = "huggingface"
+
+            from askany.memory.mem0_adapter import get_mem0_adapter
+
+            adapter = get_mem0_adapter()
+            if adapter is None:
+                pytest.skip("Mem0 not enabled")
+
+            user_id = "test_e2e_format_user"
+
+            adapter.save_turn("Test question", "Test answer", user_id=user_id)
+            time.sleep(2)
+
+            results = adapter.search("test", user_id=user_id)
+
+            # 验证返回格式
+            if len(results) > 0:
+                r = results[0]
+                assert "memory" in r, "Result should have 'memory' field"
+                assert "score" in r, "Result should have 'score' field"
+                assert isinstance(r["memory"], str), "memory should be string"
+                assert isinstance(r["score"], (int, float)), "score should be numeric"
+                print(f"[E2E Format] Sample result: {r}")
