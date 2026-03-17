@@ -201,7 +201,7 @@ async def _sse_generator(
                     "choices": [
                         {
                             "index": 0,
-                            "delta": {"role": "assistant", "content": ""},
+                            "delta": {"role": "assistant"},
                             "finish_reason": None,
                         }
                     ],
@@ -209,8 +209,13 @@ async def _sse_generator(
                 yield f"data: {json.dumps(role_chunk)}\n\n"
                 first = False
             yield _make_sse_chunk(model, content=content, chunk_id=chunk_id)
-    except Exception:
+    except Exception as e:
         logger.exception("Error during SSE streaming")
+        yield _make_sse_chunk(
+            model,
+            content=f"[Error: {type(e).__name__}] {str(e)}",
+            chunk_id=chunk_id,
+        )
     finally:
         yield _make_sse_chunk(model, finish_reason="stop", chunk_id=chunk_id)
         yield "data: [DONE]\n\n"

@@ -373,7 +373,7 @@ class TestOpenAICompatibility:
 
     @pytest.mark.asyncio
     async def test_first_chunk_has_role(self):
-        """First SSE chunk should include delta.role='assistant'."""
+        """First SSE chunk should include delta.role='assistant' without empty content."""
 
         async def gen() -> AsyncGenerator[str, None]:
             yield "hi"
@@ -384,6 +384,7 @@ class TestOpenAICompatibility:
 
         first = json.loads(chunks[0][len("data: ") :].strip())
         assert first["choices"][0]["delta"]["role"] == "assistant"
+        assert "content" not in first["choices"][0]["delta"]
 
 
 # ─── Additional edge case tests ───
