@@ -9,7 +9,9 @@ import uuid
 from contextlib import asynccontextmanager
 from logging import getLogger
 from pathlib import Path
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
+
+from llama_index.core.schema import NodeWithScore
 
 import httpx
 import uvicorn
@@ -614,8 +616,10 @@ def create_app(
                     {"query": "user_memory_context", "answer": memory_system_text}
                 ]
 
+            retrieved_nodes: List["NodeWithScore"] = []
+
             try:
-                response_text = await process_query_with_subproblems(
+                response_text, retrieved_nodes = await process_query_with_subproblems(
                     agent_workflow_global,
                     workflow_filter_global,
                     user_query,
@@ -717,19 +721,29 @@ def create_app(
             if _lf_handler is not None:
                 try:
                     _trace_id = _lf_handler.get_trace_id()
-                except Exception:
-                    pass  # handler may not have a trace yet
+                    if _trace_id:
+                        logger.debug(
+                            "Retrieved trace_id from Langfuse handler: %s", _trace_id
+                        )
+                except Exception as e:
+                    logger.warning(
+                        "Failed to get trace_id from Langfuse handler: %s", str(e)
+                    )
+
+            # Convert retrieved nodes to text for RAGAS evaluation
+            retrieved_contexts = [
+                node.node.get_content()
+                if hasattr(node.node, "get_content")
+                else str(node.node)
+                for node in retrieved_nodes
+            ]
 
             ragas_task = asyncio.create_task(
                 evaluate_rag_response(
                     trace_id=_trace_id,
                     user_input=user_query,
                     response=response_text,
-                    # TODO(observability): Plumb retrieved_contexts from the
-                    # workflow / agent response to enable context-dependent
-                    # RAGAS metrics (faithfulness, context_precision).  Until
-                    # then only response_relevancy is meaningful.
-                    retrieved_contexts=[],
+                    retrieved_contexts=retrieved_contexts,
                 )
             )
             _background_tasks.add(ragas_task)
@@ -834,7 +848,7 @@ async def process_query_with_subproblems(
     query_type: QueryType,
     *,
     mem0_qa_context: Optional[List[Dict[str, str]]] = None,
-) -> str:
+) -> Tuple[str, List["NodeWithScore"]]:
     """处理用户查询，支持子问题分解和并行/串行处理。
 
     首先使用 WorkflowFilter 尝试直接回答或通过网络搜索回答。
@@ -852,7 +866,7 @@ async def process_query_with_subproblems(
         mem0_qa_context: Mem0 memory context as QA pairs (optional)
 
     Returns:
-        处理结果字符串
+        Tuple of (处理结果字符串, 检索到的节点列表)
     """
     import asyncio
 
@@ -862,7 +876,8 @@ async def process_query_with_subproblems(
     filter_result = workflow_filter.process(user_query)
     if filter_result.have_result:
         logger.debug("工作流过滤器成功生成答案，直接返回")
-        return filter_result.result
+        result_text = filter_result.result or ""
+        return result_text, []
 
     # 如果 WorkflowFilter 返回 have_result=False，继续执行子问题提取
     logger.debug("工作流过滤器未生成答案，进行子问题提取")
@@ -900,7 +915,9 @@ async def process_query_with_subproblems(
             "result": None,
         }
         result = await agent_workflow.graph.ainvoke(initial_state)
-        return result.get("result", "抱歉，无法生成答案。")
+        answer = result.get("result", "抱歉，无法生成答案。")
+        nodes = result.get("nodes", [])
+        return answer, nodes
 
     # 如果只有一个问题组，且该组只有一个问题，直接处理
     if (
@@ -930,19 +947,21 @@ async def process_query_with_subproblems(
             "result": None,
         }
         result = await agent_workflow.graph.ainvoke(initial_state)
-        return result.get("result", "抱歉，无法生成答案。")
+        answer = result.get("result", "抱歉，无法生成答案。")
+        nodes = result.get("nodes", [])
+        return answer, nodes
 
     # 处理所有并行组
     if len(sub_problem_structure.parallel_groups) == 1:
         # 只有一个并行组，直接处理（可能是单个问题或多个相关问题）
         logger.debug("只有一个并行组，直接处理")
-        result = await process_parallel_group(
+        result, nodes = await process_parallel_group(
             agent_workflow,
             sub_problem_structure.parallel_groups[0],
             query_type,
             mem0_qa_context=_mem0_ctx,
         )
-        return result
+        return result, nodes
     else:
         # 多个并行组，并行处理每个组
         logger.debug(
@@ -960,6 +979,7 @@ async def process_query_with_subproblems(
 
         # 组合所有结果
         all_results = []
+        all_nodes = []
         for idx, result in enumerate(results):
             if isinstance(result, Exception):
                 logger.error("并行组 %d 处理失败: %s", idx + 1, str(result))
@@ -967,12 +987,15 @@ async def process_query_with_subproblems(
                     f"问题组 {idx + 1}: 抱歉，处理问题时发生错误: {str(result)}"
                 )
             else:
-                all_results.append(result)
+                result_text, result_nodes = result
+                all_results.append(result_text)
+                if result_nodes:
+                    all_nodes.extend(result_nodes)
 
         # 组合所有结果
         final_answer = "\n\n".join(all_results)
         logger.debug("所有并行组处理完成，生成最终答案")
-        return final_answer
+        return final_answer, all_nodes
 
 
 # Create default app instance (will be initialized with router)

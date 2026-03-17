@@ -96,7 +96,7 @@ async def process_parallel_group(
     query_type: QueryType,
     *,
     mem0_qa_context: Optional[List[Dict[str, str]]] = None,
-) -> str:
+) -> Tuple[str, List["NodeWithScore"]]:
     """Process a parallel group (may contain multiple related questions that need serial processing).
     处理一个并行组（可能包含多个相关问题需要串行处理）。
 
@@ -107,7 +107,7 @@ async def process_parallel_group(
         mem0_qa_context: Mem0 memory context as QA pairs (optional)
 
     Returns:
-        Processing result string / 处理结果字符串
+        Tuple of (processing result string, list of retrieved nodes) / (处理结果字符串, 检索到的节点列表)
     """
     _mem0_ctx = mem0_qa_context or []
     if len(parallel_group) == 1:
@@ -138,12 +138,14 @@ async def process_parallel_group(
         }
         result = await agent_workflow.graph.ainvoke(initial_state)
         answer = result.get("result", "抱歉，无法生成答案。")
-        return f"问题: {parallel_group[0]}\n回答: {answer}"
+        nodes = result.get("nodes", [])
+        return f"问题: {parallel_group[0]}\n回答: {answer}", nodes
     else:
         # Multiple related questions, process serially, put previous answer in outer_previous_qa_context
         # 多个相关问题，串行处理，将上一个问题的答案放到outer_previous_qa_context中
         logger.debug("并行组包含 %d 个相关问题，串行处理", len(parallel_group))
         outer_previous_qa_context: List[Dict[str, str]] = list(_mem0_ctx)
+        all_nodes: List["NodeWithScore"] = []
 
         for idx, sub_query in enumerate(parallel_group):
             logger.debug(
@@ -187,11 +189,15 @@ async def process_parallel_group(
                 }
                 result = await agent_workflow.graph.ainvoke(initial_state)
                 sub_answer = result.get("result", "抱歉，无法生成答案。")
+                sub_nodes = result.get("nodes", [])
+                if sub_nodes:
+                    all_nodes.extend(sub_nodes)
                 logger.debug(
-                    "子问题 %d/%d workflow完成，结果长度: %d",
+                    "子问题 %d/%d workflow完成，结果长度: %d, 节点数: %d",
                     idx + 1,
                     len(parallel_group),
                     len(sub_answer),
+                    len(sub_nodes),
                 )
             except Exception as e:
                 error_type = type(e).__name__
@@ -219,7 +225,7 @@ async def process_parallel_group(
         result_parts = []
         for qa_pair in outer_previous_qa_context:
             result_parts.append(f"问题: {qa_pair['query']}\n回答: {qa_pair['answer']}")
-        return "\n\n".join(result_parts)
+        return "\n\n".join(result_parts), all_nodes
 
 
 def _format_state_for_debug(state: "AgentState") -> str:
