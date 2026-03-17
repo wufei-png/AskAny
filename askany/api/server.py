@@ -257,19 +257,20 @@ def create_app(
     workflow_filter_global = workflow_filter
     simple_agent_global = simple_agent
 
-    # ── Lifespan: shutdown hook for Langfuse flush ────────────────────────
+    # ── Lifespan: shutdown hook for Langfuse and RAGAS flush ───────────────────
     @asynccontextmanager
     async def _lifespan(app: FastAPI):
         yield
-        # Shutdown: flush Langfuse events
+        # Shutdown: flush Langfuse and RAGAS events
         try:
-            from askany.observability import shutdown_langfuse
+            from askany.observability import shutdown_langfuse, shutdown_ragas
 
             shutdown_langfuse()
+            shutdown_ragas()
         except ImportError:
             pass
         except Exception:
-            logger.exception("Error during Langfuse shutdown")
+            logger.exception("Error during observability shutdown")
 
     app = FastAPI(
         title="AskAny API",
