@@ -49,10 +49,7 @@ from askany.rag.lightrag_merge import (
     render_node_with_enrichment,
 )
 from askany.rag.router import QueryRouter, QueryType
-from askany.workflow.FinalSummaryLlm_langchain import (
-    extract_docs_references,
-    format_docs_references,
-)
+
 from askany.workflow.LocalFileSearchTool import LocalFileSearchTool
 from askany.workflow.WebSearchTool import WebSearchTool
 
@@ -923,29 +920,6 @@ def create_agent_with_tools(
     )
 
     return agent
-
-
-def format_agent_response_with_references(response_content: str) -> str:
-    """Format agent response with document references.
-
-    Args:
-        response_content: The agent's response content
-
-    Returns:
-        Formatted response with references appended
-    """
-
-    global _last_retrieved_nodes
-
-    # If we have retrieved nodes, add references
-    if _last_retrieved_nodes:
-        references = extract_docs_references(_last_retrieved_nodes)
-        formatted_refs = format_docs_references(references)
-
-        if formatted_refs:
-            return response_content + formatted_refs
-
-    return response_content
 
 
 def extract_all_tool_calls(result: dict) -> list[dict]:
