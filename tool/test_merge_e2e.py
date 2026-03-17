@@ -6,24 +6,23 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from askany.main import initialize_llm
+from llama_index.core import QueryBundle
+
+from askany.config import Settings
 from askany.ingest import VectorStoreManager
+from askany.main import initialize_llm
 from askany.rag.lightrag_adapter import LightRAGAdapter
 from askany.rag.lightrag_merge import merge_lightrag_with_llamaindex
-from askany.config import Settings
-from askany.workflow.LocalFileSearchTool import LocalFileSearchTool
-from llama_index.core import QueryBundle
 
 
 def main():
     query_text = "IPS fpach"
-    query_type = "DOCS"
 
     print(f"Query: {query_text}")
     print("=" * 80)
 
     llm, embed_model = initialize_llm()
-    device = Settings().device
+    Settings().device
 
     vector_store_manager = VectorStoreManager(embed_model, llm=llm)
     vector_store_manager.initialize_faq_index()

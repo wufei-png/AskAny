@@ -912,7 +912,6 @@ class TestObservabilityPackageExports:
             initialize_langfuse,
             initialize_ragas,
             shutdown_langfuse,
-            shutdown_ragas,
         )
 
         # All should be callable

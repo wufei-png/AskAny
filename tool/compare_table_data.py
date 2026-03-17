@@ -37,8 +37,8 @@ def compare_tables(original_table: str, test_table: str) -> bool:
         cur.execute(
             """
             SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'public' 
+                SELECT FROM information_schema.tables
+                WHERE table_schema = 'public'
                 AND table_name = %s
             );
             """,
@@ -49,8 +49,8 @@ def compare_tables(original_table: str, test_table: str) -> bool:
         cur.execute(
             """
             SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'public' 
+                SELECT FROM information_schema.tables
+                WHERE table_schema = 'public'
                 AND table_name = %s
             );
             """,

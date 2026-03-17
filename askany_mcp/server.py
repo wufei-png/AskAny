@@ -7,10 +7,11 @@ It directly queries the vector store without requiring the FastAPI server.
 
 import logging
 from typing import Any
-from mcp.server.models import InitializationOptions
+
 from mcp.server import NotificationOptions, Server
+from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
-from mcp.types import Tool, TextContent
+from mcp.types import TextContent, Tool
 
 # Configure logging
 logging.basicConfig(
@@ -25,27 +26,27 @@ embed_model = None
 llm = None
 _initialization_error = None
 _initialized = False
-_init_lock = __import__('threading').Lock()
+_init_lock = __import__("threading").Lock()
 
 
 def _ensure_initialized():
     """Thread-safe initialization of RAG components."""
     global router, embed_model, llm, _initialization_error, _initialized
-    
+
     if _initialized:
         return
-    
+
     with _init_lock:
         # Double-check after acquiring lock
         if _initialized:
             return
-        
+
         if _initialization_error is not None:
             raise _initialization_error
-        
+
         try:
-            from askany.main import initialize_llm, get_device
             from askany.ingest import VectorStoreManager
+            from askany.main import get_device, initialize_llm
             from askany.rag import create_query_router
 
             logger.info("Initializing RAG components...")
@@ -69,9 +70,9 @@ def _ensure_initialized():
             # Create router
             router = create_query_router(vector_store_manager, llm, embed_model, device)
             logger.info("RAG components initialized successfully")
-            
+
             _initialized = True
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize RAG components: {e}", exc_info=True)
             _initialization_error = e
@@ -94,8 +95,8 @@ def rag_search_query(query: str, query_type: str = "auto") -> list[dict[str, Any
         List of result dictionaries with content, score, file_path, line numbers
     """
     from askany.config import settings
-    from askany.rag.router import QueryType
     from askany.rag.query_parser import parse_query_filters
+    from askany.rag.router import QueryType
 
     if router is None:
         raise RuntimeError("RAG components not initialized")

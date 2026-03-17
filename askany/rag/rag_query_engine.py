@@ -13,8 +13,8 @@ from llama_index.core.retrievers import (
 from llama_index.core.schema import NodeWithScore
 
 from askany.config import settings
-from askany.rerank import SafeReranker
 from askany.rag.provenance import enrich_nodes_with_provenance
+from askany.rerank import SafeReranker
 
 
 class KeywordVectorAppendRetriever(BaseRetriever):

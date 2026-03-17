@@ -107,8 +107,13 @@ def test_many_to_many_overlap_keeps_llama_order_and_primary_flag():
         "llama-1",
         "llama-2",
     ]
-    assert merged[0].node.metadata["related_lightrag_chunks"][0]["primary_overlap"] is True
-    assert merged[1].node.metadata["related_lightrag_chunks"][0]["primary_overlap"] is False
+    assert (
+        merged[0].node.metadata["related_lightrag_chunks"][0]["primary_overlap"] is True
+    )
+    assert (
+        merged[1].node.metadata["related_lightrag_chunks"][0]["primary_overlap"]
+        is False
+    )
 
 
 def test_overlap_block_short_circuits_top_k():
@@ -209,4 +214,7 @@ def test_overlap_block_short_circuits_top_k():
         provenance_repo=repo,
     )
 
-    assert [node.node.metadata["origin_id"] for node in merged] == ["llama-1", "llama-2"]
+    assert [node.node.metadata["origin_id"] for node in merged] == [
+        "llama-1",
+        "llama-2",
+    ]

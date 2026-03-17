@@ -5,8 +5,8 @@ Uses the official MCP Python SDK (modelcontextprotocol) with FastAPI.
 Exposes RAG search as MCP tools via SSE transport for remote access.
 """
 
-import os
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -21,14 +21,14 @@ logger = logging.getLogger("askany-mcp-fastapi")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
 
+import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import Response
-from starlette.requests import Request
-from mcp.server.models import InitializationOptions
 from mcp.server import NotificationOptions, Server
+from mcp.server.models import InitializationOptions
 from mcp.server.sse import SseServerTransport
-from mcp.types import Tool, TextContent
-import uvicorn
+from mcp.types import TextContent, Tool
+from starlette.requests import Request
 
 # Global variables for RAG components
 router = None
@@ -48,8 +48,8 @@ def _ensure_initialized():
         raise _initialization_error
 
     try:
-        from askany.main import initialize_llm, get_device
         from askany.ingest import VectorStoreManager
+        from askany.main import get_device, initialize_llm
         from askany.rag import create_query_router
 
         logger.info("Initializing RAG components...")
@@ -82,8 +82,8 @@ def rag_search_query(query: str, query_type: str = "auto") -> list[dict[str, Any
     _ensure_initialized()
 
     from askany.config import settings
-    from askany.rag.router import QueryType
     from askany.rag.query_parser import parse_query_filters
+    from askany.rag.router import QueryType
 
     cleaned_query, metadata_filters = parse_query_filters(query)
 

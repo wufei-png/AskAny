@@ -2,6 +2,7 @@
 
 from enum import Enum
 from typing import Any, Dict, List
+
 from askany.config import settings
 
 
@@ -30,7 +31,7 @@ class MiddleResultRecorder:
             middle_results: List to append the result to
             can_direct_answer: Whether the question can be answered directly
         """
-        if settings.return_middle_result == False:
+        if not settings.return_middle_result:
             return
         result = {
             "node_type": NodeType.DIRECT_ANSWER_CHECK.value,
@@ -53,7 +54,7 @@ class MiddleResultRecorder:
             need_web_search: Whether web search is needed
             need_rag_search: Whether RAG search is needed
         """
-        if settings.return_middle_result == False:
+        if not settings.return_middle_result:
             return
         result = {
             "node_type": NodeType.WEB_OR_RAG_CHECK.value,
@@ -77,7 +78,7 @@ class MiddleResultRecorder:
             keywords: List of extracted keywords
             nodes_count: Number of retrieved nodes
         """
-        if settings.return_middle_result == False:
+        if not settings.return_middle_result:
             return
         result = {
             "node_type": NodeType.RAG_RETRIEVAL.value,
@@ -101,7 +102,7 @@ class MiddleResultRecorder:
             relevant_file_paths: List of relevant file paths
             is_complete: Whether the information is complete
         """
-        if settings.return_middle_result == False:
+        if not settings.return_middle_result:
             return
         result = {
             "node_type": NodeType.ANALYZE_RELEVANCE.value,
@@ -127,7 +128,7 @@ class MiddleResultRecorder:
             sub_queries: List of sub queries
             hypothetical_answer: Hypothetical answer for vector search
         """
-        if settings.return_middle_result == False:
+        if not settings.return_middle_result:
             return
         result = {
             "node_type": NodeType.PROCESS_NO_RELEVANT.value,
@@ -150,7 +151,7 @@ class MiddleResultRecorder:
             middle_results: List to append the result to
             all_qa_context: List of Q&A context dicts with "query" and "answer" keys
         """
-        if settings.return_middle_result == False:
+        if not settings.return_middle_result:
             return
         result = {
             "node_type": NodeType.PROCESS_SUB_QUERY.value,
@@ -171,7 +172,7 @@ class MiddleResultRecorder:
             middle_results: List to append the result to
             expanded_nodes_count: Number of expanded nodes
         """
-        if settings.return_middle_result == False:
+        if not settings.return_middle_result:
             return
         result = {
             "node_type": NodeType.EXPAND_CONTEXT.value,
@@ -194,7 +195,7 @@ class MiddleResultRecorder:
         Returns:
             Formatted string with all middle results and final answer
         """
-        if settings.return_middle_result == False:
+        if not settings.return_middle_result:
             return final_answer
         formatted_parts = []
 
@@ -222,7 +223,7 @@ class MiddleResultRecorder:
         Returns:
             Formatted string representation of the data
         """
-        if settings.return_middle_result == False:
+        if not settings.return_middle_result:
             return ""
         if node_type == NodeType.DIRECT_ANSWER_CHECK.value:
             return f"can_direct_answer: {data.get('can_direct_answer', False)}"

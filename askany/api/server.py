@@ -11,13 +11,12 @@ from logging import getLogger
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
-from llama_index.core.schema import NodeWithScore
-
 import httpx
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
+from llama_index.core.schema import NodeWithScore
 from pydantic import BaseModel
 from starlette.requests import Request
 

@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Iterable, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Iterable, List, Optional
 
 import psycopg2
 from psycopg2.extras import execute_batch

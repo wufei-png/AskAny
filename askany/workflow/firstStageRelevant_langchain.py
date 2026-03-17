@@ -9,6 +9,7 @@ import re
 import sys
 from pathlib import Path
 from typing import Optional, cast
+
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
@@ -16,12 +17,11 @@ from pydantic import BaseModel, Field
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
+import logging
+
 from askany.config import settings  # noqa: E402
 from askany.ingest.keyword_extract_from_tfidf import KeywordExtractorFromTFIDF
 from askany.prompts.prompt_manager import get_prompts
-
-
-import logging
 
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler(sys.stdout)

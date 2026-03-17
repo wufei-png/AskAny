@@ -5,9 +5,9 @@ import argparse
 import json
 import logging
 import sys
+import time
 from pathlib import Path
 from urllib.parse import urlparse
-import time
 
 # Add parent directory to path to import askany modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -248,7 +248,6 @@ def main():
         faq_query = "ips启动失败怎么办？"
 
     # Construct Docs query based on ingest_check.log content
-    docs_query = "todo"
     # Test queries
     print("\n" + "=" * 80)
     print("Starting Query Tests")

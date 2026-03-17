@@ -1,6 +1,8 @@
 import deepl
 
 from askany.config import settings
+
+
 def translation(strs: str) -> str:
     auth_key = settings.deepl_auth_key  # use DeepL free API
     target_language = "ZH"  # "EN-US"

@@ -9,8 +9,7 @@ These tests verify that:
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -21,9 +20,10 @@ class TestProcessQueryWithSubproblemsReturnType:
     def test_returns_tuple_of_text_and_nodes(self):
         """Verify function has correct return type annotation."""
         import inspect
+
         from askany.api.server import process_query_with_subproblems
 
-        sig = inspect.signature(process_query_with_subproblems)
+        inspect.signature(process_query_with_subproblems)
         # Function should exist and be callable
         assert callable(process_query_with_subproblems)
 
@@ -223,8 +223,9 @@ class TestWorkflowNodesExtraction:
 
     def test_workflow_state_has_nodes_key(self):
         """Verify workflow state includes 'nodes' key in type hints."""
+        from typing import get_type_hints
+
         from askany.workflow.workflow_langgraph import AgentState
-        from typing import get_type_hints, get_origin, get_args
 
         hints = get_type_hints(AgentState)
         assert "nodes" in hints
@@ -232,8 +233,9 @@ class TestWorkflowNodesExtraction:
     def test_generate_final_answer_uses_nodes(self):
         """Verify _generate_final_answer_node uses nodes from state."""
         # This is verified by code inspection
-        from askany.workflow import workflow_langgraph
         import inspect
+
+        from askany.workflow import workflow_langgraph
 
         source = inspect.getsource(
             workflow_langgraph.AgentWorkflow._generate_final_answer_node

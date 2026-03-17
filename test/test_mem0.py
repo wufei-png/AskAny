@@ -409,7 +409,7 @@ class TestMem0E2E:
             results = adapter.search("What does user like?", user_id=user_id)
 
             # 3. 验证
-            print(f"\n[E2E Search] Query: 'What does user like?'")
+            print("\n[E2E Search] Query: 'What does user like?'")
             print(f"[E2E Search] Results: {results}")
 
             assert len(results) > 0, "Should find at least one memory"

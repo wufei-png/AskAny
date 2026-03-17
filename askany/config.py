@@ -1,7 +1,6 @@
 """Configuration management for AskAny."""
 
 import os
-from pathlib import Path
 from typing import List, Literal, Optional
 
 from pydantic import ConfigDict, Field, SecretStr, field_validator
@@ -245,7 +244,7 @@ class Settings(BaseSettings):
         0.8  # Similarity threshold for sense keyword
     )
 
-    if using_docs_keyword_index == False:
+    if not using_docs_keyword_index:
         docs_similarity_threshold -= 0.05
     # Ensemble weights for docs query engine [keyword_weight, vector_weight]
     # Options:

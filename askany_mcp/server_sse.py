@@ -4,8 +4,8 @@
 This server exposes RAG search capabilities via SSE transport for MCP protocol.
 """
 
-import os
 import logging
+import os
 from typing import Any
 
 # Configure logging
@@ -19,13 +19,13 @@ logger = logging.getLogger("askany-mcp-sse")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
 
-from mcp.server.models import InitializationOptions
-from mcp.server import NotificationOptions, Server
-from mcp.server.sse import SseServerTransport
-from mcp.types import Tool, TextContent
-from starlette.applications import Starlette
-from starlette.routing import Route, Mount
 import uvicorn
+from mcp.server import NotificationOptions, Server
+from mcp.server.models import InitializationOptions
+from mcp.server.sse import SseServerTransport
+from mcp.types import TextContent, Tool
+from starlette.applications import Starlette
+from starlette.routing import Mount, Route
 
 # Global variables for RAG components
 router = None
@@ -33,7 +33,7 @@ embed_model = None
 llm = None
 _initialization_error = None
 _initialized = False
-_init_lock = __import__('threading').Lock()
+_init_lock = __import__("threading").Lock()
 
 
 def _ensure_initialized():
@@ -47,8 +47,8 @@ def _ensure_initialized():
         raise _initialization_error
 
     try:
-        from askany.main import initialize_llm, get_device
         from askany.ingest import VectorStoreManager
+        from askany.main import get_device, initialize_llm
         from askany.rag import create_query_router
 
         logger.info("Initializing RAG components...")
@@ -78,8 +78,8 @@ def rag_search_query(query: str, query_type: str = "auto") -> list[dict[str, Any
     _ensure_initialized()
 
     from askany.config import settings
-    from askany.rag.router import QueryType
     from askany.rag.query_parser import parse_query_filters
+    from askany.rag.router import QueryType
 
     cleaned_query, metadata_filters = parse_query_filters(query)
 

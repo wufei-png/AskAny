@@ -24,8 +24,8 @@ print("Testing Reranker Model Loading")
 print("=" * 60)
 
 try:
-    from llama_index.core.postprocessor import SentenceTransformerRerank
     import torch
+    from llama_index.core.postprocessor import SentenceTransformerRerank
 
     print("\n1. Checking dependencies...")
     print("   ✅ llama_index: OK")

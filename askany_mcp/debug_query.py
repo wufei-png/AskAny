@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """Debug script to test vector store query directly."""
 
-from askany.main import initialize_llm, get_device
-from askany.ingest import VectorStoreManager
 from llama_index.core import QueryBundle
+
+from askany.ingest import VectorStoreManager
+from askany.main import get_device, initialize_llm
 
 
 def test_direct_query():
     """Test direct query from vector store."""
     print("Initializing components...")
     llm, embed_model = initialize_llm()
-    device = get_device()
+    get_device()
 
     # Initialize vector store manager
     vector_store_manager = VectorStoreManager(embed_model, llm=llm)

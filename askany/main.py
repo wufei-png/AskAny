@@ -72,8 +72,8 @@ from askany.config import settings
 from askany.ingest import VectorStoreManager, ingest_documents
 from askany.rag import create_query_router
 from askany.vllm.vllm import AutoRetryVLLM
-from askany.workflow.workflow_langgraph import AgentWorkflow
 from askany.workflow.workflow_filter import WorkflowFilter
+from askany.workflow.workflow_langgraph import AgentWorkflow
 
 logger = getLogger(__name__)
 
@@ -515,13 +515,13 @@ def main():
         router = create_query_router(vector_store_manager, llm, embed_model, device)
 
         # Initialize shared tools to reduce resource usage and enable caching
-        from askany.workflow.WebSearchTool import WebSearchTool
-        from askany.workflow.LocalFileSearchTool import LocalFileSearchTool
-        from askany.ingest.keyword_extract_wrapper import KeywordExtractorWrapper
         from askany.ingest.custom_keyword_index import (
             get_global_keyword_extractor,
             set_global_keyword_extractor,
         )
+        from askany.ingest.keyword_extract_wrapper import KeywordExtractorWrapper
+        from askany.workflow.LocalFileSearchTool import LocalFileSearchTool
+        from askany.workflow.WebSearchTool import WebSearchTool
 
         # Initialize keyword extractor (shared)
         global_extractor = get_global_keyword_extractor()

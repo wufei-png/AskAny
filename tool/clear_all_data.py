@@ -82,8 +82,8 @@ def clear_vector_tables(confirm: bool = False, table_names: list = None):
                 cur.execute(
                     """
                     SELECT EXISTS (
-                        SELECT FROM information_schema.tables 
-                        WHERE table_schema = 'public' 
+                        SELECT FROM information_schema.tables
+                        WHERE table_schema = 'public'
                         AND table_name = %s
                     );
                     """,

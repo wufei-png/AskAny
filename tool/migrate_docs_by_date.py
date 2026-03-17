@@ -109,8 +109,8 @@ def create_hybrid_table(
         cur.execute(
             """
             SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'public' 
+                SELECT FROM information_schema.tables
+                WHERE table_schema = 'public'
                 AND table_name = %s
             );
             """,
@@ -173,8 +173,8 @@ def create_hybrid_table(
         cur.execute(
             """
             SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'public' 
+                SELECT FROM information_schema.tables
+                WHERE table_schema = 'public'
                 AND table_name = %s
             );
             """,
@@ -243,8 +243,8 @@ def create_hybrid_table(
         cur.execute(
             """
             SELECT EXISTS (
-                SELECT FROM pg_sequences 
-                WHERE schemaname = 'public' 
+                SELECT FROM pg_sequences
+                WHERE schemaname = 'public'
                 AND sequencename = %s
             );
             """,
@@ -265,8 +265,8 @@ def create_hybrid_table(
             cur.execute(
                 """
                 SELECT EXISTS (
-                    SELECT FROM pg_sequences 
-                    WHERE schemaname = 'public' 
+                    SELECT FROM pg_sequences
+                    WHERE schemaname = 'public'
                     AND sequencename = %s
                 );
                 """,

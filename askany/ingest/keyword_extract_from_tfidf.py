@@ -1,10 +1,10 @@
 """Keyword extraction using TF-IDF with HanLP tokenization."""
 
 import logging
+import os
 import pickle
 import sys
 import zipfile
-import os
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
@@ -22,6 +22,7 @@ elif "HANLP_HOME" not in os.environ:
     os.environ["HANLP_HOME"] = str(Path.home() / ".hanlp")
 
 import hanlp
+from cachetools import LRUCache, cachedmethod
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 from askany.config import settings
@@ -29,7 +30,6 @@ from tool.keyword_utils import (
     load_keywords_and_frequency_from_txt,
     load_keywords_from_txt,
 )
-from cachetools import LRUCache, cachedmethod
 
 logger = logging.getLogger(__name__)
 

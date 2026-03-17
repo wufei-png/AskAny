@@ -6,22 +6,23 @@ before falling back to sub-problem extraction.
 
 import logging
 import re
-from typing import Optional
-from llama_index.core.schema import QueryBundle
-from pathlib import Path
 import sys
+from pathlib import Path
+from typing import Optional
+
+from llama_index.core.schema import QueryBundle
 
 # Add project root to path to enable imports
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
+from askany.rerank import SafeReranker
+from askany.workflow.FinalSummaryLlm_langchain import FinalAnswerGenerator
 from askany.workflow.firstStageRelevant_langchain import (
     DirectAnswerGenerator,
     WebOrRagAnswerGenerator,
 )
-from askany.workflow.FinalSummaryLlm_langchain import FinalAnswerGenerator
 from askany.workflow.WebSearchTool import WebSearchTool
-from askany.rerank import SafeReranker
 
 logger = logging.getLogger(__name__)
 
@@ -218,13 +219,13 @@ class WorkflowFilter:
 
 
 if __name__ == "__main__":
+    from askany.rerank import SafeReranker
+    from askany.workflow.FinalSummaryLlm_langchain import FinalAnswerGenerator
     from askany.workflow.firstStageRelevant_langchain import (
         DirectAnswerGenerator,
         WebOrRagAnswerGenerator,
     )
-    from askany.workflow.FinalSummaryLlm_langchain import FinalAnswerGenerator
     from askany.workflow.WebSearchTool import WebSearchTool
-    from askany.rerank import SafeReranker
 
     direct_answer_generator = DirectAnswerGenerator()
     web_or_rag_generator = WebOrRagAnswerGenerator()

@@ -11,7 +11,6 @@ from llama_index.core.node_parser import MarkdownNodeParser
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 from askany.config import settings
-
 from askany.ingest.keyword_extract_from_tfidf import KeywordExtractorFromTFIDF
 from askany.workflow.token_control import estimate_tokens
 

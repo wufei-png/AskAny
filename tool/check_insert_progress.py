@@ -109,10 +109,10 @@ def check_progress():
         # Query recent insertions (last 5 minutes)
         cur.execute(
             f"""
-            SELECT COUNT(*) 
-            FROM {table_name} 
+            SELECT COUNT(*)
+            FROM {table_name}
             WHERE id > (
-                SELECT COALESCE(MAX(id) - 1000, 0) 
+                SELECT COALESCE(MAX(id) - 1000, 0)
                 FROM {table_name}
             );
             """
@@ -163,7 +163,7 @@ def monitor_progress(interval=10):
                 if prev_rows is not None:
                     rows_diff = current_rows - prev_rows
                     id_diff = max_id - prev_max_id if max_id and prev_max_id else 0
-                    elapsed = time.time() - start_time
+                    time.time() - start_time
 
                     if rows_diff > 0:
                         rate = rows_diff / interval if interval > 0 else 0

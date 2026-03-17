@@ -106,7 +106,7 @@ def import_table_from_dump(
         ]
 
         env = {"PGPASSWORD": settings.postgres_password}
-        result = subprocess.run(
+        subprocess.run(
             cmd,
             env=env,
             capture_output=True,
@@ -184,7 +184,7 @@ def import_table_from_schema_and_data(
                             import json
 
                             metadata_val = json.loads(metadata_val)
-                        except:
+                        except (json.JSONDecodeError, TypeError):
                             pass
                     else:
                         metadata_val = None

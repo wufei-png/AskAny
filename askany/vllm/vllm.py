@@ -6,6 +6,7 @@ from typing import Optional
 import httpx
 from llama_index.core.base.llms.types import LLMMetadata, MessageRole
 from llama_index.llms.openai import OpenAI
+
 from askany.config import settings
 
 logger = getLogger(__name__)

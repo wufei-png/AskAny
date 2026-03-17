@@ -304,8 +304,8 @@ def check_database_tables(n: int = 5):
                 cur.execute(
                     """
                     SELECT EXISTS (
-                        SELECT FROM information_schema.tables 
-                        WHERE table_schema = 'public' 
+                        SELECT FROM information_schema.tables
+                        WHERE table_schema = 'public'
                         AND table_name = %s
                     );
                     """,
@@ -343,8 +343,8 @@ def check_database_tables(n: int = 5):
                     # Get table structure first
                     cur.execute(
                         """
-                        SELECT column_name, data_type 
-                        FROM information_schema.columns 
+                        SELECT column_name, data_type
+                        FROM information_schema.columns
                         WHERE table_name = %s
                         ORDER BY ordinal_position;
                     """,
@@ -357,7 +357,7 @@ def check_database_tables(n: int = 5):
                     # Note: ref_doc_id is stored in metadata_ JSON field, not as a separate column
                     cur.execute(
                         f"""
-                        SELECT id, node_id, metadata_->>'ref_doc_id' as ref_doc_id, text, metadata_, 
+                        SELECT id, node_id, metadata_->>'ref_doc_id' as ref_doc_id, text, metadata_,
                                vector_dims(embedding) as embedding_dim
                         FROM {faq_table_to_use}
                         LIMIT %s;
@@ -425,8 +425,8 @@ def check_database_tables(n: int = 5):
                     # Get table structure first
                     cur.execute(
                         """
-                        SELECT column_name, data_type 
-                        FROM information_schema.columns 
+                        SELECT column_name, data_type
+                        FROM information_schema.columns
                         WHERE table_name = %s
                         ORDER BY ordinal_position;
                     """,
@@ -439,7 +439,7 @@ def check_database_tables(n: int = 5):
                     # Note: ref_doc_id is stored in metadata_ JSON field, not as a separate column
                     cur.execute(
                         f"""
-                        SELECT id, node_id, metadata_->>'ref_doc_id' as ref_doc_id, text, metadata_, 
+                        SELECT id, node_id, metadata_->>'ref_doc_id' as ref_doc_id, text, metadata_,
                                vector_dims(embedding) as embedding_dim
                         FROM {docs_table_to_use}
                         LIMIT %s;

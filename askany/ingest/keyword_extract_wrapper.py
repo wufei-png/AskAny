@@ -8,15 +8,16 @@ from typing import List, Optional, Tuple
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
+import numpy as np  # noqa: E402
+from cachetools import LRUCache, cachedmethod
+
 from askany.config import settings  # noqa: E402
+from askany.ingest.custom_keyword import KNOWLEDGE_EMBEDDING_KEYWORDS  # noqa: E402
 from askany.ingest.keyword_extract_from_llm import KeywordExtractorFromLLM  # noqa: E402
 from askany.ingest.keyword_extract_from_tfidf import (  # noqa: E402
     KeywordExtractorFromTFIDF,
 )
-from askany.ingest.custom_keyword import KNOWLEDGE_EMBEDDING_KEYWORDS  # noqa: E402
-from cachetools import LRUCache, cachedmethod
 from tool.langdetect import contains_chinese  # noqa: E402
-import numpy as np  # noqa: E402
 
 try:
     from llama_index.core.embeddings import BaseEmbedding

@@ -45,7 +45,7 @@ def query_hnsw_index_info(table_name: str, index_name: str = None):
             index_filter = "AND i.relname LIKE '%embedding%'"
 
         cur.execute(f"""
-            SELECT 
+            SELECT
                 i.relname as index_name,
                 t.relname as table_name,
                 pg_size_pretty(pg_relation_size(i.oid)) as index_size,
@@ -88,7 +88,7 @@ def query_hnsw_index_info(table_name: str, index_name: str = None):
 
             # Query index options (HNSW parameters)
             cur.execute(f"""
-                SELECT 
+                SELECT
                     option_name,
                     option_value
                 FROM pg_options_to_table(
@@ -107,7 +107,7 @@ def query_hnsw_index_info(table_name: str, index_name: str = None):
 
             # Query index statistics
             cur.execute(f"""
-                SELECT 
+                SELECT
                     idx_scan,
                     idx_tup_read,
                     idx_tup_fetch
@@ -135,8 +135,8 @@ def query_hnsw_index_info(table_name: str, index_name: str = None):
         print("Note: HNSW Index Layer Structure")
         print(f"{'=' * 80}")
         print("""
-pgvector's HNSW index internal structure (layer hierarchy and node connections) 
-is stored in binary format within PostgreSQL's index structure and is not directly 
+pgvector's HNSW index internal structure (layer hierarchy and node connections)
+is stored in binary format within PostgreSQL's index structure and is not directly
 queryable via SQL.
 
 To access HNSW layer structure, you would need to:
@@ -197,7 +197,7 @@ def query_hnsw_layers_estimate(table_name: str, layer_n: int = None):
 
         # Get index information
         cur.execute(f"""
-            SELECT 
+            SELECT
                 i.relname as index_name,
                 pg_relation_size(i.oid) as index_size_bytes,
                 (SELECT option_value FROM pg_options_to_table(i.reloptions) WHERE option_name = 'hnsw.m') as hnsw_m,

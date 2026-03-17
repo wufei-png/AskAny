@@ -9,6 +9,7 @@ import hanlp
 # python -u -m askany.main --ingest > ingest1.log 2>&1 然后 更新custom_dict
 try:
     import tensorflow as tf
+
     print("TensorFlow version:", tf.__version__)
     print("GPU devices:", tf.config.list_physical_devices("GPU"))
     print("Built with CUDA:", tf.test.is_built_with_cuda())

@@ -2,6 +2,7 @@
 """Test direct database query to verify data exists."""
 
 import psycopg2
+
 from askany.config import settings
 
 

@@ -13,8 +13,6 @@ from llama_index.core.schema import NodeWithScore
 from askany.rag.provenance import (
     ProvenanceRepository,
     build_provenance_record,
-    canonicalize_path,
-    compute_source_doc_id,
 )
 
 logger = logging.getLogger(__name__)
@@ -490,7 +488,7 @@ def _infer_source_kind(node: NodeWithScore) -> str:
 
 
 def _is_docs_survivor(node: NodeWithScore) -> bool:
-    metadata = _metadata(node)
+    _metadata(node)
     return _infer_source_kind(node) == "docs_chunk"
 
 

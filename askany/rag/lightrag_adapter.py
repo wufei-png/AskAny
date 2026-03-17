@@ -42,6 +42,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 import psycopg2
+
 from askany.config import settings as _settings
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,7 @@ except ImportError:  # pragma: no cover
 
 # LlamaIndex imports are already a hard dependency of the project
 from llama_index.core.schema import NodeWithScore, TextNode
+
 from askany.rag.provenance import (
     ProvenanceRepository,
     build_provenance_record,
@@ -534,7 +536,7 @@ class LightRAGAdapter:
         entities_vdb = self._rag.entities_vdb
 
         all_nodes = await kg.get_all_nodes()
-        all_edges = await kg.get_all_edges()
+        await kg.get_all_edges()
 
         if len(all_nodes) > 0:
             logger.debug("NetworkX graph already has nodes, skipping load")

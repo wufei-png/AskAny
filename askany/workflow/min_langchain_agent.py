@@ -15,45 +15,45 @@ import sys
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
-
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
-from askany.rag.router import QueryRouter, QueryType
-from openai import APIStatusError
+import logging
+import sys
+
 from langchain.agents import create_agent
 from langchain.agents.middleware import (
-    dynamic_prompt,
-    ModelRequest,
-    SummarizationMiddleware,
+    FilesystemFileSearchMiddleware,
     HumanInTheLoopMiddleware,
     ModelCallLimitMiddleware,
+    ModelRequest,
+    ModelRetryMiddleware,
+    SummarizationMiddleware,
     ToolCallLimitMiddleware,
     ToolRetryMiddleware,
-    ModelRetryMiddleware,
-    FilesystemFileSearchMiddleware,
+    dynamic_prompt,
 )
-from langgraph.cache.memory import InMemoryCache
 from langchain.tools import tool
 from langchain_openai import ChatOpenAI
+from langgraph.cache.memory import InMemoryCache
 from llama_index.core.schema import NodeWithScore
+from openai import APIStatusError
 
 from askany.config import settings
 from askany.ingest import VectorStoreManager
+from askany.prompts.prompt_manager import get_prompts
 from askany.rag import create_query_router
 from askany.rag.lightrag_merge import (
     merge_lightrag_with_llamaindex,
     render_node_with_enrichment,
 )
-from askany.prompts.prompt_manager import get_prompts
-from askany.workflow.LocalFileSearchTool import LocalFileSearchTool
-from askany.workflow.WebSearchTool import WebSearchTool
+from askany.rag.router import QueryRouter, QueryType
 from askany.workflow.FinalSummaryLlm_langchain import (
     extract_docs_references,
     format_docs_references,
 )
-import logging
-import sys
+from askany.workflow.LocalFileSearchTool import LocalFileSearchTool
+from askany.workflow.WebSearchTool import WebSearchTool
 
 logger = logging.getLogger(__name__)
 logger.setLevel(
@@ -254,7 +254,9 @@ def create_rag_tool(
                             query=cleaned_query,
                             top_k=docs_top_k,
                             local_file_search=local_file_search,
-                            reranker=getattr(router.docs_query_engine, "reranker", None),
+                            reranker=getattr(
+                                router.docs_query_engine, "reranker", None
+                            ),
                         )
                     elif not nodes and query_type_enum != QueryType.FAQ:
                         nodes = lightrag_nodes[:docs_top_k]

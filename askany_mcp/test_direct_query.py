@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Direct database test to check vector retrieval."""
 
-from askany.main import initialize_llm
 from askany.ingest import VectorStoreManager
+from askany.main import initialize_llm
 
 # Initialize
 llm, embed_model = initialize_llm()

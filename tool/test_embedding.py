@@ -9,8 +9,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
-    from sentence_transformers import SentenceTransformer
     import torch
+    from sentence_transformers import SentenceTransformer
 
     print("✅ sentence-transformers and torch are available")
 except ImportError as e:

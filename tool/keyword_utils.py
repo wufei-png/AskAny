@@ -1,7 +1,7 @@
 """Utility functions for keyword extraction and loading."""
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Set, Dict
+from typing import TYPE_CHECKING, Dict, Set
 
 from askany.config import settings
 

@@ -10,9 +10,8 @@ from llama_index.core.indices.keyword_table.retrievers import (
 from llama_index.core.llms import LLM
 from llama_index.core.prompts import BasePromptTemplate
 
-from askany.ingest.keyword_extract_wrapper import KeywordExtractorWrapper
 from askany.config import settings
-
+from askany.ingest.keyword_extract_wrapper import KeywordExtractorWrapper
 
 # Global KeywordExtractorWrapper instance (singleton pattern)
 _global_keyword_extractor: Optional[KeywordExtractorWrapper] = None

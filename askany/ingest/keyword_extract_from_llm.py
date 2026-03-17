@@ -1,19 +1,20 @@
 """Keyword extraction using LLM with Chinese prompts."""
 
 import sys
+import textwrap as tw
 from collections import Counter
 from pathlib import Path
 from typing import List, Optional
 
 from openai import OpenAI
 from pydantic import BaseModel, Field
-import textwrap as tw
 
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from askany.config import settings  # noqa: E402
 import logging
+
+from askany.config import settings  # noqa: E402
 
 logger = logging.getLogger(__name__)
 from cachetools import LRUCache, cachedmethod
@@ -263,42 +264,42 @@ class KeywordExtractorFromLLM:
         return tw.dedent("""\
 你是关键词过滤助手。
 
-你的任务是：  
-从用户问题提取出的关键词列表里，过滤掉对知识检索定位价值低的词，仅保留具备明确检索区分度的关键词 
+你的任务是：
+从用户问题提取出的关键词列表里，过滤掉对知识检索定位价值低的词，仅保留具备明确检索区分度的关键词
 **注意: 不要对关键词进行拆分或者修改，只进行过滤！**
 
-【过滤原则】  
-- 保留词：  
+【过滤原则】
+- 保留词：
     - 产品名、系统名、组件名、架构名、专有技术名词， 以及这些名词附属词，如描述它们的形容词，动词，
 例如: 当关键词包含 fail, error, timeout, not show 等异常描述时，它们与主体名词结合构成了唯一的搜索意图，禁止过滤。
     - 如果关键词是明确的技术 / 产品 / 组件 / 工具名词（如数据库、中间件、基础设施、平台），
     且与同一问题中的其他关键词存在直接技术或业务关系（如配置、部署、依赖、使用），
     一律保留，不得因为“常见”或“可能不在知识库”而过滤。
 
-- 过滤词：  
-    - 语义泛化、缺乏检索区分度的抽象词（如“操作”“方法”“方案”“问题”“使用”等）  
+- 过滤词：
+    - 语义泛化、缺乏检索区分度的抽象词（如“操作”“方法”“方案”“问题”“使用”等）
     - “常见词”仅指抽象泛指词，不包括具体的技术或基础设施名词。
 
-【上下文关联规则】  
+【上下文关联规则】
 - 如果某个词本身较常见，但与其他关键词存在明确上下文或业务关联，
   且可能在同一技术文档中共同出现，则不要过滤。
 
-示例说明  
+示例说明
 
-示例 1：  
-问题：console 不显示验证码  
-原始关键词：["console", "验证码"]  
-说明：  
-- console 是系统关键名词，必须保留；  
-- 验证码是常见词，但与 console 存在直接功能关联，可能在同一文档中出现，因此不应过滤。  
+示例 1：
+问题：console 不显示验证码
+原始关键词：["console", "验证码"]
+说明：
+- console 是系统关键名词，必须保留；
+- 验证码是常见词，但与 console 存在直接功能关联，可能在同一文档中出现，因此不应过滤。
 
-示例 2：  
-问题：如何选择时空库架构？如一主一从，实际怎么操作？  
-原始关键词：["时空库", "一主一从", "架构", "操作"]  
-说明：  
-- 时空库、一主一从 是核心业务与架构关键词，必须保留；  
-- 架构 虽然较常见，但与 时空库 强相关，不过滤；  
-- 操作 语义过于宽泛，与大量场景相关，应过滤掉。 
+示例 2：
+问题：如何选择时空库架构？如一主一从，实际怎么操作？
+原始关键词：["时空库", "一主一从", "架构", "操作"]
+说明：
+- 时空库、一主一从 是核心业务与架构关键词，必须保留；
+- 架构 虽然较常见，但与 时空库 强相关，不过滤；
+- 操作 语义过于宽泛，与大量场景相关，应过滤掉。
 """)
 
     def _format_filter_user_message(self, keywords: List[str], query: str) -> str:

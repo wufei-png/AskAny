@@ -119,8 +119,8 @@ def check_table_exists(table_name: str) -> bool:
         cur.execute(
             """
             SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'public' 
+                SELECT FROM information_schema.tables
+                WHERE table_schema = 'public'
                 AND table_name = %s
             );
             """,
@@ -161,7 +161,7 @@ def export_table_schema(table_name: str, output_dir: Path) -> bool:
         ]
 
         env = {"PGPASSWORD": settings.postgres_password}
-        result = subprocess.run(
+        subprocess.run(
             cmd,
             env=env,
             capture_output=True,
@@ -201,7 +201,7 @@ def export_table_data(table_name: str, output_dir: Path) -> bool:
             cur.copy_expert(
                 f"""
                 COPY (
-                    SELECT 
+                    SELECT
                         id,
                         text,
                         metadata_::text,
@@ -249,7 +249,7 @@ def export_table_full(table_name: str, output_dir: Path) -> bool:
         ]
 
         env = {"PGPASSWORD": settings.postgres_password}
-        result = subprocess.run(
+        subprocess.run(
             cmd,
             env=env,
             capture_output=True,
@@ -287,7 +287,7 @@ def export_sequences(output_dir: Path) -> bool:
         # Use pg_sequences view (PostgreSQL 10+) which includes last_value
         cur.execute(
             """
-            SELECT 
+            SELECT
                 sequencename AS sequence_name,
                 last_value
             FROM pg_sequences

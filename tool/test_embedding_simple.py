@@ -21,8 +21,8 @@ print("Testing BGE Embedding Model Loading")
 print("=" * 60)
 
 try:
-    from sentence_transformers import SentenceTransformer
     import torch
+    from sentence_transformers import SentenceTransformer
 
     print("\n1. Checking dependencies...")
     print("   ✅ sentence-transformers: OK")

@@ -216,8 +216,8 @@ class VectorStoreManager:
             cursor.execute(
                 """
                 SELECT EXISTS (
-                    SELECT 1 FROM pg_indexes 
-                    WHERE schemaname = 'public' 
+                    SELECT 1 FROM pg_indexes
+                    WHERE schemaname = 'public'
                     AND indexname = %s
                 )
                 """,
@@ -283,8 +283,8 @@ class VectorStoreManager:
             cursor.execute(
                 """
                 SELECT EXISTS (
-                    SELECT 1 FROM pg_indexes 
-                    WHERE schemaname = 'public' 
+                    SELECT 1 FROM pg_indexes
+                    WHERE schemaname = 'public'
                     AND indexname = %s
                 )
                 """,
@@ -311,8 +311,8 @@ class VectorStoreManager:
 
             # Build CREATE INDEX statement
             create_index_sql = f"""
-                CREATE INDEX "{index_name}" 
-                ON "{table_name}" 
+                CREATE INDEX "{index_name}"
+                ON "{table_name}"
                 USING hnsw (embedding {opclass})
                 WITH (
                     m = {hnsw_kwargs.get("hnsw_m", 16)},
@@ -699,7 +699,9 @@ class VectorStoreManager:
             else:
                 node_id = node.metadata.get("id", "")
 
-            file_path = node.metadata.get("file_path") or node.metadata.get("source", "")
+            file_path = node.metadata.get("file_path") or node.metadata.get(
+                "source", ""
+            )
             if not node.metadata.get("file_path") and file_path:
                 node.metadata["file_path"] = file_path
 

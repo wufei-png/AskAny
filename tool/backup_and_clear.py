@@ -37,8 +37,8 @@ def backup_table_to_test(original_table: str, test_table: str) -> bool:
         cur.execute(
             """
             SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'public' 
+                SELECT FROM information_schema.tables
+                WHERE table_schema = 'public'
                 AND table_name = %s
             );
             """,
@@ -79,8 +79,8 @@ def backup_table_to_test(original_table: str, test_table: str) -> bool:
         cur.execute(
             """
             SELECT EXISTS (
-                SELECT FROM pg_sequences 
-                WHERE schemaname = 'public' 
+                SELECT FROM pg_sequences
+                WHERE schemaname = 'public'
                 AND sequencename = %s
             );
             """,
@@ -140,8 +140,8 @@ def clear_table(table_name: str) -> bool:
         cur.execute(
             """
             SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'public' 
+                SELECT FROM information_schema.tables
+                WHERE table_schema = 'public'
                 AND table_name = %s
             );
             """,

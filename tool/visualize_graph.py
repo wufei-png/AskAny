@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """Visualize LightRAG knowledge graph from GraphML file."""
 
-import networkx as nx
 import sys
+
+import networkx as nx
 
 
 def visualize_graphml(graphml_path: str, max_nodes: int = 200):
     """Load and display graph info."""
     G = nx.read_graphml(graphml_path)
 
-    print(f"=== GraphML Analysis ===")
+    print("=== GraphML Analysis ===")
     print(f"File: {graphml_path}")
     print(f"Total nodes: {len(G.nodes())}")
     print(f"Total edges: {len(G.edges())}")
@@ -27,21 +28,21 @@ def visualize_graphml(graphml_path: str, max_nodes: int = 200):
     print(f"Edge attributes: {edge_attrs}")
 
     # Sample nodes
-    print(f"\n=== Sample Nodes (first 10) ===")
+    print("\n=== Sample Nodes (first 10) ===")
     for i, (node, data) in enumerate(G.nodes(data=True)):
         if i >= 10:
             break
         print(f"  {node}: {data}")
 
     # Sample edges
-    print(f"\n=== Sample Edges (first 10) ===")
+    print("\n=== Sample Edges (first 10) ===")
     for i, (src, tgt, data) in enumerate(G.edges(data=True)):
         if i >= 10:
             break
         print(f"  {src} -> {tgt}")
 
     # Find fpach related nodes
-    print(f"\n=== FPACH Related Nodes ===")
+    print("\n=== FPACH Related Nodes ===")
     fpach_nodes = [n for n in G.nodes() if "fpach" in n.lower()]
     print(f"Found {len(fpach_nodes)} nodes containing 'fpach'")
     for n in fpach_nodes[:10]:

@@ -5,8 +5,8 @@ This server exposes RAG search capabilities via HTTP/SSE for remote access.
 Other machines can connect to this server using the MCP SSE transport protocol.
 """
 
-import os
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -22,15 +22,15 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
 
 # Import MCP and Starlette
-from mcp.server.models import InitializationOptions
+import uvicorn
 from mcp.server import NotificationOptions, Server
+from mcp.server.models import InitializationOptions
 from mcp.server.sse import SseServerTransport
-from mcp.types import Tool, TextContent
+from mcp.types import TextContent, Tool
 from starlette.applications import Starlette
-from starlette.routing import Route
 from starlette.requests import Request
 from starlette.responses import Response
-import uvicorn
+from starlette.routing import Route
 
 # Global variables for RAG components
 router = None
@@ -50,8 +50,8 @@ def _ensure_initialized():
         raise _initialization_error
 
     try:
-        from askany.main import initialize_llm, get_device
         from askany.ingest import VectorStoreManager
+        from askany.main import get_device, initialize_llm
         from askany.rag import create_query_router
 
         logger.info("Initializing RAG components (lazy initialization)...")
@@ -92,8 +92,8 @@ def rag_search_query(query: str, query_type: str = "auto") -> list[dict[str, Any
     _ensure_initialized()
 
     from askany.config import settings
-    from askany.rag.router import QueryType
     from askany.rag.query_parser import parse_query_filters
+    from askany.rag.router import QueryType
 
     cleaned_query, metadata_filters = parse_query_filters(query)
 

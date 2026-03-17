@@ -54,8 +54,8 @@ def initialize_ragas(settings: "Settings") -> bool:
         return False
 
     try:
-        from ragas.llms import LangchainLLMWrapper
         from langchain_openai import ChatOpenAI
+        from ragas.llms import LangchainLLMWrapper
     except ImportError:
         logger.warning(
             "ragas or langchain_openai not installed — RAGAS disabled. "
@@ -221,9 +221,9 @@ def _get_metric_classes() -> Dict[str, type]:
     # Try v0.4+ collections API first (preferred – avoids deprecation warnings)
     try:
         from ragas.metrics.collections import (
-            Faithfulness,
             AnswerRelevancy,
             ContextPrecisionWithoutReference,
+            Faithfulness,
         )
 
         classes["faithfulness"] = Faithfulness
@@ -237,8 +237,8 @@ def _get_metric_classes() -> Dict[str, type]:
     try:
         from ragas.metrics import (
             Faithfulness,
-            ResponseRelevancy,
             LLMContextPrecisionWithoutReference,
+            ResponseRelevancy,
         )
 
         classes["faithfulness"] = Faithfulness
@@ -251,9 +251,9 @@ def _get_metric_classes() -> Dict[str, type]:
     # Fallback: legacy API
     try:
         from ragas.metrics import (
-            faithfulness,
             answer_relevancy,
             context_precision,
+            faithfulness,
         )
 
         classes["faithfulness"] = type(faithfulness)
