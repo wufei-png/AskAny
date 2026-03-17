@@ -35,11 +35,11 @@ from askany.workflow.AnalysisRelated_langchain import (
     RelevanceAnalyzer,
     RelevantResult,
 )
+
 # from askany.workflow.FinalSummaryLlm import (
 #     extract_docs_references,
 #     format_docs_references,
 #     generate_final_answer,
-
 # )
 from askany.workflow.FinalSummaryLlm_langchain import (
     FinalAnswerGenerator,
@@ -51,16 +51,16 @@ from askany.workflow.firstStageRelevant_langchain import (
     WebOrRagAnswerGenerator,
 )
 from askany.workflow.LocalFileSearchTool import LocalFileSearchTool
-from askany.workflow.rewriteRetrive_langchain import QueryRewriteGenerator
-from askany.workflow.SubProblemGenerator import SubProblemGenerator
-from askany.workflow.WebSearchTool import WebSearchTool
-
-# LightRAG adapter is imported lazily inside __init__ (optional dependency)
-from askany.workflow.token_control import truncate_nodes_by_tokens
 from askany.workflow.middle_result_recorder import (
     MiddleResultRecorder,
     NodeType,
 )
+from askany.workflow.rewriteRetrive_langchain import QueryRewriteGenerator
+from askany.workflow.SubProblemGenerator import SubProblemGenerator
+
+# LightRAG adapter is imported lazily inside __init__ (optional dependency)
+from askany.workflow.token_control import truncate_nodes_by_tokens
+from askany.workflow.WebSearchTool import WebSearchTool
 
 logger = getLogger(__name__)
 
@@ -2296,6 +2296,12 @@ class AgentWorkflow:
                 if isinstance(handler, FileHandler):
                     handler.flush()
 
+        # Read mem0_qa_context from kwargs for user memory context
+        mem0_qa_context = kwargs.get("mem0_qa_context", [])
+        if mem0_qa_context is None:
+            mem0_qa_context = []
+        _mem0_ctx = mem0_qa_context if isinstance(mem0_qa_context, list) else []
+
         # 从kwargs中读取is_inner_sub_query_workflow
         # WorkflowServer可能通过context参数传递，也可能直接通过kwargs传递
         # 如果kwargs中有context（dict），尝试从context中读取is_inner_sub_query_workflow
@@ -2328,7 +2334,7 @@ class AgentWorkflow:
             "no_relevant_result": None,
             "current_sub_query": None,
             "inner_previous_qa_context": [],
-            "outer_previous_qa_context": [],
+            "outer_previous_qa_context": list(_mem0_ctx),
             "is_inner_sub_query_workflow": is_inner_sub_query_workflow,
             "is_outer_sub_query_workflow": False,
             "result": None,
@@ -2403,6 +2409,12 @@ class AgentWorkflow:
                             "is_inner_sub_query_workflow", False
                         )
 
+        # Read mem0_qa_context from kwargs for user memory context
+        mem0_qa_context = kwargs.get("mem0_qa_context", [])
+        if mem0_qa_context is None:
+            mem0_qa_context = []
+        _mem0_ctx = mem0_qa_context if isinstance(mem0_qa_context, list) else []
+
         initial_state: AgentState = {
             "query": query,
             "query_type": query_type,
@@ -2417,7 +2429,7 @@ class AgentWorkflow:
             "no_relevant_result": None,
             "current_sub_query": None,
             "inner_previous_qa_context": [],
-            "outer_previous_qa_context": [],
+            "outer_previous_qa_context": list(_mem0_ctx),
             "is_inner_sub_query_workflow": is_inner_sub_query_workflow,
             "is_outer_sub_query_workflow": False,
             "result": None,
