@@ -111,7 +111,9 @@ def compare_tables(original_table: str, test_table: str) -> bool:
             return False
 
         differences = []
-        for i, (orig_row, test_row) in enumerate(zip(original_rows, test_rows, strict=False)):
+        for i, (orig_row, test_row) in enumerate(
+            zip(original_rows, test_rows, strict=False)
+        ):
             if orig_row != test_row:
                 differences.append(
                     {

@@ -99,9 +99,7 @@ class Settings(BaseSettings):
     query_fusion_num_queries: int = 1
     # OpenAI/LLM
     openai_api_key: str | None = None
-    openai_api_base: str | None = (
-        "http://127.0.0.1:8081/v1"  # For vLLM compatibility
-    )
+    openai_api_base: str | None = "http://127.0.0.1:8081/v1"  # For vLLM compatibility
     # For vLLM: model name is still required to specify which model to use
     openai_model: str = "/net/ai02/data/xlzhong/wufei/models/Qwen3-14B-AWQ/"
 

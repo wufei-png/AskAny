@@ -1,6 +1,5 @@
 """RAG query engine for document retrieval and generation."""
 
-
 from llama_index.core import KeywordTableIndex, QueryBundle, VectorStoreIndex
 from llama_index.core.llms import LLM
 from llama_index.core.query_engine import RetrieverQueryEngine
