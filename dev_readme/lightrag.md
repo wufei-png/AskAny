@@ -54,7 +54,7 @@ Ingest documents into LightRAG's knowledge graph using the CLI:
 python -m askany.rag.lightrag_ingest --ingest-markdown
 
 # Ingest a specific directory
-python -m askany.rag.lightrag_ingest --ingest-markdown --markdown-dir data/markdown/viper-open/viper-devops-docs/viper-v5.5
+python -m askany.rag.lightrag_ingest --ingest-markdown --markdown-dir data/markdown
 
 # Ingest all JSON FAQs
 python -m askany.rag.lightrag_ingest --ingest-json

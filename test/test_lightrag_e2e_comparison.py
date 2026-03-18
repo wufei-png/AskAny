@@ -11,7 +11,6 @@ Prerequisites
 -------------
 * PostgreSQL running with both LlamaIndex vector tables AND LightRAG tables.
 * LLM endpoint reachable (see .env / config.py).
-* viper-v5.5 data ingested into BOTH pipelines.
 
 Usage
 -----
