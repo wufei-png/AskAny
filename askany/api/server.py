@@ -622,6 +622,7 @@ def create_app(
                 ]
 
             retrieved_nodes: list[NodeWithScore] = []
+            retrieved_contexts: list[str] = []
 
             try:
                 response_text, retrieved_nodes = await process_query_with_subproblems(
@@ -631,6 +632,12 @@ def create_app(
                     query_type,
                     mem0_qa_context=mem0_qa_context,
                 )
+                retrieved_contexts = [
+                    node.node.get_content()
+                    if hasattr(node.node, "get_content")
+                    else str(node.node)
+                    for node in retrieved_nodes
+                ]
             except Exception as e:
                 # Handle workflow errors gracefully
                 error_msg = str(e)
@@ -666,11 +673,13 @@ def create_app(
                 # Invoke simple agent
                 from askany.workflow.min_langchain_agent import (
                     extract_and_format_response,
+                    extract_references_from_result,
                     invoke_with_retry,
                 )
 
                 result = invoke_with_retry(simple_agent_global, messages_input)
                 response_text = extract_and_format_response(result)
+                retrieved_contexts = extract_references_from_result(result)
 
             except Exception as e:
                 error_msg = str(e)
@@ -736,13 +745,6 @@ def create_app(
                     )
 
             # Convert retrieved nodes to text for RAGAS evaluation
-            retrieved_contexts = [
-                node.node.get_content()
-                if hasattr(node.node, "get_content")
-                else str(node.node)
-                for node in retrieved_nodes
-            ]
-
             ragas_task = asyncio.create_task(
                 evaluate_rag_response(
                     trace_id=_trace_id,

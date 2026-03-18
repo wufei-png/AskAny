@@ -1016,6 +1016,19 @@ def extract_and_format_response(result: dict) -> str:
     return agent_response
 
 
+def extract_references_from_result(result: dict) -> list[str]:
+    references: list[str] = []
+    if isinstance(result, dict) and "structured_response" in result:
+        structured_response = result["structured_response"]
+        if isinstance(structured_response, FinalSummaryResponse):
+            references = (
+                list(structured_response.references)
+                if structured_response.references
+                else []
+            )
+    return references
+
+
 def invoke_with_retry(agent, messages_input: dict, max_retries: int = 2):
     """Invoke agent with retry on truncated/invalid JSON (json_invalid, EOF while parsing)."""
     for attempt in range(max_retries):
