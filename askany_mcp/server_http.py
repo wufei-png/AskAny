@@ -37,46 +37,54 @@ router = None
 embed_model = None
 llm = None
 _initialization_error = None
+_initialized = False
+_init_lock = __import__("threading").Lock()
 
 
 def _ensure_initialized():
-    """Ensure RAG components are initialized (lazy initialization)."""
-    global router, embed_model, llm, _initialization_error
+    """Thread-safe initialization of RAG components."""
+    global router, embed_model, llm, _initialization_error, _initialized
 
-    if router is not None:
+    if _initialized:
         return
 
-    if _initialization_error is not None:
-        raise _initialization_error
+    with _init_lock:
+        if _initialized:
+            return
 
-    try:
-        from askany.ingest import VectorStoreManager
-        from askany.main import get_device, initialize_llm
-        from askany.rag import create_query_router
-
-        logger.info("Initializing RAG components (lazy initialization)...")
-
-        llm, embed_model = initialize_llm()
-        device = get_device()
-
-        vector_store_manager = VectorStoreManager(embed_model, llm=llm)
+        if _initialization_error is not None:
+            raise _initialization_error
 
         try:
-            vector_store_manager.initialize_faq_index()
-            vector_store_manager.initialize_docs_index()
-            logger.info("Initialized separate FAQ and docs indexes")
+            from askany.ingest import VectorStoreManager
+            from askany.main import get_device, initialize_llm
+            from askany.rag import create_query_router
+
+            logger.info("Initializing RAG components (lazy initialization)...")
+
+            llm, embed_model = initialize_llm()
+            device = get_device()
+
+            vector_store_manager = VectorStoreManager(embed_model, llm=llm)
+
+            try:
+                vector_store_manager.initialize_faq_index()
+                vector_store_manager.initialize_docs_index()
+                logger.info("Initialized separate FAQ and docs indexes")
+            except Exception as e:
+                logger.warning(f"Separate indexes not available: {e}")
+                vector_store_manager.initialize()
+
+            router = create_query_router(vector_store_manager, llm, embed_model, device)
+
+            logger.info("RAG components initialized successfully")
+
+            _initialized = True
+
         except Exception as e:
-            logger.warning(f"Separate indexes not available: {e}")
-            vector_store_manager.initialize()
-
-        router = create_query_router(vector_store_manager, llm, embed_model, device)
-
-        logger.info("RAG components initialized successfully")
-
-    except Exception as e:
-        logger.error(f"Failed to initialize RAG components: {e}", exc_info=True)
-        _initialization_error = e
-        raise
+            logger.error(f"Failed to initialize RAG components: {e}", exc_info=True)
+            _initialization_error = e
+            raise
 
 
 def rag_search_query(query: str, query_type: str = "auto") -> list[dict[str, Any]]:
