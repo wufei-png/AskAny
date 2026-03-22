@@ -571,6 +571,51 @@ class VectorStoreManager:
 
         return nodes
 
+    def _batch_delete_by_ref_doc_ids(
+        self, table_name: str, ref_doc_ids: list[str]
+    ) -> int:
+        """Batch delete documents from PGVectorStore by ref_doc_id.
+
+        Args:
+            table_name: Vector table name (without 'data_' prefix)
+            ref_doc_ids: List of ref_doc_ids to delete
+
+        Returns:
+            Number of rows deleted
+        """
+        if not ref_doc_ids:
+            return 0
+
+        actual_table_name = f"data_{table_name}"
+
+        conn = None
+        try:
+            conn = self._get_db_connection()
+            cursor = conn.cursor()
+
+            delete_sql = f"""
+                DELETE FROM "{actual_table_name}"
+                WHERE metadata_->>'ref_doc_id' = ANY(%s)
+            """
+            cursor.execute(delete_sql, (ref_doc_ids,))
+            deleted_count = cursor.rowcount
+            conn.commit()
+            cursor.close()
+
+            if deleted_count > 0:
+                logger.info(
+                    f"Batch deleted {deleted_count} documents from {actual_table_name}"
+                )
+            return deleted_count
+        except Exception as e:
+            logger.warning(f"Batch delete failed for {actual_table_name}: {e}")
+            if conn:
+                conn.rollback()
+            return 0
+        finally:
+            if conn:
+                conn.close()
+
     def add_faq_documents(self, documents: list[Document]) -> None:
         """Add FAQ documents to the FAQ vector store.
 
@@ -585,45 +630,33 @@ class VectorStoreManager:
                 "FAQ vector store not initialized. Call initialize_faq_index() first."
             )
 
-        # Process each document: check for existing ID and delete if found
+        doc_ids_to_delete = []
         for doc in documents:
-            # Get document ID for deletion
-            # Note: For FAQ, Document.id_ is set by JSONParser when ID is provided
-            # When Document is converted to Node (via insert() or _documents_to_nodes()),
-            # Document.id_ is set as Node.ref_doc_id, which is what delete_ref_doc() uses
-            # So using Document.id_ is correct for FAQ deletion
             doc_id = None
             if hasattr(doc, "id_") and doc.id_:
-                doc_id = (
-                    doc.id_
-                )  # Priority 1: id_ (will be Node.ref_doc_id after conversion)
+                doc_id = doc.id_
             elif hasattr(doc, "metadata") and doc.metadata:
-                doc_id = doc.metadata.get("id", "")  # Priority 2: metadata (fallback)
+                doc_id = doc.metadata.get("id", "")
 
-            # If document has an ID, try to delete existing document with same ID
             if doc_id:
-                try:
-                    # Delete from vector index if exists
-                    # delete_ref_doc() searches by ref_doc_id, which equals Document.id_ after conversion
-                    self.faq_index.delete_ref_doc(doc_id, delete_from_docstore=True)
-                    logger.debug(f"Deleted existing FAQ document with ID: {doc_id}")
-                    # Also try to delete from keyword index if it exists
-                    if self.faq_keyword_index:
-                        try:
-                            self.faq_keyword_index.delete_ref_doc(
-                                doc_id, delete_from_docstore=True
-                            )
-                            logger.debug(
-                                f"Deleted existing FAQ keyword index document with ID: {doc_id}"
-                            )
-                        except Exception:
-                            # Keyword index deletion might fail, continue anyway
-                            pass
-                except Exception:
-                    # If deletion fails, document doesn't exist yet, which is fine
-                    logger.debug(
-                        f"FAQ document with ID {doc_id} does not exist yet, will insert"
-                    )
+                doc_ids_to_delete.append(doc_id)
+
+        if doc_ids_to_delete:
+            deleted_count = self._batch_delete_by_ref_doc_ids(
+                settings.faq_vector_table_name, doc_ids_to_delete
+            )
+            logger.debug(
+                f"Batch deleted {deleted_count} existing FAQ documents before insert"
+            )
+
+            if self.faq_keyword_index:
+                for doc_id in doc_ids_to_delete:
+                    try:
+                        self.faq_keyword_index.delete_ref_doc(
+                            doc_id, delete_from_docstore=True
+                        )
+                    except Exception:
+                        pass
 
         # Check if splitting is enabled
         if settings.faq_split_documents:
@@ -1560,11 +1593,10 @@ class VectorStoreManager:
             temp_file_path = Path(temp_file.name)
 
         try:
-            # Parse the temporary JSON file using json_parser
             parsed_docs = json_parser.parse_file(temp_file_path)
             new_documents = parsed_docs
 
-            # Process each FAQ item to check for updates
+            doc_ids_to_delete = []
             for item in faq_items:
                 try:
                     question = item.get("question", "").strip()
@@ -1572,39 +1604,31 @@ class VectorStoreManager:
                         errors.append("Skipped item with empty question")
                         continue
 
-                    # Check if FAQ exists by ID and delete if exists
                     doc_id = item.get("id", "")
                     if doc_id:
-                        try:
-                            # Try to delete existing document by ref_doc_id from vector index
-                            # Note: delete_ref_doc() searches by metadata_["ref_doc_id"] in JSON field, not by node.id_
-                            #       PGVectorStore.delete() uses: metadata_["ref_doc_id"].astext == ref_doc_id
-                            #       This is why we need to set ref_doc_id when creating nodes
-                            self.faq_index.delete_ref_doc(
-                                doc_id, delete_from_docstore=True
-                            )
-                            # Also try to delete from keyword index if it exists
-                            if self.faq_keyword_index:
-                                try:
-                                    self.faq_keyword_index.delete_ref_doc(
-                                        doc_id, delete_from_docstore=True
-                                    )
-                                except Exception as del_e:
-                                    logger.warning(
-                                        "Error deleting from keyword index: %s", del_e
-                                    )
-                                    # Keyword index deletion might fail, continue anyway
-                            updated_count += 1
-                        except Exception:
-                            # If deletion fails, it means it doesn't exist
-                            inserted_count += 1
-                    else:
-                        # No ID provided, always insert (may create duplicates)
-                        inserted_count += 1
+                        doc_ids_to_delete.append(doc_id)
 
                 except Exception as e:
                     errors.append(f"Error processing FAQ item: {str(e)}")
                     continue
+
+            if doc_ids_to_delete:
+                deleted_count = self._batch_delete_by_ref_doc_ids(
+                    settings.faq_vector_table_name, doc_ids_to_delete
+                )
+                updated_count = deleted_count
+                inserted_count = len(doc_ids_to_delete) - deleted_count
+
+                if self.faq_keyword_index:
+                    for doc_id in doc_ids_to_delete:
+                        try:
+                            self.faq_keyword_index.delete_ref_doc(
+                                doc_id, delete_from_docstore=True
+                            )
+                        except Exception:
+                            pass
+            else:
+                inserted_count = len(faq_items)
         finally:
             # Clean up temporary file
             try:
