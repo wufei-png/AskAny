@@ -58,6 +58,10 @@ This structured output format ensures traceability and transparency, allowing us
 - **LightRAG** (optional): Knowledge graph augmentation for docs/FAQ; configurable query modes (local/global/hybrid/mix)
 - **Mem0** (optional): Persistent cross-session user memory; user ID from `X-OpenWebUI-User-Id` when using OpenWebUI
 - **Observability** (optional): Langfuse tracing and RAGAS RAG metrics (faithfulness, response relevancy, context precision)
+- **QA Semantic Cache** (optional): GPTCache + PGVector-based response caching with configurable similarity threshold (0.9); auto-clears on FAQ hot-update
+- **Prometheus Metrics** (optional): Comprehensive monitoring for API, LLM, database, RAG retrieval, workflow, websearch, mem0, and system resources
+- **Provenance Tracking** (optional): Chunk-level lineage tracking with line range recovery for enhanced reference transparency
+- **OpenCode MCP Integration**: Model Context Protocol integration with OpenCode for native grep and local file search
 
 ## Technology Stack
 
@@ -360,7 +364,7 @@ All settings can be configured in `askany/config.py` or via environment variable
 | `local_file_search_dir` | Local search directory | data/markdown |
 | `storage_dir` | Keyword index storage | key_word_storage |
 
-### Optional: LightRAG, Mem0, Observability
+### Optional: LightRAG, Mem0, Observability, Cache
 
 | Area | Config (in `config.py` or `.env`) | Notes |
 |------|-----------------------------------|-------|
@@ -368,6 +372,8 @@ All settings can be configured in `askany/config.py` or via environment variable
 | **Mem0** | `enable_mem0=True`, `mem0_collection_name`, `mem0_top_k` | Set `ENABLE_FORWARD_USER_INFO_HEADERS=true` in OpenWebUI so `X-OpenWebUI-User-Id` is sent |
 | **Langfuse** | `enable_langfuse=True`, `langfuse_public_key`, `langfuse_secret_key` | Install: `uv sync --extra observability` (or `uv sync --all-extras` for all optional deps) |
 | **RAGAS** | `enable_ragas=True`, `ragas_sample_rate`, `ragas_metrics` | Pushes scores into Langfuse when both enabled |
+| **Prometheus** | `enable_prometheus=True`, `prometheus_port` | Exposes metrics at `/metrics` endpoint; install: `uv sync --extra observability` |
+| **QA Cache** | `enable_qa_cache=True`, `qa_cache_similarity_threshold` | GPTCache + PGVector; auto-clears on FAQ hot-update |
 
 ### Customizing Prompts for Your Knowledge Base
 
@@ -381,6 +387,8 @@ The prompts in `askany/prompts/prompts_cn.py` (Chinese) and `askany/prompts/prom
 | `/openapi.json` | GET | OpenAPI specification |
 | `/v1/chat/completions` | POST | OpenAI-compatible chat (supports `stream: true` for SSE) |
 | `/v1/update_faqs` | POST | Hot update FAQ entries |
+| `/v1/admin/cache/stats` | GET | QA cache statistics (requires QA cache enabled) |
+| `/v1/admin/cache/clear` | POST | Clear QA cache (requires QA cache enabled) |
 
 ## Development
 

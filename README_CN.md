@@ -58,6 +58,10 @@ AskAny 在 OpenWebUI 中的响应包含以下三个核心部分：
 - **LightRAG**（可选）：知识图谱增强文档/FAQ，可配置查询模式（local/global/hybrid/mix）
 - **Mem0**（可选）：跨会话持久化用户记忆；配合 OpenWebUI 时从 `X-OpenWebUI-User-Id` 读取用户身份
 - **可观测性**（可选）：Langfuse 链路追踪与 RAGAS RAG 指标（忠实度、回答相关性、上下文精确度）
+- **QA 语义缓存**（可选）：基于 GPTCache + PGVector 的问答缓存，支持可配置相似度阈值（0.9）；FAQ 热更新时自动清除
+- **Prometheus 指标**（可选）：全面的 API、LLM、数据库、RAG 检索、workflow、websearch、mem0 及系统资源监控
+- **溯源追踪**（可选）：Chunk 级别的来源追踪，支持行号范围恢复，增强引用透明度
+- **OpenCode MCP 集成**：通过 Model Context Protocol 与 OpenCode 集成，支持原生 grep 和本地文件搜索
 
 ## 技术栈
 
@@ -360,7 +364,7 @@ All settings can be configured in `askany/config.py` or via environment variable
 | `local_file_search_dir` | Local search directory | data/markdown |
 | `storage_dir` | Keyword index storage | key_word_storage |
 
-### 可选：LightRAG、Mem0、可观测性
+### 可选：LightRAG、Mem0、可观测性、缓存
 
 | 模块 | 配置（config.py 或 .env） | 说明 |
 |------|---------------------------|------|
@@ -368,6 +372,8 @@ All settings can be configured in `askany/config.py` or via environment variable
 | **Mem0** | `enable_mem0=True`、`mem0_collection_name`、`mem0_top_k` | 在 OpenWebUI 中设置 `ENABLE_FORWARD_USER_INFO_HEADERS=true` 以传递 `X-OpenWebUI-User-Id` |
 | **Langfuse** | `enable_langfuse=True`、`langfuse_public_key`、`langfuse_secret_key` | 安装：`uv sync --extra observability`（或 `uv sync --all-extras` 安装全部可选依赖） |
 | **RAGAS** | `enable_ragas=True`、`ragas_sample_rate`、`ragas_metrics` | 与 Langfuse 同时启用时会将分数写入 Langfuse |
+| **Prometheus** | `enable_prometheus=True`、`prometheus_port` | 在 `/metrics` 端点暴露指标；安装：`uv sync --extra observability` |
+| **QA 缓存** | `enable_qa_cache=True`、`qa_cache_similarity_threshold` | GPTCache + PGVector；FAQ 热更新时自动清除 |
 
 ### 为知识库定制提示词
 
@@ -381,6 +387,8 @@ All settings can be configured in `askany/config.py` or via environment variable
 | `/openapi.json` | GET | OpenAPI 规范 |
 | `/v1/chat/completions` | POST | OpenAI 兼容聊天（支持 `stream: true` 的 SSE 流式） |
 | `/v1/update_faqs` | POST | FAQ 热更新 |
+| `/v1/admin/cache/stats` | GET | QA 缓存统计（需启用 QA 缓存） |
+| `/v1/admin/cache/clear` | POST | 清除 QA 缓存（需启用 QA 缓存） |
 
 ## 开发
 
