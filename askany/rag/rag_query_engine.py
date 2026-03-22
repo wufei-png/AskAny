@@ -1,5 +1,6 @@
 """RAG query engine for document retrieval and generation."""
 
+import time
 from logging import getLogger
 
 from llama_index.core import KeywordTableIndex, QueryBundle, VectorStoreIndex
@@ -15,6 +16,7 @@ from llama_index.core.retrievers import (
 from llama_index.core.schema import NodeWithScore
 
 from askany.config import settings
+from askany.metrics import get_metrics
 from askany.rag.provenance import enrich_nodes_with_provenance
 from askany.rerank import SafeReranker
 
@@ -361,22 +363,34 @@ class RAGQueryEngine:
         Returns:
             Generated response with reference information
         """
-        # Retrieve nodes (filtering logic is inside retrieve method)
-        nodes = self.retrieve(query_str, metadata_filters)
+        metrics = get_metrics()
+        start_time = time.perf_counter()
 
-        # Synthesize answer from retrieved nodes
-        query_bundle = QueryBundle(query_str)
-        response = self.query_engine.synthesize(query_bundle, nodes)
+        # Track docs RAG query
+        metrics.askany_rag_query_total.labels(engine="docs", query_type="docs").inc()
 
-        # Extract reference information from used nodes
-        references = self._extract_docs_references(nodes)
+        try:
+            # Retrieve nodes (filtering logic is inside retrieve method)
+            nodes = self.retrieve(query_str, metadata_filters)
 
-        # Format response with references
-        response_text = str(response)
-        if references:
-            response_text += self._format_docs_references(references)
+            # Synthesize answer from retrieved nodes
+            query_bundle = QueryBundle(query_str)
+            response = self.query_engine.synthesize(query_bundle, nodes)
 
-        return response_text
+            # Extract reference information from used nodes
+            references = self._extract_docs_references(nodes)
+
+            # Format response with references
+            response_text = str(response)
+            if references:
+                response_text += self._format_docs_references(references)
+
+            return response_text
+        finally:
+            duration = time.perf_counter() - start_time
+            metrics.askany_rag_query_duration_seconds.labels(
+                engine="docs", query_type="docs"
+            ).observe(duration)
 
     def retrieve_with_scores(
         self, query_str: str, metadata_filters: dict[str, str] | None = None
@@ -390,12 +404,20 @@ class RAGQueryEngine:
         Returns:
             Tuple of (list of retrieved nodes, top score)
         """
+        metrics = get_metrics()
+        start_time = time.perf_counter()
 
-        nodes = self.retrieve(query_str, metadata_filters)
+        try:
+            nodes = self.retrieve(query_str, metadata_filters)
 
-        # Get the top score (highest similarity score)
-        top_score = nodes[0].score if nodes and nodes[0].score is not None else 0.0
-        return nodes, top_score
+            # Get the top score (highest similarity score)
+            top_score = nodes[0].score if nodes and nodes[0].score is not None else 0.0
+            return nodes, top_score
+        finally:
+            duration = time.perf_counter() - start_time
+            metrics.askany_rag_query_duration_seconds.labels(
+                engine="docs", query_type="auto"
+            ).observe(duration)
 
     def retrieve(
         self, query_str: str, metadata_filters: dict[str, str] | None = None
@@ -409,9 +431,49 @@ class RAGQueryEngine:
         Returns:
             List of retrieved nodes (filtered by metadata if filters provided, limited to similarity_top_k)
         """
+        metrics = get_metrics()
 
         query_bundle = QueryBundle(query_str)
-        nodes = self.query_engine.retriever.retrieve(query_bundle)
+        keyword_nodes = []
+
+        # Track retrieval stages - keyword search (if keyword_index exists)
+        if self.keyword_index:
+            keyword_start = time.perf_counter()
+            keyword_retriever = self.keyword_index.as_retriever()
+            keyword_nodes = keyword_retriever.retrieve(query_bundle)
+            keyword_duration = time.perf_counter() - keyword_start
+            metrics.askany_rag_retrieval_latency_seconds.labels(
+                stage="keyword"
+            ).observe(keyword_duration)
+
+        # Track retrieval stages - vector search
+        vector_start = time.perf_counter()
+        vector_retriever = VectorIndexRetriever(
+            index=self.index, similarity_top_k=self.similarity_top_k * 4
+        )
+        vector_nodes = vector_retriever.retrieve(query_bundle)
+        vector_duration = time.perf_counter() - vector_start
+        metrics.askany_rag_retrieval_latency_seconds.labels(stage="vector").observe(
+            vector_duration
+        )
+
+        # Combine nodes
+        if self.keyword_index:
+            nodes = keyword_nodes + vector_nodes
+        else:
+            nodes = vector_nodes
+
+        # Apply rerank if available
+        if self.reranker and nodes:
+            rerank_start = time.perf_counter()
+            nodes = self.reranker.postprocess_nodes(nodes, query_bundle=query_bundle)
+            rerank_duration = time.perf_counter() - rerank_start
+            metrics.askany_rag_retrieval_latency_seconds.labels(stage="rerank").observe(
+                rerank_duration
+            )
+
+        # Track nodes retrieved
+        metrics.askany_rag_nodes_retrieved.labels(engine="docs").observe(len(nodes))
 
         # Apply metadata filtering if filters exist
         if metadata_filters:

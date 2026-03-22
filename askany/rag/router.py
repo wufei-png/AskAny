@@ -1,5 +1,6 @@
 """Query router for different query types."""
 
+import time
 from copy import deepcopy
 from enum import StrEnum
 from logging import getLogger
@@ -8,6 +9,7 @@ from llama_index.core.schema import NodeWithScore, TextNode
 
 from askany.config import settings
 from askany.ingest.vector_store import VectorStoreManager
+from askany.metrics import get_metrics
 from askany.rag.faq_query_engine import FAQQueryEngine
 from askany.rag.query_parser import parse_query_filters
 from askany.rag.rag_query_engine import RAGQueryEngine
@@ -74,22 +76,38 @@ class QueryRouter:
         Returns:
             Generated response
         """
-        # Parse filters from query (will be passed to engines)
-        cleaned_query, metadata_filters = parse_query_filters(query)
+        metrics = get_metrics()
+        start_time = time.perf_counter()
 
-        if query_type == QueryType.AUTO:
-            return self._route_auto(cleaned_query, metadata_filters)
+        # Track query routing
+        metrics.askany_rag_query_total.labels(
+            engine="router", query_type=str(query_type)
+        ).inc()
 
-        if query_type == QueryType.FAQ and self.faq_query_engine:
-            return self.faq_query_engine.query(cleaned_query, metadata_filters)
-        elif query_type == QueryType.DOCS:
-            return self.docs_query_engine.query(cleaned_query, metadata_filters)
-        elif query_type == QueryType.CODE:
-            # TODO: Implement code search
-            return "Code search not yet implemented"
-        else:
-            # Fallback to docs
-            return self.docs_query_engine.query(cleaned_query, metadata_filters)
+        try:
+            # Parse filters from query (will be passed to engines)
+            cleaned_query, metadata_filters = parse_query_filters(query)
+
+            if query_type == QueryType.AUTO:
+                result = self._route_auto(cleaned_query, metadata_filters)
+            elif query_type == QueryType.FAQ and self.faq_query_engine:
+                result = self.faq_query_engine.query(cleaned_query, metadata_filters)
+            elif query_type == QueryType.DOCS:
+                result = self.docs_query_engine.query(cleaned_query, metadata_filters)
+            elif query_type == QueryType.CODE:
+                # TODO: Implement code search
+                result = "Code search not yet implemented"
+            else:
+                # Fallback to docs
+                result = self.docs_query_engine.query(cleaned_query, metadata_filters)
+        finally:
+            # Track routing duration
+            duration = time.perf_counter() - start_time
+            metrics.askany_rag_query_duration_seconds.labels(
+                engine="router", query_type=str(query_type)
+            ).observe(duration)
+
+        return result
 
     def _route_auto(
         self, query: str, metadata_filters: dict[str, str] | None = None
