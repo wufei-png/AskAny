@@ -823,15 +823,13 @@ class VectorStoreManager:
         # This applies to both first-time insertions and subsequent updates
         # Index will only be recreated if auto_create_index=True
         index_dropped = False
-        # if settings.enable_hnsw:
-        #     # Always try to drop index if it exists (for both first-time and subsequent insertions)
-        #     # This ensures fast insertion regardless of whether index exists
-        #     logger.info(
-        #         f"Dropping HNSW index (if exists) before inserting {total_nodes} nodes for faster insertion..."
-        #     )
-        #     index_dropped = self._drop_hnsw_index(self.docs_vector_store)
-        #     if not index_dropped:
-        #         logger.info("No existing HNSW index found, will insert without index (faster)")
+        if settings.enable_hnsw:
+            logger.info(
+                f"Dropping HNSW index (if exists) before inserting {total_nodes} nodes for faster insertion..."
+            )
+            index_dropped = self._drop_hnsw_index(self.docs_vector_store)
+            if not index_dropped:
+                logger.info("No existing HNSW index found, will insert without index")
 
         try:
             # For small datasets, insert all at once (more efficient)
@@ -883,7 +881,7 @@ class VectorStoreManager:
                 logger.info(
                     "Auto-creating HNSW index after insertion (auto_create_index=True)..."
                 )
-                # self._create_hnsw_index(self.docs_vector_store)
+                self._create_hnsw_index(self.docs_vector_store)
                 logger.info("HNSW index created successfully")
             elif settings.enable_hnsw:
                 logger.info(
@@ -897,12 +895,12 @@ class VectorStoreManager:
                 logger.warning(
                     f"Insertion failed, attempting to recreate HNSW index before re-raising error: {e}"
                 )
-                # try:
-                # self._create_hnsw_index(self.docs_vector_store)
-                # except Exception as recreate_error:
-                #     logger.error(
-                #         f"Failed to recreate HNSW index after insertion failure: {recreate_error}"
-                #     )
+                try:
+                    self._create_hnsw_index(self.docs_vector_store)
+                except Exception as recreate_error:
+                    logger.error(
+                        f"Failed to recreate HNSW index after insertion failure: {recreate_error}"
+                    )
             raise
 
     def create_docs_hnsw_index(self) -> None:
