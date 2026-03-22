@@ -328,9 +328,11 @@ class Settings(BaseSettings):
     max_content_length: int = -1  # Maximum content length for each node
 
     # Question-Answer Cache settings
-    enable_qa_cache: bool = True  # Whether to enable question-answer caching
-    qa_cache_use_similarity: bool = False  # Whether to use semantic similarity matching for cache (requires embedding model)
-    qa_cache_similarity_threshold: float = 0.95  # Similarity threshold for cache matching (0-1, only used when qa_cache_use_similarity=True)
+    enable_qa_cache: bool = True  # Master switch for semantic cache
+    qa_cache_similarity_threshold: float = 0.90  # Cosine similarity threshold (0-1)
+    qa_cache_ttl_seconds: int | None = 86400  # 24 hours TTL, None for no expiry
+    qa_cache_postgres_table: str = "askany_qa_cache"  # Table for cache data
+    qa_cache_vector_dim: int = 1024  # BGE-m3 embedding dimension
 
     # CPU resource limits
     cpu_cores: int | None = None  # Limit CPU cores (None = use all available cores)
