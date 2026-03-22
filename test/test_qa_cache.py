@@ -6,8 +6,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 class TestQACacheManager:
@@ -199,12 +200,12 @@ class TestQACacheManager:
             embed_fn = manager._build_embedding_func()
 
             # With composite key
-            result = embed_fn("AUTO:如何配置API")
+            embed_fn("AUTO:如何配置API")
             mock_embed_model._get_query_embedding.assert_called_with("如何配置API")
 
             # Reset mock
             mock_embed_model._get_query_embedding.reset_mock()
 
             # Without composite key (edge case)
-            result = embed_fn("如何配置API")
+            embed_fn("如何配置API")
             mock_embed_model._get_query_embedding.assert_called_with("如何配置API")

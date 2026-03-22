@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from gptcache import cache as gptcache
 from gptcache import Config
+from gptcache import cache as gptcache
 from gptcache.manager import CacheBase, VectorBase, get_data_manager
 from gptcache.similarity_evaluation.distance import SearchDistanceEvaluation
 
