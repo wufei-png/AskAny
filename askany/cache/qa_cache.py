@@ -130,12 +130,52 @@ class QACacheManager:
         cache_key = self.build_cache_key(query, query_type)
 
         try:
-            result = gptcache.get(cache_key)
-            if result is not None:
-                logger.debug(f"Cache HIT: key={cache_key[:50]}...")
-                return result
-            logger.debug(f"Cache MISS: key={cache_key[:50]}...")
-            return None
+            if gptcache.embedding_func is None:
+                logger.warning("GPTCache embedding_func not initialized")
+                return None
+
+            embedding = gptcache.embedding_func(cache_key)
+
+            if gptcache.data_manager is None:
+                logger.warning("GPTCache data_manager not initialized")
+                return None
+
+            search_results = gptcache.data_manager.search(embedding, top_k=1)
+
+            if not search_results:
+                logger.debug(f"Cache MISS: key={cache_key[:50]}... (no search results)")
+                return None
+
+            score = search_results[0][0]
+            threshold = settings.qa_cache_similarity_threshold
+            max_distance = 1.0 - threshold
+
+            if score > max_distance:
+                logger.debug(
+                    f"Cache MISS: key={cache_key[:50]}... (score={score:.4f} > {max_distance:.4f})"
+                )
+                return None
+
+            res_data = search_results[0]
+            cache_data = gptcache.data_manager.get_scalar_data(res_data)
+
+            if cache_data is None:
+                logger.debug(
+                    f"Cache MISS: key={cache_key[:50]}... (no cache data found)"
+                )
+                return None
+
+            if hasattr(cache_data, "answers") and cache_data.answers:
+                answer = cache_data.answers[0]
+                if hasattr(answer, "answer"):
+                    response: str | None = answer.answer
+                else:
+                    response = str(answer) if answer is not None else None
+            else:
+                response = str(cache_data) if cache_data is not None else None
+
+            logger.debug(f"Cache HIT: key={cache_key[:50]}... (score={score:.4f})")
+            return response
         except Exception as e:
             logger.error(f"Cache get error: {e}")
             return None
@@ -155,7 +195,17 @@ class QACacheManager:
         cache_key = self.build_cache_key(query, query_type)
 
         try:
-            gptcache.set(cache_key, response)
+            if gptcache.embedding_func is None or gptcache.data_manager is None:
+                logger.warning("GPTCache not fully initialized")
+                return
+
+            embedding = gptcache.embedding_func(cache_key)
+
+            gptcache.data_manager.save(
+                question=cache_key,
+                answer=response,
+                embedding_data=embedding,
+            )
             logger.debug(f"Cache SET: key={cache_key[:50]}...")
         except Exception as e:
             logger.error(f"Cache set error: {e}")

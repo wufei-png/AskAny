@@ -85,21 +85,34 @@ class TestQACacheManager:
         from askany.cache.qa_cache import QACacheManager
 
         with patch("askany.cache.qa_cache.gptcache") as mock_gptcache:
-            mock_gptcache.get.return_value = "cached response"
+            with patch("askany.cache.qa_cache.settings") as mock_settings:
+                mock_settings.qa_cache_similarity_threshold = 0.5
+                mock_embedding = [0.1] * 1024
+                mock_gptcache.embedding_func.return_value = mock_embedding
+                mock_gptcache.data_manager.search.return_value = [
+                    [0.1, 1]
+                ]  # low distance = similar
+                mock_cache_data = MagicMock()
+                mock_cache_data.answers = [MagicMock(answer="cached response")]
+                mock_gptcache.data_manager.get_scalar_data.return_value = (
+                    mock_cache_data
+                )
 
-            manager = QACacheManager(embed_model=mock_embed_model)
-            manager._initialized = True
+                manager = QACacheManager(embed_model=mock_embed_model)
+                manager._initialized = True
 
-            result = manager.get("如何配置API", "AUTO")
-            assert result == "cached response"
-            mock_gptcache.get.assert_called_once_with("AUTO:如何配置API")
+                result = manager.get("如何配置API", "AUTO")
+                assert result == "cached response"
+                mock_gptcache.embedding_func.assert_called_once_with("AUTO:如何配置API")
+                mock_gptcache.data_manager.search.assert_called_once()
 
     def test_get_returns_none_on_miss(self, mock_embed_model):
-        """Cache get returns None on miss."""
+        """Cache get returns None when no similar entry found."""
         from askany.cache.qa_cache import QACacheManager
 
         with patch("askany.cache.qa_cache.gptcache") as mock_gptcache:
-            mock_gptcache.get.return_value = None
+            mock_gptcache.embedding_func.return_value = [0.1] * 1024
+            mock_gptcache.data_manager.search.return_value = []  # no results
 
             manager = QACacheManager(embed_model=mock_embed_model)
             manager._initialized = True
@@ -112,11 +125,17 @@ class TestQACacheManager:
         from askany.cache.qa_cache import QACacheManager
 
         with patch("askany.cache.qa_cache.gptcache") as mock_gptcache:
+            mock_gptcache.embedding_func.return_value = [0.1] * 1024
+            mock_gptcache.data_manager.save = MagicMock()
+
             manager = QACacheManager(embed_model=mock_embed_model)
             manager._initialized = True
             manager.set("如何配置API", "FAQ", "FAQ answer")
 
-            mock_gptcache.set.assert_called_once_with("FAQ:如何配置API", "FAQ answer")
+            mock_gptcache.data_manager.save.assert_called_once()
+            call_kwargs = mock_gptcache.data_manager.save.call_args.kwargs
+            assert call_kwargs["question"] == "FAQ:如何配置API"
+            assert call_kwargs["answer"] == "FAQ answer"
 
     def test_clear_flushes_cache(self, mock_embed_model):
         """Cache clear calls gptcache.flush."""
@@ -139,7 +158,7 @@ class TestQACacheManager:
 
             result = manager.get("如何配置API", "AUTO")
             assert result is None
-            mock_gptcache.get.assert_not_called()
+            mock_gptcache.embedding_func.assert_not_called()
 
     def test_set_skips_when_not_initialized(self, mock_embed_model):
         """Cache set does nothing when not initialized."""
@@ -150,7 +169,7 @@ class TestQACacheManager:
             manager._initialized = False
 
             manager.set("如何配置API", "AUTO", "response")
-            mock_gptcache.set.assert_not_called()
+            mock_gptcache.embedding_func.assert_not_called()
 
     def test_embedding_func_extracts_query(self, mock_embed_model):
         """Embedding function extracts actual query from composite key."""
