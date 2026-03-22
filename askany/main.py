@@ -511,6 +511,16 @@ def main():
         # Create router (pass initialized LLM and embed_model)
         router = create_query_router(vector_store_manager, llm, embed_model, device)
 
+        # Initialize QA semantic cache after query engines are ready
+        if settings.enable_qa_cache:
+            from askany.cache.qa_cache import QACacheManager
+            from askany.rag import set_qa_cache_manager
+
+            qa_cache_manager = QACacheManager(embed_model=embed_model)
+            qa_cache_manager.init()
+            set_qa_cache_manager(qa_cache_manager)
+            logger.info("QA semantic cache initialized")
+
         # Initialize shared tools to reduce resource usage and enable caching
         from askany.ingest.custom_keyword_index import (
             get_global_keyword_extractor,
