@@ -826,6 +826,15 @@ def create_app(
                         device=device,
                     )
 
+                # Invalidate QA cache after FAQ hot-update
+                if settings.enable_qa_cache:
+                    from askany.rag import get_qa_cache_manager
+
+                    cache_manager = get_qa_cache_manager()
+                    if cache_manager and cache_manager.is_initialized:
+                        cache_manager.clear()
+                        logger.info("QA cache cleared due to FAQ hot-update")
+
                 return UpdateFAQsResponse(
                     success=True,
                     message=f"Successfully processed {result['total_processed']} FAQ(s)",
