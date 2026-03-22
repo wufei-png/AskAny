@@ -134,6 +134,24 @@ class UpdateFAQsResponse(BaseModel):
     errors: list[str]  # List of error messages
 
 
+class CacheStatsResponse(BaseModel):
+    """Response model for cache statistics."""
+
+    enabled: bool
+    initialized: bool
+    cache_type: str = "gptcache_pgvector"
+    threshold: float
+    dimension: int
+    table_name: str
+
+
+class CacheClearResponse(BaseModel):
+    """Response model for clearing cache."""
+
+    success: bool
+    message: str
+
+
 def _make_sse_chunk(
     model: str,
     content: str | None = None,
@@ -853,6 +871,62 @@ def create_app(
                     updated=0,
                     errors=[str(e)],
                 )
+
+    @app.get("/v1/cache/stats", response_model=CacheStatsResponse)
+    async def cache_stats():
+        """Get QA cache statistics."""
+        if not settings.enable_qa_cache:
+            return CacheStatsResponse(
+                enabled=False,
+                initialized=False,
+                threshold=0.0,
+                dimension=0,
+                table_name="",
+            )
+
+        from askany.rag import get_qa_cache_manager
+
+        cache_manager = get_qa_cache_manager()
+
+        if cache_manager is None or not cache_manager.is_initialized:
+            return CacheStatsResponse(
+                enabled=True,
+                initialized=False,
+                threshold=settings.qa_cache_similarity_threshold,
+                dimension=0,
+                table_name=settings.qa_cache_postgres_table,
+            )
+
+        return CacheStatsResponse(
+            enabled=True,
+            initialized=True,
+            threshold=settings.qa_cache_similarity_threshold,
+            dimension=cache_manager.dimension,
+            table_name=settings.qa_cache_postgres_table,
+        )
+
+    @app.post("/v1/cache/clear", response_model=CacheClearResponse)
+    async def cache_clear():
+        """Clear all QA cache entries."""
+        if not settings.enable_qa_cache:
+            return CacheClearResponse(
+                success=False, message="Cache disabled via enable_qa_cache=False"
+            )
+
+        from askany.rag import get_qa_cache_manager
+
+        cache_manager = get_qa_cache_manager()
+
+        if cache_manager is None or not cache_manager.is_initialized:
+            return CacheClearResponse(success=False, message="Cache not initialized")
+
+        try:
+            cache_manager.clear()
+            return CacheClearResponse(
+                success=True, message="Cache cleared successfully"
+            )
+        except Exception as e:
+            return CacheClearResponse(success=False, message=str(e))
 
     return app
 
