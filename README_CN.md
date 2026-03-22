@@ -130,8 +130,9 @@ uv sync
 cp .env.example .env
 # 编辑 .env 配置数据库凭据和 API 端点
 
-# 可选：Langfuse + RAGAS 可观测性
-uv sync --extra observability
+# 可选：`uv sync` 仅安装主依赖。安装全部可选依赖（LightRAG + Langfuse/RAGAS 等）：
+#   uv sync --all-extras
+# 或仅可观测性：uv sync --extra observability
 ```
 
 ### 数据库设置
@@ -365,7 +366,7 @@ All settings can be configured in `askany/config.py` or via environment variable
 |------|---------------------------|------|
 | **LightRAG** | `enable_lightrag=True`、`lightrag_working_dir`、`lightrag_query_mode` | 启用前需执行 `python -m askany.rag.lightrag_ingest --ingest-markdown --ingest-json` |
 | **Mem0** | `enable_mem0=True`、`mem0_collection_name`、`mem0_top_k` | 在 OpenWebUI 中设置 `ENABLE_FORWARD_USER_INFO_HEADERS=true` 以传递 `X-OpenWebUI-User-Id` |
-| **Langfuse** | `enable_langfuse=True`、`langfuse_public_key`、`langfuse_secret_key` | 安装：`uv sync --extra observability` |
+| **Langfuse** | `enable_langfuse=True`、`langfuse_public_key`、`langfuse_secret_key` | 安装：`uv sync --extra observability`（或 `uv sync --all-extras` 安装全部可选依赖） |
 | **RAGAS** | `enable_ragas=True`、`ragas_sample_rate`、`ragas_metrics` | 与 Langfuse 同时启用时会将分数写入 Langfuse |
 
 ### 为知识库定制提示词

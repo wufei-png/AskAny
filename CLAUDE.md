@@ -13,7 +13,10 @@ AskAny is a Chinese-optimized RAG (Retrieval-Augmented Generation) Q&A assistant
 uv python install 3.11 && uv python pin 3.11
 uv sync
 cp .env.example .env  # Configure database and API credentials
-# Optional: uv sync --extra observability  (Langfuse/RAGAS tracing). HanLP tokenizer uses PyTorch by default.
+# `uv sync` installs core dependencies only. For all optional extras (LightRAG + observability):
+#   uv sync --all-extras
+# Or install individually: uv sync --extra observability (Langfuse/RAGAS), uv sync --extra lightrag
+# HanLP tokenizer uses PyTorch by default.
 ```
 
 ### Database

@@ -14,6 +14,7 @@
 uv python install 3.11
 uv python pin 3.11
 uv sync
+# 可选：安装全部可选依赖（LightRAG、可观测性等）：uv sync --all-extras
 ```
 
 ### 2. 配置PostgreSQL

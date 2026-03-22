@@ -130,8 +130,9 @@ uv sync
 cp .env.example .env
 # Edit .env with database credentials and API endpoints
 
-# Optional: Langfuse + RAGAS observability
-uv sync --extra observability
+# Optional: `uv sync` is core deps only. Install everything (LightRAG + Langfuse/RAGAS):
+#   uv sync --all-extras
+# Or observability only: uv sync --extra observability
 ```
 
 ### Database Setup
@@ -365,7 +366,7 @@ All settings can be configured in `askany/config.py` or via environment variable
 |------|-----------------------------------|-------|
 | **LightRAG** | `enable_lightrag=True`, `lightrag_working_dir`, `lightrag_query_mode` | Run `python -m askany.rag.lightrag_ingest --ingest-markdown --ingest-json` before enabling |
 | **Mem0** | `enable_mem0=True`, `mem0_collection_name`, `mem0_top_k` | Set `ENABLE_FORWARD_USER_INFO_HEADERS=true` in OpenWebUI so `X-OpenWebUI-User-Id` is sent |
-| **Langfuse** | `enable_langfuse=True`, `langfuse_public_key`, `langfuse_secret_key` | Install: `uv sync --extra observability` |
+| **Langfuse** | `enable_langfuse=True`, `langfuse_public_key`, `langfuse_secret_key` | Install: `uv sync --extra observability` (or `uv sync --all-extras` for all optional deps) |
 | **RAGAS** | `enable_ragas=True`, `ragas_sample_rate`, `ragas_metrics` | Pushes scores into Langfuse when both enabled |
 
 ### Customizing Prompts for Your Knowledge Base

@@ -44,7 +44,7 @@ uv python install 3.11
 # 固定项目使用的 Python 版本
 uv python pin 3.11
 
-# 同步依赖（安装/更新所有依赖）
+# 同步依赖（默认仅主依赖；安装全部可选依赖用 uv sync --all-extras）
 uv sync
 
 # 添加新依赖
