@@ -48,6 +48,10 @@ class FinalAnswerGenerator:
         Args:
             llm: LangChain ChatOpenAI instance. If None, creates one from settings.
         """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
         if llm is None:
             api_base = settings.openai_api_base
             api_key = settings.openai_api_key if settings.openai_api_key else None
@@ -65,10 +69,10 @@ class FinalAnswerGenerator:
                 callbacks=[_lf_handler] if _lf_handler else None,
             )
 
-            print(f"Using LLM: {type(self.llm)}")
-            print(f"API Base: {api_base}")
-            print(f"Model: {model}")
-            print("-" * 80)
+            logger.info(f"Using LLM: {type(self.llm)}")
+            logger.info(f"API Base: {api_base}")
+            logger.info(f"Model: {model}")
+            logger.info("-" * 80)
         else:
             self.llm = llm
 
@@ -175,7 +179,7 @@ class FinalAnswerGenerator:
         # 使用普通的 completion 接口，不使用 structured output
         try:
             response = self.llm.invoke(messages)
-            print(f"Response: {response}")
+            logger.debug(f"Response: {response}")
         except Exception as e:
             # Handle LengthFinishReasonError and other parsing errors
             error_msg = str(e)
@@ -214,17 +218,17 @@ class FinalAnswerGenerator:
         reasoning = getattr(response, "reasoning", None)
 
         # 打印调试信息
-        print(
+        logger.debug(
             f"Completion response - answer length: {len(summary_answer) if summary_answer else 0}"
         )
         if reasoning:
-            print(f"Reasoning length: {len(reasoning)}")
+            logger.debug(f"Reasoning length: {len(reasoning)}")
 
         # 尝试获取 token usage（如果可用）
         if hasattr(response, "response_metadata"):
             token_usage = response.response_metadata.get("token_usage", {})
             if token_usage:
-                print(f"Token Usage: {token_usage}")
+                logger.debug(f"Token Usage: {token_usage}")
 
         return (summary_answer, reasoning)
 
@@ -383,7 +387,7 @@ class FinalAnswerGenerator:
             )
 
         formatted_input = self._format_not_complete_answer_input(query, truncated_nodes)
-        print(f"Formatted input: {formatted_input}")
+        logger.debug(f"Formatted input: {formatted_input}")
         # Check and truncate messages if needed
         prompts = get_prompts()
         messages = [
@@ -419,7 +423,7 @@ class FinalAnswerGenerator:
         # 使用普通的 completion 接口，不使用 structured output
         try:
             response = self.llm.invoke(messages)
-            print(f"Response: {response}")
+            logger.debug(f"Response: {response}")
         except Exception as e:
             # Handle LengthFinishReasonError and other parsing errors
             error_msg = str(e)
@@ -458,17 +462,17 @@ class FinalAnswerGenerator:
         reasoning = getattr(response, "reasoning", None)
 
         # 打印调试信息
-        print(
+        logger.debug(
             f"Completion response - answer length: {len(summary_answer) if summary_answer else 0}"
         )
         if reasoning:
-            print(f"Reasoning length: {len(reasoning)}")
+            logger.debug(f"Reasoning length: {len(reasoning)}")
 
         # 尝试获取 token usage（如果可用）
         if hasattr(response, "response_metadata"):
             token_usage = response.response_metadata.get("token_usage", {})
             if token_usage:
-                print(f"Token Usage: {token_usage}")
+                logger.debug(f"Token Usage: {token_usage}")
 
         return (summary_answer, reasoning)
 

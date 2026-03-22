@@ -60,10 +60,10 @@ class KeywordExtractorFromLLM:
                 timeout=settings.llm_timeout,
             )
 
-            print(f"Using LLM: {type(self.client)}")
-            print(f"API Base: {api_base}")
-            print(f"Model: {model}")
-            print("-" * 80)
+            logger.info(f"Using LLM: {type(self.client)}")
+            logger.info(f"API Base: {api_base}")
+            logger.info(f"Model: {model}")
+            logger.info("-" * 80)
         else:
             self.client = client
 
@@ -320,10 +320,10 @@ if __name__ == "__main__":
     api_key = settings.openai_api_key if settings.openai_api_key else None
     model = settings.openai_model
 
-    print("Using LLM: KeywordExtractorFromLLM")
-    print(f"API Base: {api_base}")
-    print(f"Model: {model}")
-    print("-" * 80)
+    logger.info("Using LLM: KeywordExtractorFromLLM")
+    logger.info(f"API Base: {api_base}")
+    logger.info(f"Model: {model}")
+    logger.info("-" * 80)
 
     # Test KeywordExtractorFromLLM
     extractor = KeywordExtractorFromLLM(max_keywords=3)

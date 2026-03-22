@@ -1,9 +1,12 @@
 """Local file search tool for finding and extracting content from files."""
 
+import logging
 import os
 import re
 import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from llama_index.core.node_parser import MarkdownNodeParser
 
@@ -31,11 +34,11 @@ class LocalFileSearchTool:
             self.base_path = Path(base_path).resolve()
         else:
             self.base_path = Path.cwd()
-        print(f"Base path: {self.base_path}")
+        logger.info(f"Base path: {self.base_path}")
         self.markdown_parser = MarkdownNodeParser.from_defaults()
         # 查找所有markdown文件
         self.markdown_files = self._find_markdown_files(self.base_path)
-        print(f"Found {len(self.markdown_files)} markdown files")
+        logger.info(f"Found {len(self.markdown_files)} markdown files")
         self.expand_context_ratio = settings.expand_context_ratio
         self.keyword_expand_ratio = settings.keyword_expand_ratio
 
@@ -97,7 +100,7 @@ class LocalFileSearchTool:
 
             return (start_line, end_line)
         except Exception as e:
-            print(f"Error reading file {file_path}: {e}")
+            logger.error(f"Error reading file {file_path}: {e}")
             return None
 
     def _expand_context_by_line_num(
@@ -179,7 +182,7 @@ class LocalFileSearchTool:
                 lines = f.readlines()
             return len(lines)
         except Exception as e:
-            print(f"Error reading file {file_path}: {e}")
+            logger.error(f"Error reading file {file_path}: {e}")
             return None
 
     def get_file_content_by_lines(
@@ -217,7 +220,7 @@ class LocalFileSearchTool:
             content_lines = lines[start_line - 1 : end_line]
             return "".join(content_lines)
         except Exception as e:
-            print(f"Error reading file {file_path}: {e}")
+            logger.error(f"Error reading file {file_path}: {e}")
             return None
 
     def _filter_results_by_tokens(
@@ -253,7 +256,7 @@ class LocalFileSearchTool:
             total_tokens += content_tokens
 
         if len(filtered_results) < len(results):
-            print(
+            logger.info(
                 f"Filtered results due to token limit: original={len(results)} results, "
                 f"kept={len(filtered_results)} results, total_tokens={total_tokens}/{max_tokens}"
             )
@@ -312,7 +315,7 @@ class LocalFileSearchTool:
         total_original = sum(len(results) for results in all_results.values())
         total_filtered = sum(len(results) for results in filtered_results.values())
         if total_filtered < total_original:
-            print(
+            logger.info(
                 f"Filtered all results due to token limit: original={total_original} results, "
                 f"kept={total_filtered} results, total_tokens={total_tokens}/{max_tokens}"
             )
@@ -364,7 +367,7 @@ class LocalFileSearchTool:
                 filtered_results[keyword] = results
 
         if filtered_keywords:
-            print(
+            logger.info(
                 f"Filtered {len(filtered_keywords)} keywords due to limits: {filtered_keywords}"
             )
 
@@ -535,7 +538,7 @@ class LocalFileSearchTool:
                     )
 
                     if not expanded:
-                        print(
+                        logger.debug(
                             f"DEBUG: expand_context returned None for line_text='{line_text[:50]}...' at line_num={line_num} in file={file_path_str}"
                         )
                         # 尝试直接使用已知的行号来扩展上下文
@@ -547,7 +550,7 @@ class LocalFileSearchTool:
                             expand_lines=expand_lines,
                         )
                         if expanded:
-                            print(
+                            logger.debug(
                                 f"DEBUG: _expand_context_by_line_num succeeded for line_num={line_num}"
                             )
 
@@ -562,7 +565,7 @@ class LocalFileSearchTool:
                             results[keyword].append(expanded)
 
             except Exception as e:
-                print(f"Error searching in file {file_path}: {e}")
+                logger.error(f"Error searching in file {file_path}: {e}")
                 continue
 
         # 对每个关键字的结果，合并同一文件中重叠的结果
@@ -1013,7 +1016,7 @@ class LocalFileSearchTool:
                 "content": block_content,
             }
         except Exception as e:
-            print(f"Error expanding markdown block in {file_path}: {e}")
+            logger.error(f"Error expanding markdown block in {file_path}: {e}")
             # 如果出错，回退到原始行号范围
             # 检查并修正 end_line 是否超过文件行数
             file_line_count = self.get_file_line_count(file_path)
@@ -1115,7 +1118,7 @@ class LocalFileSearchTool:
             markdown_files = list(set(markdown_files))
             markdown_files.sort()
         except Exception as e:
-            print(f"Error finding markdown files in {directory}: {e}")
+            logger.error(f"Error finding markdown files in {directory}: {e}")
 
         return markdown_files
 
@@ -1123,8 +1126,8 @@ class LocalFileSearchTool:
 if __name__ == "__main__":
     # Test LocalFileSearchTool
     tool = LocalFileSearchTool(settings.local_file_search_dir)
-    print("Testing LocalFileSearchTool")
-    print("-" * 80)
+    logger.info("Testing LocalFileSearchTool")
+    logger.info("-" * 80)
 
     # Test search_by_keywords
     # print("Test 1: search_by_keywords")
@@ -1182,69 +1185,71 @@ if __name__ == "__main__":
     # print("-" * 80)
     # raise Exception("Stop here")
 
-    print("Test 1: search_by_keywords by markdown mode")
+    logger.info("Test 1: search_by_keywords by markdown mode")
     keywords = ["五分量"]
     result = tool.search_by_keywords(keywords)
-    print(f"Search results for keywords {keywords}:")
+    logger.info(f"Search results for keywords {keywords}:")
     for keyword, matches in result.items():
-        print(f"  Keyword: {keyword}")
-        print(f"  Matches: {len(matches)}")
+        logger.info(f"  Keyword: {keyword}")
+        logger.info(f"  Matches: {len(matches)}")
         for match in matches:  # Show first 2 matches
-            print(f"    File: {match['file_path']}")
-            print(f"    Lines: {match['start_line']}-{match['end_line']}")
-            # print(f"    Content preview: {match['content'][:-1]}")
+            logger.info(f"    File: {match['file_path']}")
+            logger.info(f"    Lines: {match['start_line']}-{match['end_line']}")
+            # logger.info(f"    Content preview: {match['content'][:-1]}")
     raise Exception("Stop here")
 
-    print("Test 1: search_by_keywords by markdown mode")
+    logger.info("Test 1: search_by_keywords by markdown mode")
     keywords = ["ips start failed"]
     result = tool.search_by_keywords(keywords, expand_mode="markdown")
-    print(f"Search results for keywords {keywords}:")
+    logger.info(f"Search results for keywords {keywords}:")
     for keyword, matches in result.items():
-        print(f"  Keyword: {keyword}")
-        print(f"  Matches: {len(matches)}")
+        logger.info(f"  Keyword: {keyword}")
+        logger.info(f"  Matches: {len(matches)}")
         for match in matches:  # Show first 2 matches
-            print(f"    File: {match['file_path']}")
-            print(f"    Lines: {match['start_line']}-{match['end_line']}")
-            print(f"    Content preview: {match['content'][:-1]}")
-    print("-" * 80)
+            logger.info(f"    File: {match['file_path']}")
+            logger.info(f"    Lines: {match['start_line']}-{match['end_line']}")
+            logger.info(f"    Content preview: {match['content'][:-1]}")
+    logger.info("-" * 80)
 
     # Test find_text_line_range (if we have a test file)
-    print("Test 2: find_text_line_range")
+    logger.info("Test 2: find_text_line_range")
     # This would require an actual file to test, so we'll skip if file doesn't exist
     test_file = "data/markdown/xxx-FAQ-1-break-changes.md"
     test_text = "xxx 的重大改动"
     line_range = tool.find_text_line_range(test_text, test_file)
     if line_range:
-        print(f"Found text '{test_text}' at lines {line_range[0]}-{line_range[1]}")
+        logger.info(
+            f"Found text '{test_text}' at lines {line_range[0]}-{line_range[1]}"
+        )
     else:
-        print(f"Text '{test_text}' not found in file")
-    print("-" * 80)
+        logger.info(f"Text '{test_text}' not found in file")
+    logger.info("-" * 80)
 
     # Test expand_context with markdown mode
-    print("Test 3: expand_context with markdown mode")
+    logger.info("Test 3: expand_context with markdown mode")
     test_file = "data/markdown/break-changes.md"
     test_text = "此更新会添加jobs表的一个字段"
     line_range = tool.expand_context(test_text, test_file, expand_mode="markdown")
     if line_range:
-        print(
+        logger.info(
             f"Found text '{test_text}' at lines {line_range['start_line']}-{line_range['end_line']}"
         )
-        print(f"Content preview: {line_range['content'][:-1]}")
+        logger.info(f"Content preview: {line_range['content'][:-1]}")
     else:
-        print(f"Text '{test_text}' not found in file")
-    print("-" * 80)
+        logger.info(f"Text '{test_text}' not found in file")
+    logger.info("-" * 80)
 
     # Test expand_context with ratio mode
-    print("Test 4: expand_context with ratio mode")
+    logger.info("Test 4: expand_context with ratio mode")
     test_file = "data/markdown/break-changes.md"
     test_text = "此更新会添加jobs表的一个字段"
     line_range = tool.expand_context(
         test_text, test_file, expand_mode="ratio", expand_ratio=5
     )
     if line_range:
-        print(
+        logger.info(
             f"Found text '{test_text}' at lines {line_range['start_line']}-{line_range['end_line']}"
         )
-        print(f"Content preview: {line_range['content'][:-1]}")
+        logger.info(f"Content preview: {line_range['content'][:-1]}")
     else:
-        print(f"Text '{test_text}' not found in file")
+        logger.info(f"Text '{test_text}' not found in file")

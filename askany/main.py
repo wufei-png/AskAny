@@ -421,7 +421,7 @@ def main():
     limit_cpu_cores(args.cpu_cores if args.cpu_cores is not None else None)
 
     device = get_device()
-    print(f"Using device: {device}")
+    logger.info(f"Using device: {device}")
     # Initialize LLM and embedding models once
     llm, embed_model = initialize_llm()
     # After ingestion, check database if requested
@@ -435,41 +435,41 @@ def main():
 
     elif args.create_index:
         # Create HNSW indexes for vector stores
-        print("Creating HNSW indexes for vector stores...")
+        logger.info("Creating HNSW indexes for vector stores...")
         vector_store_manager = VectorStoreManager(embed_model, llm=llm)
 
         # Initialize indexes first
         try:
             vector_store_manager.initialize_faq_index()
-            print("FAQ vector store initialized")
+            logger.info("FAQ vector store initialized")
         except Exception as e:
             logger.warning(f"Could not initialize FAQ vector store: {e}")
 
         try:
             vector_store_manager.initialize_docs_index()
-            print("Docs vector store initialized")
+            logger.info("Docs vector store initialized")
         except Exception as e:
             logger.warning(f"Could not initialize docs vector store: {e}")
 
         # Create indexes
         try:
             vector_store_manager.create_faq_hnsw_index()
-            print("FAQ HNSW index created successfully")
+            logger.info("FAQ HNSW index created successfully")
         except Exception as e:
             logger.error(f"Failed to create FAQ HNSW index: {e}")
 
         try:
             vector_store_manager.create_docs_hnsw_index()
-            print("Docs HNSW index created successfully")
+            logger.info("Docs HNSW index created successfully")
         except Exception as e:
             logger.error(f"Failed to create docs HNSW index: {e}")
 
-        print("Index creation completed!")
+        logger.info("Index creation completed!")
 
     elif args.query:
         # Query nodes from vector store
         if not args.query_text:
-            print("Error: --query-text is required when using --query")
+            logger.error("--query-text is required when using --query")
             parser.print_help()
             return
 
@@ -502,7 +502,7 @@ def main():
         try:
             vector_store_manager.initialize_faq_index()
             vector_store_manager.initialize_docs_index()
-            print("Using separate indexes for FAQ and docs")
+            logger.info("Using separate indexes for FAQ and docs")
         except Exception as e:
             # Fallback to legacy single index
             logger.error(f"Separate indexes not available, using legacy index: {e}")
@@ -533,7 +533,7 @@ def main():
         # Initialize shared web search tool
         try:
             shared_web_search_tool = WebSearchTool()
-            print("Shared WebSearchTool initialized")
+            logger.info("Shared WebSearchTool initialized")
         except ImportError:
             logger.warning("WebSearchTool not available, web search will be disabled")
             shared_web_search_tool = None
@@ -546,7 +546,7 @@ def main():
             base_path=base_path,
             keyword_extractor=keyword_extractor.GetKeywordExtractorFromTFIDF(),
         )
-        print("Shared LocalFileSearchTool initialized")
+        logger.info("Shared LocalFileSearchTool initialized")
 
         # Create AgentWorkflow (LangGraph version) with shared tools
         # Use Settings.llm which is the underlying LLM instance (unwrapped if AutoRetryVLLM)
@@ -565,7 +565,7 @@ def main():
             web_search_tool=agent_workflow.web_search_tool,
             reranker=agent_workflow.reranker,
         )
-        print("AgentWorkflow (deep search) initialized")
+        logger.info("AgentWorkflow (deep search) initialized")
 
         # Create simple agent (min_langchain_agent) with shared tools
         from askany.workflow.min_langchain_agent import create_agent_with_tools
@@ -577,21 +577,21 @@ def main():
             llm_instance=llm,
             keyword_extractor=keyword_extractor,
         )
-        print("Simple agent initialized")
+        logger.info("Simple agent initialized")
 
         # Start server with vector_store_manager for hot updates
-        print(f"Starting API server on {settings.api_host}:{settings.api_port}")
-        print(
+        logger.info(f"Starting API server on {settings.api_host}:{settings.api_port}")
+        logger.info(
             f"OpenAPI schema available at: http://{settings.api_host}:{settings.api_port}/openapi.json"
         )
-        print(
+        logger.info(
             f"FAQ hot update endpoint: http://{settings.api_host}:{settings.api_port}/v1/update_faqs"
         )
-        print("Model selection:")
-        print(
+        logger.info("Model selection:")
+        logger.info(
             "  - Models with '-deepsearch' suffix: Use AgentWorkflow (complex workflow)"
         )
-        print("  - Other models: Use simple agent (fast workflow)")
+        logger.info("  - Other models: Use simple agent (fast workflow)")
         run_server(
             router,
             vector_store_manager,

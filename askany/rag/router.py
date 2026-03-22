@@ -355,7 +355,9 @@ def create_query_router(
             similarity_top_k=settings.docs_similarity_top_k,
             ensemble_weights=settings.docs_ensemble_weights,
         )
-        print("Docs query engine created with ensemble retriever (keyword + vector)")
+        logger.info(
+            "Docs query engine created with ensemble retriever (keyword + vector)"
+        )
     elif docs_vector_index:
         # Docs vector index exists but no keyword index (vector-only, backward compatible)
         docs_query_engine = RAGQueryEngine(
@@ -363,7 +365,7 @@ def create_query_router(
             llm=llm,
             similarity_top_k=settings.docs_similarity_top_k,
         )
-        print("Docs query engine created with vector-only retrieval")
+        logger.info("Docs query engine created with vector-only retrieval")
     else:
         raise ValueError("No docs vector index available. Please run --ingest first.")
 
@@ -385,7 +387,7 @@ def create_query_router(
             logger.info(
                 "FAQ query engine created with ensemble retriever (keyword + vector + rerank)"
             )
-            print(
+            logger.info(
                 "FAQ query engine created with ensemble retriever (keyword + vector + rerank)"
             )
         except Exception as e:
@@ -393,7 +395,7 @@ def create_query_router(
             raise
     elif faq_vector_index:
         # FAQ vector index exists but no keyword index
-        print("Warning: No FAQ keyword index found, FAQ will use vector-only retrieval")
+        logger.warning("No FAQ keyword index found, FAQ will use vector-only retrieval")
         faq_query_engine = RAGQueryEngine(
             index=faq_vector_index,
             llm=llm,
@@ -412,18 +414,18 @@ def create_query_router(
                 ensemble_weights=settings.faq_ensemble_weights,
                 device=device,
             )
-            print(
+            logger.info(
                 "FAQ query engine created with legacy indexes (keyword + vector + rerank)"
             )
         elif legacy_index:
-            print("Warning: Using legacy index for FAQ (vector-only)")
+            logger.error("Using legacy index for FAQ (vector-only)")
             faq_query_engine = RAGQueryEngine(
                 index=legacy_index,
                 llm=llm,
                 similarity_top_k=settings.faq_vector_only_similarity_top_k,
             )
         else:
-            print("Warning: No FAQ index found, FAQ queries will be disabled")
+            logger.error("No FAQ index found, FAQ queries will be disabled")
 
     # Create router
     logger.info("Creating QueryRouter instance...")

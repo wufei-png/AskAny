@@ -77,7 +77,7 @@ class MarkdownParser:
         """
         self.embedding_model = embedding_model
         self.split_mode = split_mode.lower()
-        print(f"Split mode: {self.split_mode}")
+        logger.info(f"Split mode: {self.split_mode}")
         # Note: chunk_size and chunk_overlap are kept for backward compatibility
         # but MarkdownNodeParser doesn't support these parameters
         self.chunk_size = chunk_size
@@ -187,7 +187,7 @@ class MarkdownParser:
             documents = []
             if markdown_nodes:
                 # Convert all markdown nodes to documents at once
-                print(f"Markdown node text: {markdown_nodes[0].text}")
+                logger.debug(f"Markdown node text: {markdown_nodes[0].text}")
                 temp_docs = [
                     Document(
                         text=md_node.text,
@@ -266,7 +266,6 @@ class MarkdownParser:
         if self.split_mode == "markdown":
             # Use only MarkdownNodeParser
             nodes = self.markdown_parser.get_nodes_from_documents([doc])
-            print(f"Parsed {len(nodes)} Markdown nodes")
             logger.info(f"Parsed {len(nodes)} Markdown nodes")
         elif self.split_mode == "semantic":
             # Use only SemanticSplitterNodeParser
@@ -431,7 +430,6 @@ class MarkdownParser:
             except Exception as e:
                 logger.error(f"Error parsing {md_file}: {e}", exc_info=True)
                 files_iter.set_postfix(file=f"{md_file.name} (ERROR)")
-                print(f"Error parsing {md_file}: {e}")
 
         logger.info(
             f"Total nodes created from {len(markdown_files)} markdown file(s): {len(documents)}"
@@ -524,7 +522,6 @@ class MarkdownParser:
             except Exception as e:
                 logger.error(f"Error parsing {md_file}: {e}", exc_info=True)
                 files_iter.set_postfix(file=f"{md_file.name} (ERROR)")
-                print(f"Error parsing {md_file}: {e}")
 
         logger.info(
             f"Total nodes created from {len(markdown_files)} markdown file(s): {len(nodes)}"

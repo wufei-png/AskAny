@@ -31,13 +31,13 @@ def ingest_documents(embed_model, llm=None):
     faq_docs = []
     docs_docs = []
 
-    print("Parsing JSON files (FAQ)...")
+    logger.info("Parsing JSON files (FAQ)...")
     # Parse JSON files (FAQ)
     json_parser = JSONParser()
     json_dir = Path(settings.json_dir)
     if json_dir.exists():
         json_docs = json_parser.parse_directory(json_dir)
-        print(f"Parsed {len(json_docs)} JSON FAQ documents")
+        logger.info(f"Parsed {len(json_docs)} JSON FAQ documents")
 
         # Log detailed information about parsed documents
         logger.info(
@@ -102,7 +102,7 @@ def ingest_documents(embed_model, llm=None):
     #     vector_store_manager.create_faq_keyword_index(faq_docs, llm=keyword_llm)
     #     print(f"Created FAQ keyword index with {len(faq_docs)} FAQ documents")
 
-    print("Parsing Markdown files (Docs)...")
+    logger.info("Parsing Markdown files (Docs)...")
     # Parse Markdown files (Docs)
     markdown_dir = Path(settings.markdown_dir)
     if markdown_dir.exists():
@@ -117,7 +117,7 @@ def ingest_documents(embed_model, llm=None):
         # Try to load from cache
         if cache_file.exists():
             try:
-                print(f"Loading cached docs nodes from {cache_file}...")
+                logger.info(f"Loading cached docs nodes from {cache_file}...")
                 with open(cache_file, "rb") as f:
                     try:
                         docs_docs = pickle.load(f)
@@ -135,7 +135,7 @@ def ingest_documents(embed_model, llm=None):
                             raise ValueError(
                                 "Cache file is neither valid pickle nor JSON"
                             ) from e
-                print(f"Loaded {len(docs_docs)} cached Markdown nodes")
+                logger.info(f"Loaded {len(docs_docs)} cached Markdown nodes")
                 logger.info(
                     f"[ingest_documents] Loaded {len(docs_docs)} docs nodes from cache: {cache_file}"
                 )
@@ -154,15 +154,15 @@ def ingest_documents(embed_model, llm=None):
                 embed_model, split_mode=settings.markdown_split_mode
             )
             markdown_nodes = markdown_parser.parse_directory(markdown_dir)
-            print(f"Parsed {len(markdown_nodes)} Markdown nodes")
+            logger.info(f"Parsed {len(markdown_nodes)} Markdown nodes")
             docs_docs = markdown_nodes
 
             # Save to cache
             try:
-                print(f"Saving docs nodes to cache: {cache_file}...")
+                logger.info(f"Saving docs nodes to cache: {cache_file}...")
                 with open(cache_file, "wb") as f:
                     pickle.dump(docs_docs, f)
-                print(f"Saved {len(docs_docs)} nodes to cache")
+                logger.info(f"Saved {len(docs_docs)} nodes to cache")
                 logger.info(
                     f"[ingest_documents] Saved {len(docs_docs)} docs nodes to cache: {cache_file}"
                 )
@@ -173,30 +173,30 @@ def ingest_documents(embed_model, llm=None):
 
     # Initialize and add docs documents to separate docs vector store
     if docs_docs:
-        print("Initializing docs vector store...")
+        logger.info("Initializing docs vector store...")
         vector_store_manager.initialize_docs_index()
-        print("Adding documentation to docs vector store...")
+        logger.info("Adding documentation to docs vector store...")
         vector_store_manager.add_docs_nodes(docs_docs)
-        print(f"Added {len(docs_docs)} nodes to docs vector store")
+        logger.info(f"Added {len(docs_docs)} nodes to docs vector store")
         # Only create keyword index if enabled in config
         if settings.using_docs_keyword_index:
-            print("Creating keyword index for docs...")
+            logger.info("Creating keyword index for docs...")
             # Use llm from Settings if available, otherwise use the passed llm
             keyword_llm = llm if llm else Settings.llm
             if keyword_llm:
                 vector_store_manager.create_docs_keyword_index(
                     docs_docs, llm=keyword_llm
                 )
-                print(f"Created docs keyword index with {len(docs_docs)} nodes")
+                logger.info(f"Created docs keyword index with {len(docs_docs)} nodes")
             else:
-                print(
-                    "Warning: No LLM available, skipping docs keyword index creation. "
+                logger.error(
+                    "No LLM available, skipping docs keyword index creation. "
                     "Keyword index requires LLM for keyword extraction."
                 )
         else:
-            print(
+            logger.info(
                 "Skipping docs keyword index creation (using_docs_keyword_index=False)"
             )
 
-    print("Document ingestion completed!")
+    logger.info("Document ingestion completed!")
     return vector_store_manager

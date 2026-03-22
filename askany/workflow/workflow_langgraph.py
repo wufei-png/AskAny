@@ -897,7 +897,7 @@ class AgentWorkflow:
 
         # TODO first use tokens or keywords?
         # First attempt: search using extracted keywords
-        print("keywords", keywords)
+        logger.debug("keywords: %s", keywords)
         keyword_nodes_tmp = (
             self.local_file_search.search_keyword_using_binary_algorithm(keywords)
         )
@@ -915,15 +915,15 @@ class AgentWorkflow:
 
         #     keyword_nodes = self._search_results_to_nodes(keyword_nodes_tmp)
         #     logger.debug("使用tokens搜索完成 - 节点数: %d", len(keyword_nodes))
-        print("len(nodes): ", len(nodes))
-        print("len(keyword_nodes): ", len(keyword_nodes))
-        print(f"nodes: {nodes}")
-        print(f"keyword_nodes: {keyword_nodes}")
+        logger.debug("len(nodes): %d", len(nodes))
+        logger.debug("len(keyword_nodes): %d", len(keyword_nodes))
+        logger.debug("nodes: %s", nodes)
+        logger.debug("keyword_nodes: %s", keyword_nodes)
         # raise Exception("Stop here")
         if keyword_nodes and len(keyword_nodes) > 0:
             nodes = self._merge_nodes(nodes, keyword_nodes)
             logger.debug("合并关键词搜索结果后节点数: %d", len(nodes))
-        print("nodes: ", nodes)
+        logger.debug("nodes: %s", nodes)
         # Check if web search is also needed (when both web and rag are true)
         if need_web and self.web_search_tool:
             logger.debug("同时需要网络搜索，执行网络搜索")
@@ -2120,8 +2120,8 @@ class AgentWorkflow:
                             # 内容重复，合并：取最小 start_line 和最大 end_line
                             merged_start = min(current_start, next_start)
                             merged_end = max(current_end, next_end)
-                            print(
-                                "success merge",
+                            logger.debug(
+                                "success merge: path=%s, current=[%d-%d], next=[%d-%d], merged=[%d-%d]",
                                 current_path,
                                 current_start,
                                 current_end,

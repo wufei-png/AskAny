@@ -1,6 +1,10 @@
 """RAG query engine for document retrieval and generation."""
 
+from logging import getLogger
+
 from llama_index.core import KeywordTableIndex, QueryBundle, VectorStoreIndex
+
+logger = getLogger(__name__)
 from llama_index.core.llms import LLM
 from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.response_synthesizers import ResponseMode
@@ -80,13 +84,13 @@ class KeywordVectorAppendRetriever(BaseRetriever):
                 return keyword_nodes
             keyword_table = index_struct.table
         except Exception as e:
-            print(f"Error accessing keyword table: {e}")
+            logger.error(f"Error accessing keyword table: {e}")
             return keyword_nodes
 
         # 只查找 keyword_nodes 中节点对应的关键词，避免遍历整个索引表
         # 收集所有需要查找的节点ID
         node_ids_to_find = {node.node.node_id for node in keyword_nodes}
-        print("node_ids_to_find: ", node_ids_to_find)
+        logger.debug("node_ids_to_find: %s", node_ids_to_find)
         # with open("node_ids_to_find.txt", "w", encoding="utf-8") as f:  f.write(str(node_ids_to_find))
         # with open("keyword_table.txt", "w", encoding="utf-8") as f:  f.write(str(keyword_table))
         # 只遍历包含这些节点ID的关键词，构建反向映射：node_id -> [keywords]
@@ -99,7 +103,7 @@ class KeywordVectorAppendRetriever(BaseRetriever):
                     if node_id not in node_to_keywords:
                         node_to_keywords[node_id] = []
                     node_to_keywords[node_id].append(keyword)
-        print("node_to_keywords: ", node_to_keywords)
+        logger.debug("node_to_keywords: %s", node_to_keywords)
         # 按关键词分组节点：keyword -> [nodes]
         keyword_to_nodes: dict[str, list[NodeWithScore]] = {}
         nodes_without_keywords = []
@@ -117,7 +121,7 @@ class KeywordVectorAppendRetriever(BaseRetriever):
                     if keyword not in keyword_to_nodes:
                         keyword_to_nodes[keyword] = []
                     keyword_to_nodes[keyword].append(node)
-        print("keyword_to_nodes: ", keyword_to_nodes)
+        logger.debug("keyword_to_nodes: %s", keyword_to_nodes)
         # 对每个关键词进行限制检查
         # 使用字典按node_id存储节点，避免重复（一个节点可能对应多个关键词）
         filtered_nodes_dict: dict[str, NodeWithScore] = {}
@@ -136,15 +140,22 @@ class KeywordVectorAppendRetriever(BaseRetriever):
 
             file_count = len(unique_files)
             matches_count = len(nodes)
-            print(
-                f"keyword: {keyword}, file_count: {file_count}, matches_count: {matches_count}"
+            logger.debug(
+                "keyword: %s, file_count: %s, matches_count: %s",
+                keyword,
+                file_count,
+                matches_count,
             )
             # 如果超过限制，过滤掉该关键词对应的所有节点
             if file_count > max_file_num or matches_count > max_matches_num:
                 filtered_keywords.append(keyword)
-                print(
-                    f"Filtered keyword '{keyword}': file_count={file_count} (max={max_file_num}), "
-                    f"matches_count={matches_count} (max={max_matches_num})"
+                logger.info(
+                    "Filtered keyword '%s': file_count=%s (max=%s), matches_count=%s (max=%s)",
+                    keyword,
+                    file_count,
+                    max_file_num,
+                    matches_count,
+                    max_matches_num,
                 )
             else:
                 # 保留该关键词的节点（使用node_id去重，因为一个节点可能对应多个关键词）
@@ -161,10 +172,12 @@ class KeywordVectorAppendRetriever(BaseRetriever):
 
         # 转换为列表
         filtered_nodes = list(filtered_nodes_dict.values())
-        print("filtered_nodes: ", filtered_nodes)
+        logger.debug("filtered_nodes: %s", filtered_nodes)
         if filtered_keywords:
-            print(
-                f"Filtered {len(filtered_keywords)} keywords due to limits: {filtered_keywords}"
+            logger.info(
+                "Filtered %s keywords due to limits: %s",
+                len(filtered_keywords),
+                filtered_keywords,
             )
 
         return filtered_nodes
@@ -194,7 +207,7 @@ class KeywordVectorAppendRetriever(BaseRetriever):
         vector_node_ids = {node.node.node_id for node in filtered_vector_nodes}
 
         # Filter keyword nodes by limits (file count and match count)
-        print("keyword_nodes: ", keyword_nodes[0].node.node_id)
+        logger.debug("keyword_nodes: %s", keyword_nodes[0].node.node_id)
         keyword_nodes = self._filter_keyword_nodes_by_limits(keyword_nodes)
         keyword_nodes = keyword_nodes[: self._similarity_top_k]
         # Add keyword nodes that are not already in vector results
@@ -205,9 +218,9 @@ class KeywordVectorAppendRetriever(BaseRetriever):
             node.score = 1
         # Combine: vector results first (they are reranked and filtered), then keyword results
         combined_nodes = keyword_nodes_to_add + filtered_vector_nodes
-        print("combined_nodes: ", len(combined_nodes))
+        logger.debug("combined_nodes: %s", len(combined_nodes))
         for node in combined_nodes:
-            print(f"node: {node}")
+            logger.debug("node: %s", node)
         return combined_nodes
 
 

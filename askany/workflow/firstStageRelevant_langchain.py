@@ -99,10 +99,10 @@ class DirectAnswerGenerator:
                 callbacks=[_lf_handler] if _lf_handler else None,
             )
 
-            print(f"Using LLM: {type(self.llm)}")
-            print(f"API Base: {api_base}")
-            print(f"Model: {model}")
-            print("-" * 80)
+            logger.info(f"Using LLM: {type(self.llm)}")
+            logger.info(f"API Base: {api_base}")
+            logger.info(f"Model: {model}")
+            logger.info("-" * 80)
         else:
             self.llm = llm
 
@@ -150,9 +150,11 @@ class DirectAnswerGenerator:
                     frequency = self.keyword_extractor.get_frequency_in_freqfile(
                         keyword
                     )
-                    print(f"关键词 {keyword} 在word_freq.txt中出现，频率为 {frequency}")
+                    logger.info(
+                        f"关键词 {keyword} 在word_freq.txt中出现，频率为 {frequency}"
+                    )
                     if frequency <= settings.freq_in_rag_threshold:
-                        print(
+                        logger.warning(
                             f"关键词 {keyword} 在word_freq.txt中出现，且频率小于10，我们推翻了llm的判断，需要进行网络搜索"
                         )
                         result.can_direct_answer = False
@@ -207,10 +209,10 @@ class WebOrRagAnswerGenerator:
                 callbacks=[_lf_handler] if _lf_handler else None,
             )
 
-            print(f"Using LLM: {type(self.llm)}")
-            print(f"API Base: {api_base}")
-            print(f"Model: {model}")
-            print("-" * 80)
+            logger.info(f"Using LLM: {type(self.llm)}")
+            logger.info(f"API Base: {api_base}")
+            logger.info(f"Model: {model}")
+            logger.info("-" * 80)
         else:
             self.llm = llm
 
@@ -273,19 +275,21 @@ class WebOrRagAnswerGenerator:
         if result.need_rag_search and result.need_web_search:
             if have_extracted_keywords:
                 if keywords and len(keywords) > 0:
-                    print(
+                    logger.info(
                         "关键词提取有结果，通常来讲这种情况是用户想要知道一些业务知识，而不是通用知识，所以不需要进行网络搜索"
                     )
                     result.need_web_search = False
             else:
                 keywords = self.keyword_extractor.extract_keywords_set(query)
                 if keywords and len(keywords) > 0:
-                    print(
+                    logger.info(
                         "关键词提取有结果，通常来讲这种情况是用户想要知道一些业务知识，而不是通用知识，所以不需要进行网络搜索"
                     )
                     result.need_web_search = False
                 else:
-                    print("关键词提取没有结果，我们不推翻llm的判断，需要进行网络搜索")
+                    logger.info(
+                        "关键词提取没有结果，我们不推翻llm的判断，需要进行网络搜索"
+                    )
                     result.need_web_search = True
 
         return result
@@ -312,30 +316,30 @@ if __name__ == "__main__":
     web_rag_answer_generator = WebOrRagAnswerGenerator()
     query = "什么是激活率？"
     result = direct_answer.generate(query)
-    print(f"Result: {result}")
-    print(f"Can direct answer: {result.can_direct_answer}")
+    logger.info(f"Result: {result}")
+    logger.info(f"Can direct answer: {result.can_direct_answer}")
     # print(f"Reasoning: {result.reasoning}")
-    print("-" * 80)
+    logger.info("-" * 80)
     if not result.can_direct_answer:
         result = web_rag_answer_generator.generate(query)
-        print(f"{query} Result: {result}")
-        print(f"Need web search: {result.need_web_search}")
-        print(f"Need rag search: {result.need_rag_search}")
+        logger.info(f"{query} Result: {result}")
+        logger.info(f"Need web search: {result.need_web_search}")
+        logger.info(f"Need rag search: {result.need_rag_search}")
         # print(f"Reasoning: {result.reasoning}")
-        print("-" * 80)
+        logger.info("-" * 80)
     raise Exception("Stop here")
     result = web_rag_answer_generator.generate(
         """在中美当前的关系下，普通人如何投资美股？"""
     )
-    print(f"在中美当前的关系下，普通人如何投资美股？Result: {result}")
-    print(f"Need web search: {result.need_web_search}")
-    print(f"Need rag search: {result.need_rag_search}")
+    logger.info(f"在中美当前的关系下，普通人如何投资美股？Result: {result}")
+    logger.info(f"Need web search: {result.need_web_search}")
+    logger.info(f"Need rag search: {result.need_rag_search}")
     # print(f"Reasoning: {result.reasoning}")
-    print("-" * 80)
+    logger.info("-" * 80)
 
     result = web_rag_answer_generator.generate("""k8s如何重启deployment？""")
-    print(f"k8s如何重启deployment？Result: {result}")
-    print(f"Need web search: {result.need_web_search}")
-    print(f"Need rag search: {result.need_rag_search}")
+    logger.info(f"k8s如何重启deployment？Result: {result}")
+    logger.info(f"Need web search: {result.need_web_search}")
+    logger.info(f"Need rag search: {result.need_rag_search}")
     # print(f"Reasoning: {result.reasoning}")
-    print("-" * 80)
+    logger.info("-" * 80)
