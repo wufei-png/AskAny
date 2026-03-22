@@ -2,6 +2,7 @@
 
 import logging
 import sys
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -13,6 +14,7 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from askany.config import settings
+from askany.metrics import get_metrics
 from askany.workflow.SummaryFromLlm import SummaryFromLlm
 
 logger = logging.getLogger(__name__)
@@ -69,6 +71,12 @@ class WebSearchTool:
 
         logger.debug("Web search started - query: %s, engine: %s", query, self.engine)
 
+        metrics = get_metrics()
+        start_time = time.perf_counter()
+        status = "success"
+        prompt_tokens = 0
+        completion_tokens = 0
+
         # Prepare request data
         data = {
             "question": query,
@@ -108,6 +116,7 @@ class WebSearchTool:
                     response.status_code,
                     response.text,
                 )
+                status = "error"
                 return []
 
             # Parse response
@@ -117,11 +126,13 @@ class WebSearchTool:
                     "Web search API response missing 'data' field - response: %s",
                     result,
                 )
+                status = "error"
                 return []
 
             answer_text = result["data"]
             if not answer_text or not answer_text.strip():
                 logger.warning("Web search API returned empty answer")
+                status = "error"
                 return []
 
             # Extract token usage information
@@ -194,6 +205,8 @@ class WebSearchTool:
             logger.error(
                 "Web search API request timed out after %d seconds", self.timeout
             )
+            status = "timeout"
+            metrics.askany_websearch_timeout_total.labels(engine=self.engine).inc()
             return []
         except requests.exceptions.ConnectionError as e:
             logger.error(
@@ -201,15 +214,39 @@ class WebSearchTool:
                 self.api_url,
                 str(e),
             )
+            status = "connection_error"
+            metrics.askany_websearch_connection_error_total.labels(
+                engine=self.engine
+            ).inc()
             return []
         except requests.exceptions.RequestException as e:
             logger.error("Web search API request exception: %s", str(e))
+            status = "error"
             return []
         except Exception as e:
             logger.error(
                 "Unexpected error during web search: %s", str(e), exc_info=True
             )
+            status = "error"
             return []
+        finally:
+            duration = time.perf_counter() - start_time
+            metrics.askany_websearch_requests_total.labels(
+                engine=self.engine, status=status
+            ).inc()
+            metrics.askany_websearch_duration_seconds.labels(
+                engine=self.engine
+            ).observe(duration)
+            metrics.askany_websearch_results_count.labels(engine=self.engine).observe(
+                1 if status == "success" else 0
+            )
+            if prompt_tokens > 0 or completion_tokens > 0:
+                metrics.askany_websearch_tokens_total.labels(token_type="prompt").inc(
+                    prompt_tokens
+                )
+                metrics.askany_websearch_tokens_total.labels(
+                    token_type="completion"
+                ).inc(completion_tokens)
 
 
 if __name__ == "__main__":

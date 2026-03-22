@@ -8,6 +8,7 @@ except ImportError:
 import json
 import os
 import re
+import time
 from collections.abc import AsyncGenerator
 from datetime import datetime
 from logging import FileHandler, Formatter, getLogger
@@ -26,6 +27,7 @@ from askany.ingest.custom_keyword_index import (
     set_global_keyword_extractor,
 )
 from askany.ingest.keyword_extract_wrapper import KeywordExtractorWrapper
+from askany.metrics import get_metrics
 from askany.rag.lightrag_merge import merge_lightrag_with_llamaindex
 from askany.rag.query_parser import parse_query_filters
 from askany.rag.router import QueryRouter, QueryType
@@ -583,40 +585,52 @@ class AgentWorkflow:
         query = state.get("query", "")
         logger.debug("直接回答检查开始 - 查询: %s", query)
 
-        # Check if question can be answered directly
-        direct_answer_result = self.direct_answer_generator.generate(query)
-        logger.debug(
-            "直接回答检查完成 - 可以直接回答: %s",
-            direct_answer_result.can_direct_answer,
-        )
-
-        # Record middle result
-        middle_results = state.get("middle_results", [])
-        MiddleResultRecorder.record_direct_answer_check(
-            middle_results, direct_answer_result.can_direct_answer
-        )
-
-        if direct_answer_result.can_direct_answer:
-            logger.debug("问题可以直接回答，生成直接答案")
-            # Generate direct answer using LLM
-            answer, reasoning = self.final_answer_generator.generate_final_answer(
-                query, []
+        # Track node execution
+        metrics = get_metrics()
+        node_start = time.perf_counter()
+        try:
+            # Check if question can be answered directly
+            direct_answer_result = self.direct_answer_generator.generate(query)
+            logger.debug(
+                "直接回答检查完成 - 可以直接回答: %s",
+                direct_answer_result.can_direct_answer,
             )
-            reasoning_str = reasoning if reasoning else ""
+
+            # Record middle result
+            middle_results = state.get("middle_results", [])
+            MiddleResultRecorder.record_direct_answer_check(
+                middle_results, direct_answer_result.can_direct_answer
+            )
+
+            if direct_answer_result.can_direct_answer:
+                logger.debug("问题可以直接回答，生成直接答案")
+                # Generate direct answer using LLM
+                answer, reasoning = self.final_answer_generator.generate_final_answer(
+                    query, []
+                )
+                reasoning_str = reasoning if reasoning else ""
+                return {
+                    **state,
+                    "can_direct_answer": True,
+                    "result": answer + "\n\n" + reasoning_str,
+                    "middle_results": middle_results,
+                }
+
+            # Cannot answer directly, proceed to check web/rag search
+            logger.debug("问题不能直接回答，检查是否需要网络搜索或RAG检索")
             return {
                 **state,
-                "can_direct_answer": True,
-                "result": answer + "\n\n" + reasoning_str,
+                "can_direct_answer": False,
                 "middle_results": middle_results,
             }
-
-        # Cannot answer directly, proceed to check web/rag search
-        logger.debug("问题不能直接回答，检查是否需要网络搜索或RAG检索")
-        return {
-            **state,
-            "can_direct_answer": False,
-            "middle_results": middle_results,
-        }
+        finally:
+            node_duration = time.perf_counter() - node_start
+            metrics.askany_workflow_node_execution_total.labels(
+                node_name="direct_answer_check", status="success"
+            ).inc()
+            metrics.askany_workflow_node_duration_seconds.labels(
+                node_name="direct_answer_check"
+            ).observe(node_duration)
 
     def _web_or_rag_check_node(self, state: AgentState) -> AgentState:
         """Step 0.5: 判断是否需要网络搜索或RAG检索。"""
@@ -624,117 +638,130 @@ class AgentWorkflow:
         query = state.get("query", "")
         logger.debug("网络/RAG检查开始 - 查询: %s", query)
 
-        # Check if web_or_rag_result is already cached from workflow_filter
-        web_or_rag_result_cached = state.get("web_or_rag_result_cached", False)
-        if web_or_rag_result_cached:
-            # Use cached results from workflow_filter
-            need_web = state.get("need_web_search", False)
-            need_rag = state.get("need_rag_search", False)
-            logger.debug(
-                "使用缓存的网络/RAG检查结果 - 需要网络搜索: %s, 需要RAG检索: %s",
-                need_web,
-                need_rag,
+        metrics = get_metrics()
+        node_start = time.perf_counter()
+        try:
+            # Check if web_or_rag_result is already cached from workflow_filter
+            web_or_rag_result_cached = state.get("web_or_rag_result_cached", False)
+            if web_or_rag_result_cached:
+                # Use cached results from workflow_filter
+                need_web = state.get("need_web_search", False)
+                need_rag = state.get("need_rag_search", False)
+                logger.debug(
+                    "使用缓存的网络/RAG检查结果 - 需要网络搜索: %s, 需要RAG检索: %s",
+                    need_web,
+                    need_rag,
+                )
+            else:
+                # Check if web search or RAG search is needed
+                web_or_rag_result = self.web_or_rag_generator.generate(query)
+                logger.debug(
+                    "网络/RAG检查完成 - 需要网络搜索: %s, 需要RAG检索: %s",
+                    web_or_rag_result.need_web_search,
+                    web_or_rag_result.need_rag_search,
+                )
+
+                need_web = web_or_rag_result.need_web_search
+                need_rag = web_or_rag_result.need_rag_search
+
+            # Record middle result
+            middle_results = state.get("middle_results", [])
+            MiddleResultRecorder.record_web_or_rag_check(
+                middle_results, need_web, need_rag
             )
-        else:
-            # Check if web search or RAG search is needed
-            web_or_rag_result = self.web_or_rag_generator.generate(query)
-            logger.debug(
-                "网络/RAG检查完成 - 需要网络搜索: %s, 需要RAG检索: %s",
-                web_or_rag_result.need_web_search,
-                web_or_rag_result.need_rag_search,
-            )
 
-            need_web = web_or_rag_result.need_web_search
-            need_rag = web_or_rag_result.need_rag_search
+            # Case 1: web=true, rag=false -> web search only
+            if need_web and not need_rag:
+                logger.debug("仅需要网络搜索")
+                if self.web_search_tool is None:
+                    logger.warning("网络搜索工具不可用，直接生成答案")
+                    answer, reasoning = (
+                        self.final_answer_generator.generate_final_answer(query, [])
+                    )
+                    reasoning_str = reasoning if reasoning else ""
+                    return {
+                        **state,
+                        "need_web_search": True,
+                        "need_rag_search": False,
+                        "result": answer + "\n\n" + reasoning_str,
+                        "middle_results": middle_results,
+                    }
+                web_nodes = self.web_search_tool.search(query)
+                logger.debug("网络搜索完成 - 结果数: %d", len(web_nodes))
+                # Check if we have nodes before generating answer
+                if not web_nodes:
+                    logger.error("网络搜索未返回任何结果")
+                    return {
+                        **state,
+                        "need_web_search": True,
+                        "need_rag_search": False,
+                        "nodes": [],
+                        "result": "抱歉，网络搜索未找到相关信息。",
+                    }
 
-        # Record middle result
-        middle_results = state.get("middle_results", [])
-        MiddleResultRecorder.record_web_or_rag_check(middle_results, need_web, need_rag)
+                # Generate answer from web search results
+                answer = (
+                    web_nodes[0].node.get_content()
+                    if hasattr(web_nodes[0].node, "get_content")
+                    else web_nodes[0].node.text
+                )
+                if not answer:
+                    logger.error("网络搜索结果为空")
+                    return {
+                        **state,
+                        "need_web_search": True,
+                        "need_rag_search": False,
+                        "nodes": [],
+                        "result": "抱歉，网络搜索未找到相关信息。",
+                    }
+                logger.debug("网络搜索答案生成完成")
+                return {
+                    **state,
+                    "need_web_search": True,
+                    "need_rag_search": False,
+                    "nodes": web_nodes,
+                    "result": answer + "\n",
+                    "middle_results": middle_results,
+                }
 
-        # Case 1: web=true, rag=false -> web search only
-        if need_web and not need_rag:
-            logger.debug("仅需要网络搜索")
-            if self.web_search_tool is None:
-                logger.warning("网络搜索工具不可用，直接生成答案")
+            # Case 2: both false -> warning and direct answer
+            if not need_web and not need_rag:
+                logger.warning(
+                    "既不需要网络搜索也不需要RAG检索，但之前判断不能直接回答。"
+                    "这可能是判断错误，直接生成答案。"
+                )
                 answer, reasoning = self.final_answer_generator.generate_final_answer(
                     query, []
                 )
                 reasoning_str = reasoning if reasoning else ""
                 return {
                     **state,
-                    "need_web_search": True,
+                    "need_web_search": False,
                     "need_rag_search": False,
                     "result": answer + "\n\n" + reasoning_str,
                     "middle_results": middle_results,
                 }
-            web_nodes = self.web_search_tool.search(query)
-            logger.debug("网络搜索完成 - 结果数: %d", len(web_nodes))
-            # Check if we have nodes before generating answer
-            if not web_nodes:
-                logger.error("网络搜索未返回任何结果")
-                return {
-                    **state,
-                    "need_web_search": True,
-                    "need_rag_search": False,
-                    "nodes": [],
-                    "result": "抱歉，网络搜索未找到相关信息。",
-                }
 
-            # Generate answer from web search results
-            answer = (
-                web_nodes[0].node.get_content()
-                if hasattr(web_nodes[0].node, "get_content")
-                else web_nodes[0].node.text
+            # Case 3: web=false, rag=true OR both true -> RAG retrieval (possibly with web)
+            logger.debug(
+                "需要RAG检索 (web=%s, rag=%s)，触发RAG检索",
+                need_web,
+                need_rag,
             )
-            if not answer:
-                logger.error("网络搜索结果为空")
-                return {
-                    **state,
-                    "need_web_search": True,
-                    "need_rag_search": False,
-                    "nodes": [],
-                    "result": "抱歉，网络搜索未找到相关信息。",
-                }
-            logger.debug("网络搜索答案生成完成")
             return {
                 **state,
-                "need_web_search": True,
-                "need_rag_search": False,
-                "nodes": web_nodes,
-                "result": answer + "\n",
+                "need_web_search": need_web,
+                "need_rag_search": need_rag,
                 "middle_results": middle_results,
             }
-
-        # Case 2: both false -> warning and direct answer
-        if not need_web and not need_rag:
-            logger.warning(
-                "既不需要网络搜索也不需要RAG检索，但之前判断不能直接回答。"
-                "这可能是判断错误，直接生成答案。"
-            )
-            answer, reasoning = self.final_answer_generator.generate_final_answer(
-                query, []
-            )
-            reasoning_str = reasoning if reasoning else ""
-            return {
-                **state,
-                "need_web_search": False,
-                "need_rag_search": False,
-                "result": answer + "\n\n" + reasoning_str,
-                "middle_results": middle_results,
-            }
-
-        # Case 3: web=false, rag=true OR both true -> RAG retrieval (possibly with web)
-        logger.debug(
-            "需要RAG检索 (web=%s, rag=%s)，触发RAG检索",
-            need_web,
-            need_rag,
-        )
-        return {
-            **state,
-            "need_web_search": need_web,
-            "need_rag_search": need_rag,
-            "middle_results": middle_results,
-        }
+        finally:
+            node_duration = time.perf_counter() - node_start
+            metrics.askany_workflow_node_execution_total.labels(
+                node_name="web_or_rag_check", status="success"
+            ).inc()
+            metrics.askany_workflow_node_duration_seconds.labels(
+                node_name="web_or_rag_check"
+            ).observe(node_duration)
 
     def _rag_retrieval_node(self, state: AgentState) -> AgentState:
         """Step 1: RAG检索。"""
@@ -745,217 +772,235 @@ class AgentWorkflow:
 
         logger.debug("RAG检索开始 - 查询: %s, 查询类型: %s", query, query_type)
 
-        # Validate query is not None
-        if query is None:
-            logger.error("查询不能为None，使用空字符串作为默认值")
-            query = ""
+        metrics = get_metrics()
+        node_start = time.perf_counter()
+        try:
+            # Validate query is not None
+            if query is None:
+                logger.error("查询不能为None，使用空字符串作为默认值")
+                query = ""
 
-        cleaned_query, metadata_filters = parse_query_filters(query)
-        logger.debug(
-            "查询解析完成 - 清理后查询: %s, 元数据过滤器: %s",
-            cleaned_query,
-            metadata_filters,
-        )
+            cleaned_query, metadata_filters = parse_query_filters(query)
+            logger.debug(
+                "查询解析完成 - 清理后查询: %s, 元数据过滤器: %s",
+                cleaned_query,
+                metadata_filters,
+            )
 
-        # Update state with cleaned_query and metadata_filters
-        state = {
-            **state,
-            "query": cleaned_query,
-            "metadata_filters": metadata_filters,
-        }
+            # Update state with cleaned_query and metadata_filters
+            state = {
+                **state,
+                "query": cleaned_query,
+                "metadata_filters": metadata_filters,
+            }
 
-        if settings.query_rewrite_bool:
-            # Rewrite query for better RAG retrieval
-            try:
-                rewrite_result = self.query_rewrite_generator.generate(cleaned_query)
-                rewritten_query = rewrite_result.rewritten_query.strip()
-                if rewritten_query:
-                    logger.debug(
-                        "查询重写完成 - 原始查询: %s, 重写后查询: %s",
-                        cleaned_query,
-                        rewritten_query,
+            if settings.query_rewrite_bool:
+                # Rewrite query for better RAG retrieval
+                try:
+                    rewrite_result = self.query_rewrite_generator.generate(
+                        cleaned_query
                     )
-                    cleaned_query = rewritten_query
-                    # Update state with rewritten query
-                    state = {
-                        **state,
-                        "query": cleaned_query,
-                    }
-                else:
-                    logger.debug("查询重写结果为空，使用原始查询")
-            except Exception as e:
-                logger.warning("查询重写失败，使用原始查询: %s", str(e))
+                    rewritten_query = rewrite_result.rewritten_query.strip()
+                    if rewritten_query:
+                        logger.debug(
+                            "查询重写完成 - 原始查询: %s, 重写后查询: %s",
+                            cleaned_query,
+                            rewritten_query,
+                        )
+                        cleaned_query = rewritten_query
+                        # Update state with rewritten query
+                        state = {
+                            **state,
+                            "query": cleaned_query,
+                        }
+                    else:
+                        logger.debug("查询重写结果为空，使用原始查询")
+                except Exception as e:
+                    logger.warning("查询重写失败，使用原始查询: %s", str(e))
 
-        # Retrieve nodes directly using router's engines
-        if query_type == QueryType.FAQ and self.router.faq_query_engine:
-            logger.debug("使用FAQ查询引擎检索")
-            nodes = self.router.faq_query_engine.retrieve(
-                cleaned_query, metadata_filters
-            )
-            logger.debug("FAQ检索完成 - 检索到 %d 个节点", len(nodes))
-        elif query_type == QueryType.DOCS:
-            logger.debug("使用DOCS查询引擎检索")
-            nodes = self.router.docs_query_engine.retrieve(
-                cleaned_query, metadata_filters
-            )
-            logger.debug("DOCS检索完成 - 检索到 %d 个节点", len(nodes))
-        else:
-            # AUTO mode: try FAQ first, then docs
-            logger.debug("AUTO模式 - 先尝试FAQ检索")
-            if self.router.faq_query_engine:
-                nodes, top_score = self.router.faq_query_engine.retrieve_with_scores(
+            # Retrieve nodes directly using router's engines
+            if query_type == QueryType.FAQ and self.router.faq_query_engine:
+                logger.debug("使用FAQ查询引擎检索")
+                nodes = self.router.faq_query_engine.retrieve(
                     cleaned_query, metadata_filters
                 )
-                logger.debug(
-                    "FAQ检索完成 - 检索到 %d 个节点, 最高分数: %.4f, 阈值: %.4f",
-                    len(nodes),
-                    top_score,
-                    settings.faq_score_threshold,
-                )
-                # If FAQ score is low, also retrieve from docs
-                if top_score < settings.faq_score_threshold:
-                    logger.debug("FAQ分数低于阈值，切换到DOCS检索")
-                    docs_nodes = self.router.docs_query_engine.retrieve(
-                        cleaned_query, metadata_filters
-                    )
-                    logger.debug("DOCS检索完成 - 检索到 %d 个节点", len(docs_nodes))
-                    nodes = docs_nodes  # !只用docs的答案
-            else:
-                logger.debug("FAQ查询引擎不可用，使用DOCS查询引擎")
+                logger.debug("FAQ检索完成 - 检索到 %d 个节点", len(nodes))
+            elif query_type == QueryType.DOCS:
+                logger.debug("使用DOCS查询引擎检索")
                 nodes = self.router.docs_query_engine.retrieve(
                     cleaned_query, metadata_filters
                 )
                 logger.debug("DOCS检索完成 - 检索到 %d 个节点", len(nodes))
-
-        # Now we have nodes from rag;
-
-        # ── LightRAG knowledge-graph augmentation ──────────────────────────────
-        # Retrieve KG-derived nodes and merge them in.  Controlled by the
-        # settings.enable_lightrag flag (defaults to False until the graph
-        # has been built with lightrag_ingest.py).
-        if getattr(settings, "enable_lightrag", False) and self.lightrag_adapter:
-            try:
-                lightrag_nodes = self.lightrag_adapter.retrieve(
-                    cleaned_query,
-                    mode=getattr(settings, "lightrag_query_mode", "mix"),
-                )
-                if lightrag_nodes:
-                    docs_top_k = getattr(
-                        self.router.docs_query_engine,
-                        "similarity_top_k",
-                        settings.docs_similarity_top_k,
-                    )
-                    if docs_top_k <= 0:
-                        docs_top_k = max(len(nodes), len(lightrag_nodes))
-                    has_docs_nodes = any(
-                        (
-                            (
-                                node.node.metadata.get("source_kind") == "docs_chunk"
-                                or node.node.metadata.get("type") == "markdown"
-                            )
-                            if hasattr(node.node, "metadata")
-                            else False
+            else:
+                # AUTO mode: try FAQ first, then docs
+                logger.debug("AUTO模式 - 先尝试FAQ检索")
+                if self.router.faq_query_engine:
+                    nodes, top_score = (
+                        self.router.faq_query_engine.retrieve_with_scores(
+                            cleaned_query, metadata_filters
                         )
-                        for node in nodes
                     )
-                    if nodes and has_docs_nodes:
-                        nodes = merge_lightrag_with_llamaindex(
-                            nodes,
-                            lightrag_nodes,
-                            query=cleaned_query,
-                            top_k=docs_top_k,
-                            local_file_search=self.local_file_search,
-                            reranker=getattr(
-                                self.router.docs_query_engine, "reranker", None
-                            ),
-                        )
-                    elif not nodes and query_type != QueryType.FAQ:
-                        nodes = lightrag_nodes[:docs_top_k]
                     logger.debug(
-                        "LightRAG KG检索完成 - 合并了 %d 个KG节点, 合并后总节点数: %d",
-                        len(lightrag_nodes),
+                        "FAQ检索完成 - 检索到 %d 个节点, 最高分数: %.4f, 阈值: %.4f",
                         len(nodes),
+                        top_score,
+                        settings.faq_score_threshold,
                     )
-            except Exception as _lgr_exc:
-                logger.warning("LightRAG retrieval failed, skipping: %s", _lgr_exc)
+                    # If FAQ score is low, also retrieve from docs
+                    if top_score < settings.faq_score_threshold:
+                        logger.debug("FAQ分数低于阈值，切换到DOCS检索")
+                        docs_nodes = self.router.docs_query_engine.retrieve(
+                            cleaned_query, metadata_filters
+                        )
+                        logger.debug("DOCS检索完成 - 检索到 %d 个节点", len(docs_nodes))
+                        nodes = docs_nodes  # !只用docs的答案
+                else:
+                    logger.debug("FAQ查询引擎不可用，使用DOCS查询引擎")
+                    nodes = self.router.docs_query_engine.retrieve(
+                        cleaned_query, metadata_filters
+                    )
+                    logger.debug("DOCS检索完成 - 检索到 %d 个节点", len(nodes))
 
-        # raise Exception("Stop here")
-        # Extract keywords
-        keywords, keywords_other = self._extract_keywords_from_query(cleaned_query)
-        logger.debug(
-            "关键词提取完成 - 提取到 %d 个关键词: %s, 过滤关键词数: %d",
-            len(keywords),
-            keywords,
-            len(keywords_other),
-        )
+            # Now we have nodes from rag;
 
-        # Tokenize query for sliding window search
-        tokens = self.local_file_search.keyword_extractor.tokenize_text(
-            cleaned_query, filter_stopwords=False
-        )
-        logger.debug("查询分词完成 - 分词数: %d, tokens: %s", len(tokens), tokens)
+            # ── LightRAG knowledge-graph augmentation ──────────────────────────────
+            # Retrieve KG-derived nodes and merge them in.  Controlled by the
+            # settings.enable_lightrag flag (defaults to False until the graph
+            # has been built with lightrag_ingest.py).
+            if getattr(settings, "enable_lightrag", False) and self.lightrag_adapter:
+                try:
+                    lightrag_nodes = self.lightrag_adapter.retrieve(
+                        cleaned_query,
+                        mode=getattr(settings, "lightrag_query_mode", "mix"),
+                    )
+                    if lightrag_nodes:
+                        docs_top_k = getattr(
+                            self.router.docs_query_engine,
+                            "similarity_top_k",
+                            settings.docs_similarity_top_k,
+                        )
+                        if docs_top_k <= 0:
+                            docs_top_k = max(len(nodes), len(lightrag_nodes))
+                        has_docs_nodes = any(
+                            (
+                                (
+                                    node.node.metadata.get("source_kind")
+                                    == "docs_chunk"
+                                    or node.node.metadata.get("type") == "markdown"
+                                )
+                                if hasattr(node.node, "metadata")
+                                else False
+                            )
+                            for node in nodes
+                        )
+                        if nodes and has_docs_nodes:
+                            nodes = merge_lightrag_with_llamaindex(
+                                nodes,
+                                lightrag_nodes,
+                                query=cleaned_query,
+                                top_k=docs_top_k,
+                                local_file_search=self.local_file_search,
+                                reranker=getattr(
+                                    self.router.docs_query_engine, "reranker", None
+                                ),
+                            )
+                        elif not nodes and query_type != QueryType.FAQ:
+                            nodes = lightrag_nodes[:docs_top_k]
+                        logger.debug(
+                            "LightRAG KG检索完成 - 合并了 %d 个KG节点, 合并后总节点数: %d",
+                            len(lightrag_nodes),
+                            len(nodes),
+                        )
+                except Exception as _lgr_exc:
+                    logger.warning("LightRAG retrieval failed, skipping: %s", _lgr_exc)
 
-        # TODO first use tokens or keywords?
-        # First attempt: search using extracted keywords
-        logger.debug("keywords: %s", keywords)
-        keyword_nodes_tmp = (
-            self.local_file_search.search_keyword_using_binary_algorithm(keywords)
-        )
-        keyword_nodes = self._search_results_to_nodes(keyword_nodes_tmp)
+            # raise Exception("Stop here")
+            # Extract keywords
+            keywords, keywords_other = self._extract_keywords_from_query(cleaned_query)
+            logger.debug(
+                "关键词提取完成 - 提取到 %d 个关键词: %s, 过滤关键词数: %d",
+                len(keywords),
+                keywords,
+                len(keywords_other),
+            )
 
-        # If no results found, try again with tokenized tokens
-        # TODO now not use this, if use, add the min slide window size
-        # if not keyword_nodes:
-        #     logger.debug("使用keywords未找到结果，尝试使用直接分词进行搜索")
-        #     keyword_nodes_tmp = self.local_file_search.search_keyword_using_binary_algorithm(tokens)
+            # Tokenize query for sliding window search
+            tokens = self.local_file_search.keyword_extractor.tokenize_text(
+                cleaned_query, filter_stopwords=False
+            )
+            logger.debug("查询分词完成 - 分词数: %d, tokens: %s", len(tokens), tokens)
 
-        #     for token in tokens:
-        #         if token not in keywords:
-        #             keywords.append(token)
+            # TODO first use tokens or keywords?
+            # First attempt: search using extracted keywords
+            logger.debug("keywords: %s", keywords)
+            keyword_nodes_tmp = (
+                self.local_file_search.search_keyword_using_binary_algorithm(keywords)
+            )
+            keyword_nodes = self._search_results_to_nodes(keyword_nodes_tmp)
 
-        #     keyword_nodes = self._search_results_to_nodes(keyword_nodes_tmp)
-        #     logger.debug("使用tokens搜索完成 - 节点数: %d", len(keyword_nodes))
-        logger.debug("len(nodes): %d", len(nodes))
-        logger.debug("len(keyword_nodes): %d", len(keyword_nodes))
-        logger.debug("nodes: %s", nodes)
-        logger.debug("keyword_nodes: %s", keyword_nodes)
-        # raise Exception("Stop here")
-        if keyword_nodes and len(keyword_nodes) > 0:
-            nodes = self._merge_nodes(nodes, keyword_nodes)
-            logger.debug("合并关键词搜索结果后节点数: %d", len(nodes))
-        logger.debug("nodes: %s", nodes)
-        # Check if web search is also needed (when both web and rag are true)
-        if need_web and self.web_search_tool:
-            logger.debug("同时需要网络搜索，执行网络搜索")
-            # Perform web search concurrently with RAG (if not already done)
-            web_nodes = self.web_search_tool.search(query)
-            logger.debug("网络搜索完成 - 结果数: %d", len(web_nodes))
+            # If no results found, try again with tokenized tokens
+            # TODO now not use this, if use, add the min slide window size
+            # if not keyword_nodes:
+            #     logger.debug("使用keywords未找到结果，尝试使用直接分词进行搜索")
+            #     keyword_nodes_tmp = self.local_file_search.search_keyword_using_binary_algorithm(tokens)
 
-            # Merge web search results with RAG results
-            if web_nodes:
-                nodes = self._merge_nodes(nodes, web_nodes)
-                logger.debug("合并网络搜索结果后节点数: %d", len(nodes))
+            #     for token in tokens:
+            #         if token not in keywords:
+            #             keywords.append(token)
 
-        # Rerank merged results (SafeReranker handles all edge cases)
-        if self.reranker:
-            query_bundle = QueryBundle(query)
-            nodes = self.reranker.postprocess_nodes(nodes, query_bundle)
-            logger.debug("Reranker重排序完成 - 节点数: %d", len(nodes))
+            #     keyword_nodes = self._search_results_to_nodes(keyword_nodes_tmp)
+            #     logger.debug("使用tokens搜索完成 - 节点数: %d", len(keyword_nodes))
+            logger.debug("len(nodes): %d", len(nodes))
+            logger.debug("len(keyword_nodes): %d", len(keyword_nodes))
+            logger.debug("nodes: %s", nodes)
+            logger.debug("keyword_nodes: %s", keyword_nodes)
+            # raise Exception("Stop here")
+            if keyword_nodes and len(keyword_nodes) > 0:
+                nodes = self._merge_nodes(nodes, keyword_nodes)
+                logger.debug("合并关键词搜索结果后节点数: %d", len(nodes))
+            logger.debug("nodes: %s", nodes)
+            # Check if web search is also needed (when both web and rag are true)
+            if need_web and self.web_search_tool:
+                logger.debug("同时需要网络搜索，执行网络搜索")
+                # Perform web search concurrently with RAG (if not already done)
+                web_nodes = self.web_search_tool.search(query)
+                logger.debug("网络搜索完成 - 结果数: %d", len(web_nodes))
 
-        # Record middle result
-        middle_results = state.get("middle_results", [])
-        MiddleResultRecorder.record_rag_retrieval(middle_results, keywords, len(nodes))
+                # Merge web search results with RAG results
+                if web_nodes:
+                    nodes = self._merge_nodes(nodes, web_nodes)
+                    logger.debug("合并网络搜索结果后节点数: %d", len(nodes))
 
-        return {
-            **state,
-            "nodes": nodes,
-            "keywords": keywords,
-            "keywords_other": keywords_other,  # Cache filtered out keywords for use in _process_no_relevant_node
-            "iteration": 0,
-            "query": cleaned_query,  # Ensure cleaned_query is in returned state
-            "metadata_filters": metadata_filters,  # Ensure metadata_filters is in returned state
-            "middle_results": middle_results,
-        }
+            # Rerank merged results (SafeReranker handles all edge cases)
+            if self.reranker:
+                query_bundle = QueryBundle(query)
+                nodes = self.reranker.postprocess_nodes(nodes, query_bundle)
+                logger.debug("Reranker重排序完成 - 节点数: %d", len(nodes))
+
+            # Record middle result
+            middle_results = state.get("middle_results", [])
+            MiddleResultRecorder.record_rag_retrieval(
+                middle_results, keywords, len(nodes)
+            )
+
+            return {
+                **state,
+                "nodes": nodes,
+                "keywords": keywords,
+                "keywords_other": keywords_other,  # Cache filtered out keywords for use in _process_no_relevant_node
+                "iteration": 0,
+                "query": cleaned_query,  # Ensure cleaned_query is in returned state
+                "metadata_filters": metadata_filters,  # Ensure metadata_filters is in returned state
+                "middle_results": middle_results,
+            }
+        finally:
+            node_duration = time.perf_counter() - node_start
+            metrics.askany_workflow_node_execution_total.labels(
+                node_name="rag_retrieval", status="success"
+            ).inc()
+            metrics.askany_workflow_node_duration_seconds.labels(
+                node_name="rag_retrieval"
+            ).observe(node_duration)
 
     def _analyze_relevance_node(self, state: AgentState) -> AgentState:
         """Step 2: LLM判断相关性和完整性。"""
@@ -965,60 +1010,148 @@ class AgentWorkflow:
         nodes = state.get("nodes", [])
         keywords = state.get("keywords", [])
 
-        # Prepend outer and inner previous Q&A context nodes if exist
-        outer_previous_qa_context = state.get("outer_previous_qa_context", [])
-        inner_previous_qa_context = state.get("inner_previous_qa_context", [])
-        if outer_previous_qa_context or inner_previous_qa_context:
-            context_nodes = self._qa_context_to_nodes(
-                outer_previous_qa_context, inner_previous_qa_context
-            )
-            nodes = context_nodes + nodes
+        metrics = get_metrics()
+        node_start = time.perf_counter()
+        try:
+            # Prepend outer and inner previous Q&A context nodes if exist
+            outer_previous_qa_context = state.get("outer_previous_qa_context", [])
+            inner_previous_qa_context = state.get("inner_previous_qa_context", [])
+            if outer_previous_qa_context or inner_previous_qa_context:
+                context_nodes = self._qa_context_to_nodes(
+                    outer_previous_qa_context, inner_previous_qa_context
+                )
+                nodes = context_nodes + nodes
+                logger.debug(
+                    "添加了 %d 个外部Q&A上下文节点和 %d 个内部Q&A上下文节点到分析节点中",
+                    len(outer_previous_qa_context),
+                    len(inner_previous_qa_context),
+                )
+
             logger.debug(
-                "添加了 %d 个外部Q&A上下文节点和 %d 个内部Q&A上下文节点到分析节点中",
-                len(outer_previous_qa_context),
-                len(inner_previous_qa_context),
-            )
-
-        logger.debug(
-            "相关性分析开始 - 查询: %s, 迭代次数: %d, 节点数: %d",
-            query,
-            iteration,
-            len(nodes),
-        )
-
-        # Limit total nodes to prevent infinite accumulation
-        max_nodes = settings.max_nodes_to_llm
-        logger.debug("当前节点总数: %d, 最大节点数限制: %d", len(nodes), max_nodes)
-        if len(nodes) > max_nodes:
-            logger.warning(
-                "Too many nodes accumulated (%d > %d), truncating to prevent token overflow. "
-                "This may indicate a loop or excessive context expansion.",
+                "相关性分析开始 - 查询: %s, 迭代次数: %d, 节点数: %d",
+                query,
+                iteration,
                 len(nodes),
-                max_nodes,
             )
-            # Keep the highest scored nodes
-            nodes = sorted(nodes, key=lambda n: n.score, reverse=True)[:max_nodes]
-            logger.debug("节点截断后数量: %d", len(nodes))
 
-        # Check max iterations
-        logger.debug(
-            "检查最大迭代次数 - 当前迭代: %d, 最大迭代: %d",
-            iteration,
-            settings.agent_max_iterations,
-        )
-        if iteration > settings.agent_max_iterations:
-            logger.debug("达到最大迭代次数，生成最终答案")
-            answer, reasoning = self.final_answer_generator.generate_final_answer(
-                query, nodes
+            # Limit total nodes to prevent infinite accumulation
+            max_nodes = settings.max_nodes_to_llm
+            logger.debug("当前节点总数: %d, 最大节点数限制: %d", len(nodes), max_nodes)
+            if len(nodes) > max_nodes:
+                logger.warning(
+                    "Too many nodes accumulated (%d > %d), truncating to prevent token overflow. "
+                    "This may indicate a loop or excessive context expansion.",
+                    len(nodes),
+                    max_nodes,
+                )
+                # Keep the highest scored nodes
+                nodes = sorted(nodes, key=lambda n: n.score, reverse=True)[:max_nodes]
+                logger.debug("节点截断后数量: %d", len(nodes))
+
+            # Check max iterations
+            logger.debug(
+                "检查最大迭代次数 - 当前迭代: %d, 最大迭代: %d",
+                iteration,
+                settings.agent_max_iterations,
             )
-            references = extract_docs_references(nodes)
-            formatted_refs = format_docs_references(references)
-            reasoning_str = reasoning if reasoning else ""
+            if iteration > settings.agent_max_iterations:
+                logger.debug("达到最大迭代次数，生成最终答案")
+                answer, reasoning = self.final_answer_generator.generate_final_answer(
+                    query, nodes
+                )
+                references = extract_docs_references(nodes)
+                formatted_refs = format_docs_references(references)
+                reasoning_str = reasoning if reasoning else ""
+                return {
+                    **state,
+                    "nodes": nodes,
+                    "result": answer + formatted_refs + reasoning_str,
+                }
+
+            # Analyze
+            logger.debug("开始LLM分析相关性和完整性")
+            analysis = self.relevance_analyzer.analyze_relevance_and_completeness(
+                query, nodes, keywords
+            )
+            logger.debug(
+                "分析完成 - 相关文件路径数: %d, 是否完整: %s",
+                len(analysis.relevant_file_paths),
+                analysis.is_complete,
+            )
+
+            # Record middle result
+            middle_results = state.get("middle_results", [])
+            MiddleResultRecorder.record_analyze_relevance(
+                middle_results,
+                analysis.relevant_file_paths,
+            )
+
+            # Check if complete
+            is_relevant = len(analysis.relevant_file_paths) > 0
+            is_complete = analysis.is_complete
+            logger.debug(
+                "检查完成条件 - 是否相关: %s, 是否完整: %s", is_relevant, is_complete
+            )
+
+            filtered_nodes = self.relevance_analyzer.filter_relevant_nodes(
+                nodes, analysis.relevant_file_paths
+            )
+            logger.debug(
+                "节点过滤完成 - 原始节点数: %d, 过滤后节点数: %d",
+                len(nodes),
+                len(filtered_nodes),
+            )
+            # 更新 state 的 nodes 为过滤后的节点
+            nodes = filtered_nodes
+            state["nodes"] = nodes
+
+            # 处理逻辑：is_complete true 且有relevant_file_paths -> 针对relevant_file_paths回答
+            if is_complete and is_relevant:
+                logger.debug("查询已相关且完整，过滤相关节点并生成最终答案")
+                # 过滤出只与 relevant_file_paths 相关的节点
+                answer, reasoning = self.final_answer_generator.generate_final_answer(
+                    query, nodes
+                )
+                references = extract_docs_references(nodes)
+                formatted_refs = format_docs_references(references)
+                reasoning_str = reasoning if reasoning else ""
+                return {
+                    **state,
+                    "nodes": nodes,
+                    "analysis": analysis,
+                    "result": answer + formatted_refs + reasoning_str,
+                    "middle_results": middle_results,
+                }
+
+            # 如果没有relevant_file_paths说明llm返回结果有误，返回没有结果llm判断失败
+            if is_complete and not is_relevant:
+                logger.error("LLM判断失败：is_complete=true但没有relevant_file_paths")
+                return {
+                    **state,
+                    "analysis": analysis,
+                    "result": "抱歉，无法找到相关信息。LLM判断结果异常，请重试或调整问题。",
+                    "middle_results": middle_results,
+                }
+
+            # 否则 is_complete false
+            logger.debug("迭代次数更新为: %d", iteration + 1)
+
             return {
                 **state,
                 "nodes": nodes,
-                "result": answer + formatted_refs + reasoning_str,
+                "keywords": keywords,  # 保存keywords以保持状态一致性
+                "analysis": analysis,
+                "iteration": iteration + 1,
+                "middle_results": middle_results,
             }
+        finally:
+            node_duration = time.perf_counter() - node_start
+            metrics.askany_workflow_node_execution_total.labels(
+                node_name="analyze_relevance", status="success"
+            ).inc()
+            metrics.askany_workflow_node_duration_seconds.labels(
+                node_name="analyze_relevance"
+            ).observe(node_duration)
 
         # Analyze
         logger.debug("开始LLM分析相关性和完整性")
@@ -1105,30 +1238,122 @@ class AgentWorkflow:
         if analysis is None:
             return {**state, "result": "分析结果缺失"}
 
-        is_relevant = len(analysis.relevant_file_paths) > 0
-        if is_relevant:
-            # 有相关文档，跳过此步骤
-            logger.debug("有相关文档，跳过无相关文档处理步骤")
-            return state
+        metrics = get_metrics()
+        node_start = time.perf_counter()
+        try:
+            is_relevant = len(analysis.relevant_file_paths) > 0
+            if is_relevant:
+                # 有相关文档，跳过此步骤
+                logger.debug("有相关文档，跳过无相关文档处理步骤")
+                return state
 
-        # 检查是否是子问题workflow
-        is_inner_sub_query_workflow = state.get("is_inner_sub_query_workflow", False)
-        keywords = state.get("keywords", [])
-        keywords_other = state.get("keywords_other", [])
-
-        if is_inner_sub_query_workflow:
-            # 子问题workflow中，直接使用query（在_process_sub_query_node中已经设置为sub_query）
-            query_to_use = state.get("query", "")
-            logger.debug(
-                "子问题workflow中，使用不包含子问题的分析模型 - 查询: %s", query_to_use
+            # 检查是否是子问题workflow
+            is_inner_sub_query_workflow = state.get(
+                "is_inner_sub_query_workflow", False
             )
-            no_relevant_result = (
-                self.relevance_analyzer.analyze_no_relevant_without_sub_queries(
-                    query_to_use, keywords
+            keywords = state.get("keywords", [])
+            keywords_other = state.get("keywords_other", [])
+
+            if is_inner_sub_query_workflow:
+                # 子问题workflow中，直接使用query（在_process_sub_query_node中已经设置为sub_query）
+                query_to_use = state.get("query", "")
+                logger.debug(
+                    "子问题workflow中，使用不包含子问题的分析模型 - 查询: %s",
+                    query_to_use,
                 )
+                no_relevant_result = (
+                    self.relevance_analyzer.analyze_no_relevant_without_sub_queries(
+                        query_to_use, keywords
+                    )
+                )
+                logger.debug(
+                    "无相关文档分析完成（子问题workflow） - 关键词数: %d, 假想答案: %s",
+                    len(no_relevant_result.missing_info_keywords),
+                    "有" if no_relevant_result.hypothetical_answer else "无",
+                )
+
+                # Merge keywords from state, missing_info_keywords, and keywords_other, then update state keywords
+                merged_keywords_set = (
+                    set(keywords)
+                    | set(no_relevant_result.missing_info_keywords)
+                    | set(keywords_other)
+                )
+                updated_keywords = list(merged_keywords_set)
+                state["keywords"] = updated_keywords
+                logger.debug(
+                    "合并关键词完成（子问题workflow） - 原始关键词数: %d, missing_info_keywords数: %d, keywords_other数: %d, 合并后: %d",
+                    len(keywords),
+                    len(no_relevant_result.missing_info_keywords),
+                    len(keywords_other),
+                    len(updated_keywords),
+                )
+
+                # Record middle result (for sub-query workflow, sub_queries is empty)
+                middle_results = state.get("middle_results", [])
+                MiddleResultRecorder.record_process_no_relevant(
+                    middle_results,
+                    no_relevant_result.missing_info_keywords,
+                    [],  # sub_queries is empty for NoRelevantResultWithoutSubQueries
+                    no_relevant_result.hypothetical_answer,
+                )
+
+                # 检查是否有missing_info_keywords或hypothetical_answer
+                has_keywords = len(no_relevant_result.missing_info_keywords) > 0
+                has_hypothetical = bool(no_relevant_result.hypothetical_answer)
+                if has_keywords or has_hypothetical:
+                    logger.debug("检测到关键词或假想答案，触发并发检索")
+                    # Merge keywords_other into missing_info_keywords to enhance search
+                    original_missing_info_keywords_len = len(
+                        no_relevant_result.missing_info_keywords
+                    )
+                    enhanced_missing_info_keywords = list(
+                        set(no_relevant_result.missing_info_keywords)
+                        | set(keywords_other)
+                    )
+                    no_relevant_result.missing_info_keywords = (
+                        enhanced_missing_info_keywords
+                    )
+                    logger.debug(
+                        "增强missing_info_keywords完成（子问题workflow） - 原始数: %d, keywords_other数: %d, 增强后: %d",
+                        original_missing_info_keywords_len,
+                        len(keywords_other),
+                        len(enhanced_missing_info_keywords),
+                    )
+                    # 触发并发检索
+                    new_nodes = self._concurrent_search(
+                        no_relevant_result, query_to_use
+                    )
+                    # Merge with existing nodes if needed
+                    existing_nodes = state.get("nodes", [])
+                    if settings.reserve_keywords_old_nodes and existing_nodes:
+                        nodes = self._merge_nodes(existing_nodes, new_nodes)
+                    else:
+                        nodes = new_nodes
+                    return {
+                        **state,
+                        "no_relevant_result": no_relevant_result,
+                        "nodes": nodes,
+                        "keywords_other": [],  # Clear keywords_other after enhancement
+                        "middle_results": middle_results,
+                    }
+
+                # 否则，不完整，且没有missing_info_keywords hypothetical_answer
+                logger.error("LLM判断失败：无相关文档且无搜索策略（子问题workflow）")
+                return {
+                    **state,
+                    "result": "抱歉，无法找到相关信息，且无法生成有效的搜索策略。请尝试调整问题或提供更多上下文。",
+                    "middle_results": middle_results,
+                }
+
+            # 非子问题workflow，使用完整的analyze_no_relevant
+            query = state.get("query", "")
+            logger.debug("开始分析无相关文档情况 - 查询: %s", query)
+            no_relevant_result = self.relevance_analyzer.analyze_no_relevant(
+                query, keywords
             )
             logger.debug(
-                "无相关文档分析完成（子问题workflow） - 关键词数: %d, 假想答案: %s",
+                "无相关文档分析完成 - 子问题数: %d, 关键词数: %d, 假想答案: %s",
+                len(no_relevant_result.sub_queries),
                 len(no_relevant_result.missing_info_keywords),
                 "有" if no_relevant_result.hypothetical_answer else "无",
             )
@@ -1142,23 +1367,33 @@ class AgentWorkflow:
             updated_keywords = list(merged_keywords_set)
             state["keywords"] = updated_keywords
             logger.debug(
-                "合并关键词完成（子问题workflow） - 原始关键词数: %d, missing_info_keywords数: %d, keywords_other数: %d, 合并后: %d",
+                "合并关键词完成 - 原始关键词数: %d, missing_info_keywords数: %d, keywords_other数: %d, 合并后: %d",
                 len(keywords),
                 len(no_relevant_result.missing_info_keywords),
                 len(keywords_other),
                 len(updated_keywords),
             )
 
-            # Record middle result (for sub-query workflow, sub_queries is empty)
+            # Record middle result
             middle_results = state.get("middle_results", [])
             MiddleResultRecorder.record_process_no_relevant(
                 middle_results,
                 no_relevant_result.missing_info_keywords,
-                [],  # sub_queries is empty for NoRelevantResultWithoutSubQueries
+                no_relevant_result.sub_queries,
                 no_relevant_result.hypothetical_answer,
             )
 
-            # 检查是否有missing_info_keywords或hypothetical_answer
+            # TODO 这里可能比较容易触发
+            # 如果有sub_queries，触发子问题处理
+            if no_relevant_result.sub_queries and settings.inner_sub_problems:
+                logger.debug("检测到子问题，触发子问题处理流程")
+                return {
+                    **state,
+                    "no_relevant_result": no_relevant_result,
+                    "middle_results": middle_results,
+                }
+
+            # 如果没有sub_queries，检查是否有missing_info_keywords或hypothetical_answer
             has_keywords = len(no_relevant_result.missing_info_keywords) > 0
             has_hypothetical = bool(no_relevant_result.hypothetical_answer)
             if has_keywords or has_hypothetical:
@@ -1174,13 +1409,12 @@ class AgentWorkflow:
                     enhanced_missing_info_keywords
                 )
                 logger.debug(
-                    "增强missing_info_keywords完成（子问题workflow） - 原始数: %d, keywords_other数: %d, 增强后: %d",
+                    "增强missing_info_keywords完成 - 原始数: %d, keywords_other数: %d, 增强后: %d",
                     original_missing_info_keywords_len,
                     len(keywords_other),
                     len(enhanced_missing_info_keywords),
                 )
-                # 触发并发检索
-                new_nodes = self._concurrent_search(no_relevant_result, query_to_use)
+                new_nodes = self._concurrent_search(no_relevant_result, query)
                 # Merge with existing nodes if needed
                 existing_nodes = state.get("nodes", [])
                 if settings.reserve_keywords_old_nodes and existing_nodes:
@@ -1195,103 +1429,21 @@ class AgentWorkflow:
                     "middle_results": middle_results,
                 }
 
-            # 否则，不完整，且没有missing_info_keywords hypothetical_answer
-            logger.error("LLM判断失败：无相关文档且无搜索策略（子问题workflow）")
+            # 否则，不完整，且没有sub_queries missing_info_keywords hypothetical_answer
+            logger.error("LLM判断失败：无相关文档且无搜索策略")
             return {
                 **state,
                 "result": "抱歉，无法找到相关信息，且无法生成有效的搜索策略。请尝试调整问题或提供更多上下文。",
                 "middle_results": middle_results,
             }
-
-        # 非子问题workflow，使用完整的analyze_no_relevant
-        query = state.get("query", "")
-        logger.debug("开始分析无相关文档情况 - 查询: %s", query)
-        no_relevant_result = self.relevance_analyzer.analyze_no_relevant(
-            query, keywords
-        )
-        logger.debug(
-            "无相关文档分析完成 - 子问题数: %d, 关键词数: %d, 假想答案: %s",
-            len(no_relevant_result.sub_queries),
-            len(no_relevant_result.missing_info_keywords),
-            "有" if no_relevant_result.hypothetical_answer else "无",
-        )
-
-        # Merge keywords from state, missing_info_keywords, and keywords_other, then update state keywords
-        merged_keywords_set = (
-            set(keywords)
-            | set(no_relevant_result.missing_info_keywords)
-            | set(keywords_other)
-        )
-        updated_keywords = list(merged_keywords_set)
-        state["keywords"] = updated_keywords
-        logger.debug(
-            "合并关键词完成 - 原始关键词数: %d, missing_info_keywords数: %d, keywords_other数: %d, 合并后: %d",
-            len(keywords),
-            len(no_relevant_result.missing_info_keywords),
-            len(keywords_other),
-            len(updated_keywords),
-        )
-
-        # Record middle result
-        middle_results = state.get("middle_results", [])
-        MiddleResultRecorder.record_process_no_relevant(
-            middle_results,
-            no_relevant_result.missing_info_keywords,
-            no_relevant_result.sub_queries,
-            no_relevant_result.hypothetical_answer,
-        )
-
-        # TODO 这里可能比较容易触发
-        # 如果有sub_queries，触发子问题处理
-        if no_relevant_result.sub_queries and settings.inner_sub_problems:
-            logger.debug("检测到子问题，触发子问题处理流程")
-            return {
-                **state,
-                "no_relevant_result": no_relevant_result,
-                "middle_results": middle_results,
-            }
-
-        # 如果没有sub_queries，检查是否有missing_info_keywords或hypothetical_answer
-        has_keywords = len(no_relevant_result.missing_info_keywords) > 0
-        has_hypothetical = bool(no_relevant_result.hypothetical_answer)
-        if has_keywords or has_hypothetical:
-            logger.debug("检测到关键词或假想答案，触发并发检索")
-            # Merge keywords_other into missing_info_keywords to enhance search
-            original_missing_info_keywords_len = len(
-                no_relevant_result.missing_info_keywords
-            )
-            enhanced_missing_info_keywords = list(
-                set(no_relevant_result.missing_info_keywords) | set(keywords_other)
-            )
-            no_relevant_result.missing_info_keywords = enhanced_missing_info_keywords
-            logger.debug(
-                "增强missing_info_keywords完成 - 原始数: %d, keywords_other数: %d, 增强后: %d",
-                original_missing_info_keywords_len,
-                len(keywords_other),
-                len(enhanced_missing_info_keywords),
-            )
-            new_nodes = self._concurrent_search(no_relevant_result, query)
-            # Merge with existing nodes if needed
-            existing_nodes = state.get("nodes", [])
-            if settings.reserve_keywords_old_nodes and existing_nodes:
-                nodes = self._merge_nodes(existing_nodes, new_nodes)
-            else:
-                nodes = new_nodes
-            return {
-                **state,
-                "no_relevant_result": no_relevant_result,
-                "nodes": nodes,
-                "keywords_other": [],  # Clear keywords_other after enhancement
-                "middle_results": middle_results,
-            }
-
-        # 否则，不完整，且没有sub_queries missing_info_keywords hypothetical_answer
-        logger.error("LLM判断失败：无相关文档且无搜索策略")
-        return {
-            **state,
-            "result": "抱歉，无法找到相关信息，且无法生成有效的搜索策略。请尝试调整问题或提供更多上下文。",
-            "middle_results": middle_results,
-        }
+        finally:
+            node_duration = time.perf_counter() - node_start
+            metrics.askany_workflow_node_execution_total.labels(
+                node_name="process_no_relevant", status="success"
+            ).inc()
+            metrics.askany_workflow_node_duration_seconds.labels(
+                node_name="process_no_relevant"
+            ).observe(node_duration)
 
     async def _process_sub_query_node(self, state: AgentState) -> AgentState:
         """处理子问题：在一个循环中处理所有子问题，避免多次事件触发。"""
@@ -1303,116 +1455,133 @@ class AgentWorkflow:
                 "result": "子问题结果缺失",
             }
 
-        sub_queries = no_relevant_result.sub_queries
-        if not sub_queries or len(sub_queries) == 0:
-            return {
-                **state,
-                "result": "子问题结果缺失",
-            }
-        if len(sub_queries) == 1:
-            logger.warning("子问题数量为1 这不正常")
-        inner_previous_qa_context = state.get("inner_previous_qa_context", [])
-
-        logger.debug("开始处理 %d 个子问题", len(sub_queries))
-
-        # 在一个循环中处理所有子问题
-        # inner_previous_qa_context is now a list, so we'll append to it
-        all_qa_context = (
-            inner_previous_qa_context.copy() if inner_previous_qa_context else []
-        )
-        for idx, sub_query in enumerate(sub_queries):
-            logger.debug(
-                "处理子问题 %d/%d - 子问题: %s",
-                idx + 1,
-                len(sub_queries),
-                sub_query,
-            )
-
-            # 对于LangGraph workflow，直接调用图的ainvoke方法（异步版本）
-            # 不需要通过workflow_client，因为我们在同一个进程中
-            # 使用原始query，不修改query，上下文通过inner_previous_qa_context传递
-            logger.debug(
-                "使用LangGraph workflow处理子问题: %s, 已有 %d 个内部Q&A上下文",
-                sub_query,
-                len(all_qa_context),
-            )
-            try:
-                # 直接调用图的ainvoke方法，设置is_inner_sub_query_workflow=True以防止子问题再次分割
-                # 构建初始状态，与invoke方法中的逻辑一致
-                initial_state: AgentState = {
-                    "query": sub_query,  # 使用原始query，不修改
-                    "query_type": QueryType.AUTO,
-                    "can_direct_answer": False,
-                    "need_web_search": False,
-                    "need_rag_search": False,
-                    "web_or_rag_result_cached": False,
-                    "nodes": [],
-                    "keywords": [],
-                    "analysis": None,
-                    "iteration": 0,
-                    "no_relevant_result": None,
-                    "current_sub_query": None,
-                    "inner_previous_qa_context": all_qa_context.copy(),  # 传递之前的内部Q&A上下文
-                    "outer_previous_qa_context": state.get(
-                        "outer_previous_qa_context", []
-                    ),
-                    "is_inner_sub_query_workflow": True,  # 设置标志防止子问题再次分割
-                    "is_outer_sub_query_workflow": state.get(
-                        "is_outer_sub_query_workflow", False
-                    ),
-                    "result": None,
-                    "middle_results": [],
-                    "metadata_filters": None,
-                    "no_complete_answer": False,
-                    "_stream_mode": False,
+        metrics = get_metrics()
+        node_start = time.perf_counter()
+        try:
+            sub_queries = no_relevant_result.sub_queries
+            if not sub_queries or len(sub_queries) == 0:
+                return {
+                    **state,
+                    "result": "子问题结果缺失",
                 }
-                # 使用异步的ainvoke方法
-                result = await self.graph.ainvoke(initial_state)
-                sub_answer = result.get("result", "抱歉，无法生成答案。")
+            if len(sub_queries) == 1:
+                logger.warning("子问题数量为1 这不正常")
+            inner_previous_qa_context = state.get("inner_previous_qa_context", [])
+
+            logger.debug("开始处理 %d 个子问题", len(sub_queries))
+
+            # 在一个循环中处理所有子问题
+            # inner_previous_qa_context is now a list, so we'll append to it
+            all_qa_context = (
+                inner_previous_qa_context.copy() if inner_previous_qa_context else []
+            )
+            for idx, sub_query in enumerate(sub_queries):
                 logger.debug(
-                    "子问题 %d/%d workflow完成，结果长度: %d",
+                    "处理子问题 %d/%d - 子问题: %s",
                     idx + 1,
                     len(sub_queries),
-                    len(sub_answer),
-                )
-            except Exception as e:
-                error_type = type(e).__name__
-                error_msg = str(e) if str(e) else repr(e)
-                logger.error(
-                    "子问题workflow调用失败 - 异常类型: %s, 异常消息: %s, 子问题: %s",
-                    error_type,
-                    error_msg,
                     sub_query,
-                    exc_info=True,
                 )
-                sub_answer = f"抱歉，处理子问题时发生错误: {error_type}: {error_msg}"
 
-            # 更新上下文，累积所有子问题的Q&A
-            all_qa_context.append(
-                {
-                    "query": sub_query,
-                    "answer": sub_answer,
-                }
+                # 对于LangGraph workflow，直接调用图的ainvoke方法（异步版本）
+                # 不需要通过workflow_client，因为我们在同一个进程中
+                # 使用原始query，不修改query，上下文通过inner_previous_qa_context传递
+                logger.debug(
+                    "使用LangGraph workflow处理子问题: %s, 已有 %d 个内部Q&A上下文",
+                    sub_query,
+                    len(all_qa_context),
+                )
+                try:
+                    # 直接调用图的ainvoke方法，设置is_inner_sub_query_workflow=True以防止子问题再次分割
+                    # 构建初始状态，与invoke方法中的逻辑一致
+                    initial_state: AgentState = {
+                        "query": sub_query,  # 使用原始query，不修改
+                        "query_type": QueryType.AUTO,
+                        "can_direct_answer": False,
+                        "need_web_search": False,
+                        "need_rag_search": False,
+                        "web_or_rag_result_cached": False,
+                        "nodes": [],
+                        "keywords": [],
+                        "analysis": None,
+                        "iteration": 0,
+                        "no_relevant_result": None,
+                        "current_sub_query": None,
+                        "inner_previous_qa_context": all_qa_context.copy(),  # 传递之前的内部Q&A上下文
+                        "outer_previous_qa_context": state.get(
+                            "outer_previous_qa_context", []
+                        ),
+                        "is_inner_sub_query_workflow": True,  # 设置标志防止子问题再次分割
+                        "is_outer_sub_query_workflow": state.get(
+                            "is_outer_sub_query_workflow", False
+                        ),
+                        "result": None,
+                        "middle_results": [],
+                        "metadata_filters": None,
+                        "no_complete_answer": False,
+                        "_stream_mode": False,
+                    }
+                    # 使用异步的ainvoke方法
+                    result = await self.graph.ainvoke(initial_state)
+                    sub_answer = result.get("result", "抱歉，无法生成答案。")
+                    logger.debug(
+                        "子问题 %d/%d workflow完成，结果长度: %d",
+                        idx + 1,
+                        len(sub_queries),
+                        len(sub_answer),
+                    )
+                except Exception as e:
+                    error_type = type(e).__name__
+                    error_msg = str(e) if str(e) else repr(e)
+                    logger.error(
+                        "子问题workflow调用失败 - 异常类型: %s, 异常消息: %s, 子问题: %s",
+                        error_type,
+                        error_msg,
+                        sub_query,
+                        exc_info=True,
+                    )
+                    sub_answer = (
+                        f"抱歉，处理子问题时发生错误: {error_type}: {error_msg}"
+                    )
+
+                # 更新上下文，累积所有子问题的Q&A
+                all_qa_context.append(
+                    {
+                        "query": sub_query,
+                        "answer": sub_answer,
+                    }
+                )
+
+            # 所有子问题处理完成，更新上下文并返回最终答案
+            logger.debug("所有子问题处理完成，生成最终答案")
+
+            # Record middle result
+            middle_results = state.get("middle_results", [])
+            MiddleResultRecorder.record_process_sub_query(
+                middle_results, all_qa_context
             )
 
-        # 所有子问题处理完成，更新上下文并返回最终答案
-        logger.debug("所有子问题处理完成，生成最终答案")
-
-        # Record middle result
-        middle_results = state.get("middle_results", [])
-        MiddleResultRecorder.record_process_sub_query(middle_results, all_qa_context)
-
-        # Format the final answer from the Q&A context list
-        result_parts = []
-        for qa_pair in all_qa_context:
-            result_parts.append(f"问题: {qa_pair['query']}\n回答: {qa_pair['answer']}")
-        final_answer = "基于以下子问题的处理结果：\n\n" + "\n\n".join(result_parts)
-        return {
-            **state,
-            "inner_previous_qa_context": all_qa_context,
-            "result": final_answer,
-            "middle_results": middle_results,
-        }
+            # Format the final answer from the Q&A context list
+            result_parts = []
+            for qa_pair in all_qa_context:
+                result_parts.append(
+                    f"问题: {qa_pair['query']}\n回答: {qa_pair['answer']}"
+                )
+            final_answer = "基于以下子问题的处理结果：\n\n" + "\n\n".join(result_parts)
+            return {
+                **state,
+                "inner_previous_qa_context": all_qa_context,
+                "result": final_answer,
+                "middle_results": middle_results,
+            }
+        finally:
+            node_duration = time.perf_counter() - node_start
+            metrics.askany_workflow_node_execution_total.labels(
+                node_name="process_sub_query", status="success"
+            ).inc()
+            metrics.askany_workflow_node_duration_seconds.labels(
+                node_name="process_sub_query"
+            ).observe(node_duration)
 
     def _expand_context_node(self, state: AgentState) -> AgentState:
         """Step 4: 找到chunk所在位置 → 扩展上下文。"""
@@ -1420,120 +1589,131 @@ class AgentWorkflow:
         analysis = state.get("analysis")
         nodes = state.get("nodes", [])
 
-        if analysis is None:
-            return state
+        metrics = get_metrics()
+        node_start = time.perf_counter()
+        try:
+            if analysis is None:
+                return state
 
-        # Only expand context if relevant but incomplete
-        is_relevant = len(analysis.relevant_file_paths) > 0
-        is_complete = analysis.is_complete
-        should_process = is_relevant and not is_complete
-        logger.debug(
-            "上下文扩展步骤开始 - 是否相关: %s, 是否完整: %s, 是否处理: %s",
-            is_relevant,
-            is_complete,
-            should_process,
-        )
-        if not should_process:
-            # Not relevant or already complete, skip expansion
-            logger.debug("跳过上下文扩展步骤")
-            return state
-
-        logger.debug(
-            "开始扩展上下文 - 节点数: %d, 扩展模式: %s, 扩展比例: %.2f",
-            len(nodes),
-            settings.expand_context_mode,
-            settings.expand_context_ratio,
-        )
-        expanded_nodes = []
-        for node in nodes:
-            file_path = node.node.metadata.get("file_path") or node.node.metadata.get(
-                "source"
+            # Only expand context if relevant but incomplete
+            is_relevant = len(analysis.relevant_file_paths) > 0
+            is_complete = analysis.is_complete
+            should_process = is_relevant and not is_complete
+            logger.debug(
+                "上下文扩展步骤开始 - 是否相关: %s, 是否完整: %s, 是否处理: %s",
+                is_relevant,
+                is_complete,
+                should_process,
             )
-            if not file_path:
-                logger.debug("节点缺少文件路径，跳过扩展")
-                continue
+            if not should_process:
+                # Not relevant or already complete, skip expansion
+                logger.debug("跳过上下文扩展步骤")
+                return state
 
-            content = (
-                node.node.get_content()
-                if hasattr(node.node, "get_content")
-                else node.node.text
+            logger.debug(
+                "开始扩展上下文 - 节点数: %d, 扩展模式: %s, 扩展比例: %.2f",
+                len(nodes),
+                settings.expand_context_mode,
+                settings.expand_context_ratio,
             )
-            if not content:
-                logger.debug("节点内容为空，跳过扩展 - 文件路径: %s", file_path)
-                continue
+            expanded_nodes = []
+            for node in nodes:
+                file_path = node.node.metadata.get(
+                    "file_path"
+                ) or node.node.metadata.get("source")
+                if not file_path:
+                    logger.debug("节点缺少文件路径，跳过扩展")
+                    continue
 
-            logger.debug("扩展节点上下文 - 文件路径: %s", file_path)
-            expanded = self.local_file_search.expand_context(
-                content,
-                file_path,
-                expand_mode=settings.expand_context_mode,
-                expand_ratio=settings.expand_context_ratio,
-            )
-
-            if expanded:
-                logger.debug(
-                    "节点扩展成功 - 文件路径: %s, 起始行: %s, 结束行: %s",
-                    expanded.get("file_path"),
-                    expanded.get("start_line"),
-                    expanded.get("end_line"),
+                content = (
+                    node.node.get_content()
+                    if hasattr(node.node, "get_content")
+                    else node.node.text
                 )
-                from llama_index.core.schema import TextNode
+                if not content:
+                    logger.debug("节点内容为空，跳过扩展 - 文件路径: %s", file_path)
+                    continue
 
-                expanded_node = TextNode(
-                    text=expanded["content"],
-                    metadata={
-                        "file_path": expanded["file_path"],
-                        "source": expanded["file_path"],
-                        "type": "markdown",
-                        "start_line": expanded["start_line"],
-                        "end_line": expanded["end_line"],
-                    },
+                logger.debug("扩展节点上下文 - 文件路径: %s", file_path)
+                expanded = self.local_file_search.expand_context(
+                    content,
+                    file_path,
+                    expand_mode=settings.expand_context_mode,
+                    expand_ratio=settings.expand_context_ratio,
                 )
-                # 使用临时分数，稍后通过reranker重新评分
-                expanded_nodes.append(NodeWithScore(node=expanded_node, score=0.0))
-            else:
-                logger.debug("节点扩展失败 - 文件路径: %s", file_path)
 
-        # 使用reranker对扩展节点重新评分 (SafeReranker handles all edge cases)
-        if expanded_nodes and self.reranker:
-            query = state.get("query", "")
-            query_bundle = QueryBundle(query)
-            expanded_nodes = self.reranker.postprocess_nodes(
-                expanded_nodes, query_bundle=query_bundle
+                if expanded:
+                    logger.debug(
+                        "节点扩展成功 - 文件路径: %s, 起始行: %s, 结束行: %s",
+                        expanded.get("file_path"),
+                        expanded.get("start_line"),
+                        expanded.get("end_line"),
+                    )
+                    from llama_index.core.schema import TextNode
+
+                    expanded_node = TextNode(
+                        text=expanded["content"],
+                        metadata={
+                            "file_path": expanded["file_path"],
+                            "source": expanded["file_path"],
+                            "type": "markdown",
+                            "start_line": expanded["start_line"],
+                            "end_line": expanded["end_line"],
+                        },
+                    )
+                    # 使用临时分数，稍后通过reranker重新评分
+                    expanded_nodes.append(NodeWithScore(node=expanded_node, score=0.0))
+                else:
+                    logger.debug("节点扩展失败 - 文件路径: %s", file_path)
+
+            # 使用reranker对扩展节点重新评分 (SafeReranker handles all edge cases)
+            if expanded_nodes and self.reranker:
+                query = state.get("query", "")
+                query_bundle = QueryBundle(query)
+                expanded_nodes = self.reranker.postprocess_nodes(
+                    expanded_nodes, query_bundle=query_bundle
+                )
+                logger.debug("Reranker重排序完成 - 节点数: %d", len(expanded_nodes))
+
+            logger.debug("上下文扩展完成 - 扩展节点数: %d", len(expanded_nodes))
+
+            # 根据reserve_expanded_old_nodes决定是合并还是替换
+            if expanded_nodes:
+                if settings.reserve_expanded_old_nodes:
+                    logger.debug(
+                        "合并扩展节点 - 原有节点数: %d, 扩展节点数: %d",
+                        len(nodes),
+                        len(expanded_nodes),
+                    )
+                    nodes = self._merge_nodes(nodes, expanded_nodes)
+                    logger.debug("合并后节点数: %d", len(nodes))
+                else:
+                    logger.debug("替换节点 - 扩展节点数: %d", len(expanded_nodes))
+                    nodes = expanded_nodes
+            # TODO here truncate nodes by tokens
+            nodes, total_tokens, was_truncated = truncate_nodes_by_tokens(
+                nodes, settings.llm_max_tokens
             )
-            logger.debug("Reranker重排序完成 - 节点数: %d", len(expanded_nodes))
 
-        logger.debug("上下文扩展完成 - 扩展节点数: %d", len(expanded_nodes))
+            # Record middle result
+            middle_results = state.get("middle_results", [])
+            MiddleResultRecorder.record_expand_context(
+                middle_results, len(expanded_nodes) if expanded_nodes else 0
+            )
 
-        # 根据reserve_expanded_old_nodes决定是合并还是替换
-        if expanded_nodes:
-            if settings.reserve_expanded_old_nodes:
-                logger.debug(
-                    "合并扩展节点 - 原有节点数: %d, 扩展节点数: %d",
-                    len(nodes),
-                    len(expanded_nodes),
-                )
-                nodes = self._merge_nodes(nodes, expanded_nodes)
-                logger.debug("合并后节点数: %d", len(nodes))
-            else:
-                logger.debug("替换节点 - 扩展节点数: %d", len(expanded_nodes))
-                nodes = expanded_nodes
-        # TODO here truncate nodes by tokens
-        nodes, total_tokens, was_truncated = truncate_nodes_by_tokens(
-            nodes, settings.llm_max_tokens
-        )
-
-        # Record middle result
-        middle_results = state.get("middle_results", [])
-        MiddleResultRecorder.record_expand_context(
-            middle_results, len(expanded_nodes) if expanded_nodes else 0
-        )
-
-        return {
-            **state,
-            "nodes": nodes,
-            "middle_results": middle_results,
-        }
+            return {
+                **state,
+                "nodes": nodes,
+                "middle_results": middle_results,
+            }
+        finally:
+            node_duration = time.perf_counter() - node_start
+            metrics.askany_workflow_node_execution_total.labels(
+                node_name="expand_context", status="success"
+            ).inc()
+            metrics.askany_workflow_node_duration_seconds.labels(
+                node_name="expand_context"
+            ).observe(node_duration)
 
     def _generate_final_answer_node(self, state: AgentState) -> AgentState:
         """生成最终答案节点。"""
@@ -1543,24 +1723,44 @@ class AgentWorkflow:
         result = state.get("result")
         middle_results = state.get("middle_results", [])
 
-        # Prepend outer and inner previous Q&A context nodes if exist
-        outer_previous_qa_context = state.get("outer_previous_qa_context", [])
-        inner_previous_qa_context = state.get("inner_previous_qa_context", [])
+        metrics = get_metrics()
+        node_start = time.perf_counter()
+        try:
+            # Prepend outer and inner previous Q&A context nodes if exist
+            outer_previous_qa_context = state.get("outer_previous_qa_context", [])
+            inner_previous_qa_context = state.get("inner_previous_qa_context", [])
 
-        if outer_previous_qa_context or inner_previous_qa_context:
-            context_nodes = self._qa_context_to_nodes(
-                outer_previous_qa_context, inner_previous_qa_context
-            )
-            nodes = context_nodes + nodes
-            logger.debug(
-                "添加了 %d 个外部Q&A上下文节点和 %d 个内部Q&A上下文节点到最终答案生成",
-                len(outer_previous_qa_context),
-                len(inner_previous_qa_context),
-            )
+            if outer_previous_qa_context or inner_previous_qa_context:
+                context_nodes = self._qa_context_to_nodes(
+                    outer_previous_qa_context, inner_previous_qa_context
+                )
+                nodes = context_nodes + nodes
+                logger.debug(
+                    "添加了 %d 个外部Q&A上下文节点和 %d 个内部Q&A上下文节点到最终答案生成",
+                    len(outer_previous_qa_context),
+                    len(inner_previous_qa_context),
+                )
 
-        # ---- Stream mode: skip LLM call, store prepared state for caller ----
-        if state.get("_stream_mode", False):
-            # If result already exists (direct answer / web search), no streaming needed
+            # ---- Stream mode: skip LLM call, store prepared state for caller ----
+            if state.get("_stream_mode", False):
+                # If result already exists (direct answer / web search), no streaming needed
+                if result:
+                    if settings.return_middle_result:
+                        formatted_result = MiddleResultRecorder.format_middle_results(
+                            middle_results, result
+                        )
+                        return {
+                            **state,
+                            "result": formatted_result,
+                            "nodes": nodes,
+                        }
+                    return {**state, "nodes": nodes}
+                # Return state with updated nodes but no result — caller will stream
+                return {**state, "nodes": nodes, "result": None}
+
+            # ---- Normal (non-streaming) mode ----
+
+            # If result already exists (from direct answer or web search), handle return_middle_result
             if result:
                 if settings.return_middle_result:
                     formatted_result = MiddleResultRecorder.format_middle_results(
@@ -1569,37 +1769,44 @@ class AgentWorkflow:
                     return {
                         **state,
                         "result": formatted_result,
-                        "nodes": nodes,
                     }
-                return {**state, "nodes": nodes}
-            # Return state with updated nodes but no result — caller will stream
-            return {**state, "nodes": nodes, "result": None}
+                return state
 
-        # ---- Normal (non-streaming) mode ----
+            # Requirement: Check if previous node is analyze_relevance and previous previous node is expand_context
+            # and expand_node_force_end_line is True and model thinks it still cannot summarize/answer
 
-        # If result already exists (from direct answer or web search), handle return_middle_result
-        if result:
-            if settings.return_middle_result:
-                formatted_result = MiddleResultRecorder.format_middle_results(
-                    middle_results, result
+            no_complete_answer = state.get("no_complete_answer", False)
+            if no_complete_answer:
+                logger.debug(
+                    "需求2条件满足：上一个节点是analyze_relevance，上上一个节点是expand_context，"
+                    "且expand_node_force_end_line为true，且模型认为依然不能总结回答，使用generate_not_complete_answer"
                 )
+                answer, reasoning = (
+                    self.final_answer_generator.generate_not_complete_answer(
+                        query, nodes
+                    )
+                )
+                references = extract_docs_references(nodes)
+                formatted_refs = format_docs_references(references)
+                reasoning_str = reasoning if reasoning else ""
+                final_result = answer + formatted_refs + reasoning_str
+
+                if settings.return_middle_result:
+                    formatted_result = MiddleResultRecorder.format_middle_results(
+                        middle_results, final_result
+                    )
+                    return {
+                        **state,
+                        "result": formatted_result,
+                    }
                 return {
                     **state,
-                    "result": formatted_result,
+                    "result": final_result,
                 }
-            return state
 
-        # Requirement: Check if previous node is analyze_relevance and previous previous node is expand_context
-        # and expand_node_force_end_line is True and model thinks it still cannot summarize/answer
-
-        no_complete_answer = state.get("no_complete_answer", False)
-        if no_complete_answer:
-            logger.debug(
-                "需求2条件满足：上一个节点是analyze_relevance，上上一个节点是expand_context，"
-                "且expand_node_force_end_line为true，且模型认为依然不能总结回答，使用generate_not_complete_answer"
-            )
-            answer, reasoning = (
-                self.final_answer_generator.generate_not_complete_answer(query, nodes)
+            # Otherwise, generate from nodes using normal method
+            answer, reasoning = self.final_answer_generator.generate_final_answer(
+                query, nodes
             )
             references = extract_docs_references(nodes)
             formatted_refs = format_docs_references(references)
@@ -1618,28 +1825,14 @@ class AgentWorkflow:
                 **state,
                 "result": final_result,
             }
-
-        # Otherwise, generate from nodes using normal method
-        answer, reasoning = self.final_answer_generator.generate_final_answer(
-            query, nodes
-        )
-        references = extract_docs_references(nodes)
-        formatted_refs = format_docs_references(references)
-        reasoning_str = reasoning if reasoning else ""
-        final_result = answer + formatted_refs + reasoning_str
-
-        if settings.return_middle_result:
-            formatted_result = MiddleResultRecorder.format_middle_results(
-                middle_results, final_result
-            )
-            return {
-                **state,
-                "result": formatted_result,
-            }
-        return {
-            **state,
-            "result": final_result,
-        }
+        finally:
+            node_duration = time.perf_counter() - node_start
+            metrics.askany_workflow_node_execution_total.labels(
+                node_name="generate_final_answer", status="success"
+            ).inc()
+            metrics.askany_workflow_node_duration_seconds.labels(
+                node_name="generate_final_answer"
+            ).observe(node_duration)
 
     # Routing functions
 
@@ -2351,7 +2544,22 @@ class AgentWorkflow:
             "_stream_mode": False,
         }
 
-        result = self.graph.invoke(initial_state)
+        metrics = get_metrics()
+        start_time = time.perf_counter()
+        status = "success"
+        try:
+            result = self.graph.invoke(initial_state)
+        except Exception:
+            status = "error"
+            raise
+        finally:
+            duration = time.perf_counter() - start_time
+            metrics.askany_workflow_execution_total.labels(
+                workflow_type="langgraph", status=status
+            ).inc()
+            metrics.askany_workflow_execution_duration_seconds.labels(
+                workflow_type="langgraph"
+            ).observe(duration)
 
         if debug and debug_logger:
             result_text = result.get("result", "抱歉，无法生成答案。")

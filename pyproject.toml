@@ -46,6 +46,7 @@ dependencies = [
     "mem0ai>=0.1.0",
     "cachetools>=7.0.1",
     "gptcache>=0.1.44",
+    "prometheus-client>=0.19.0",
 ]
 
 [dependency-groups]

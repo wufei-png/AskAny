@@ -39,11 +39,13 @@ import contextlib
 import hashlib
 import logging
 import os
+import time
 from typing import Any
 
 import psycopg2
 
 from askany.config import settings as _settings
+from askany.metrics import get_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -790,59 +792,80 @@ class LightRAGAdapter:
             max_total_tokens=self._max_total_tokens,
         )
 
-        # ── Langfuse: wrap retrieval in a parent span ──────────────────────
-        # All child LLM calls (already instrumented via @observe on _llm_func)
-        # will be automatically nested under this span when Langfuse is enabled.
-        if _LANGFUSE_ENABLED and _langfuse_client is not None:
-            with _langfuse_client.start_as_current_observation(
-                as_type="span",
-                name="lightrag-retrieve",
-                input={"query": query, "mode": mode or self._default_mode},
-            ) as _span:
+        metrics = get_metrics()
+        effective_mode = mode or self._default_mode
+        start_time = time.perf_counter()
+        status = "success"
+        nodes: list[NodeWithScore] = []
+
+        try:
+            # ── Langfuse: wrap retrieval in a parent span ──────────────────────
+            # All child LLM calls (already instrumented via @observe on _llm_func)
+            # will be automatically nested under this span when Langfuse is enabled.
+            if _LANGFUSE_ENABLED and _langfuse_client is not None:
+                with _langfuse_client.start_as_current_observation(
+                    as_type="span",
+                    name="lightrag-retrieve",
+                    input={"query": query, "mode": effective_mode},
+                ) as _span:
+                    try:
+                        result = await self._rag.aquery_data(query, param=param)
+                    except Exception as exc:
+                        _span.update(metadata={"error": str(exc)})
+                        logger.warning(
+                            "LightRAGAdapter: query failed – %s", exc, exc_info=True
+                        )
+                        status = "error"
+                        return []
+                    nodes = self._convert_to_nodes(result, query)
+                    _span.update(
+                        output={
+                            "node_count": len(nodes),
+                            "chunk_count": len(
+                                [
+                                    n
+                                    for n in nodes
+                                    if n.node.metadata.get("type") == "lightrag_chunk"
+                                ]
+                            ),
+                            "entity_count": len(
+                                [
+                                    n
+                                    for n in nodes
+                                    if n.node.metadata.get("type") == "lightrag_entity"
+                                ]
+                            ),
+                            "relation_count": len(
+                                [
+                                    n
+                                    for n in nodes
+                                    if n.node.metadata.get("type")
+                                    == "lightrag_relation"
+                                ]
+                            ),
+                        }
+                    )
+            else:
+                # Langfuse not active – plain execution path (no overhead)
                 try:
                     result = await self._rag.aquery_data(query, param=param)
                 except Exception as exc:
-                    _span.update(metadata={"error": str(exc)})
                     logger.warning(
                         "LightRAGAdapter: query failed – %s", exc, exc_info=True
                     )
+                    status = "error"
                     return []
                 nodes = self._convert_to_nodes(result, query)
-                _span.update(
-                    output={
-                        "node_count": len(nodes),
-                        "chunk_count": len(
-                            [
-                                n
-                                for n in nodes
-                                if n.node.metadata.get("type") == "lightrag_chunk"
-                            ]
-                        ),
-                        "entity_count": len(
-                            [
-                                n
-                                for n in nodes
-                                if n.node.metadata.get("type") == "lightrag_entity"
-                            ]
-                        ),
-                        "relation_count": len(
-                            [
-                                n
-                                for n in nodes
-                                if n.node.metadata.get("type") == "lightrag_relation"
-                            ]
-                        ),
-                    }
-                )
-                return nodes
-        else:
-            # Langfuse not active – plain execution path (no overhead)
-            try:
-                result = await self._rag.aquery_data(query, param=param)
-            except Exception as exc:
-                logger.warning("LightRAGAdapter: query failed – %s", exc, exc_info=True)
-                return []
-            return self._convert_to_nodes(result, query)
+        finally:
+            duration = time.perf_counter() - start_time
+            metrics.askany_lightrag_retrieval_total.labels(
+                mode=effective_mode, status=status
+            ).inc()
+            metrics.askany_lightrag_retrieval_duration_seconds.labels(
+                mode=effective_mode
+            ).observe(duration)
+
+        return nodes
 
     def retrieve(
         self,

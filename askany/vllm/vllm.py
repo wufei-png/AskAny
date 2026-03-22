@@ -1,5 +1,6 @@
 """vLLM integration for OpenAI-compatible LLM endpoints."""
 
+import time
 from logging import getLogger
 
 import httpx
@@ -7,6 +8,7 @@ from llama_index.core.base.llms.types import LLMMetadata, MessageRole
 from llama_index.llms.openai import OpenAI
 
 from askany.config import settings
+from askany.metrics import get_metrics
 
 logger = getLogger(__name__)
 
@@ -106,6 +108,8 @@ class AutoRetryVLLM:
             "Model %s not found, attempting to get first available model from vLLM API",
             self._model_name,
         )
+        metrics = get_metrics()
+        metrics.askany_llm_404_retries_total.labels(model=self._model_name).inc()
         first_model = get_first_available_model(self._api_base)
         if first_model:
             logger.info("Retrying with first available model: %s", first_model)
@@ -128,14 +132,140 @@ class AutoRetryVLLM:
         if callable(attr):
 
             def wrapper(*args, **kwargs):
+                metrics = get_metrics()
+                model = self._model_name
+                operation = "chat"  # default operation type
+                start_time = time.perf_counter()
+
+                # Determine if streaming
+                is_streaming = kwargs.get("stream", False) or name == "stream"
+
                 current_attr = attr
                 try:
-                    return current_attr(*args, **kwargs)
+                    result = current_attr(*args, **kwargs)
+                    duration = time.perf_counter() - start_time
+
+                    # Record duration and success
+                    metrics.askany_llm_request_duration_seconds.labels(
+                        model=model, operation=operation
+                    ).observe(duration)
+                    metrics.askany_llm_requests_total.labels(
+                        model=model, status="success", error_type="none"
+                    ).inc()
+
+                    # Handle token counting for streaming
+                    if is_streaming:
+                        # Wrap streaming generator to count chunks and tokens
+                        prompt_tokens = (
+                            kwargs.get("prompt", "").__len__()
+                            if kwargs.get("prompt")
+                            else 0
+                        )
+
+                        def token_counter():
+                            chunk_count = 0
+                            completion_tokens = 0
+                            for chunk in result:
+                                chunk_count += 1
+                                yield chunk
+                            # Record streaming metrics after iteration completes
+                            metrics.askany_llm_stream_chunks_total.labels(
+                                model=model
+                            ).inc(chunk_count)
+                            metrics.askany_llm_tokens_total.labels(
+                                model=model, token_type="prompt"
+                            ).inc(prompt_tokens)
+                            metrics.askany_llm_tokens_total.labels(
+                                model=model, token_type="completion"
+                            ).inc(completion_tokens)
+                            metrics.askany_llm_tokens_total.labels(
+                                model=model, token_type="total"
+                            ).inc(prompt_tokens + completion_tokens)
+
+                        return token_counter()
+
+                    # Handle token counting for non-streaming responses
+                    if hasattr(result, "raw") and result.raw:
+                        raw = result.raw
+                        # Try to extract token usage from OpenAI-compatible response
+                        if hasattr(raw, "usage") and raw.usage:
+                            prompt_tokens = raw.usage.prompt_tokens or 0
+                            completion_tokens = raw.usage.completion_tokens or 0
+                            metrics.askany_llm_tokens_total.labels(
+                                model=model, token_type="prompt"
+                            ).inc(prompt_tokens)
+                            metrics.askany_llm_tokens_total.labels(
+                                model=model, token_type="completion"
+                            ).inc(completion_tokens)
+                            metrics.askany_llm_tokens_total.labels(
+                                model=model, token_type="total"
+                            ).inc(prompt_tokens + completion_tokens)
+
+                    return result
+
+                except TimeoutError:
+                    duration = time.perf_counter() - start_time
+                    metrics.askany_llm_request_duration_seconds.labels(
+                        model=model, operation=operation
+                    ).observe(duration)
+                    metrics.askany_llm_timeout_total.labels(model=model).inc()
+                    metrics.askany_llm_requests_total.labels(
+                        model=model, status="error", error_type="timeout"
+                    ).inc()
+                    raise
+
                 except Exception as e:
+                    duration = time.perf_counter() - start_time
+                    metrics.askany_llm_request_duration_seconds.labels(
+                        model=model, operation=operation
+                    ).observe(duration)
+                    error_type = type(e).__name__
+                    metrics.askany_llm_connection_errors_total.labels(
+                        model=model, error_type=error_type
+                    ).inc()
+                    metrics.askany_llm_requests_total.labels(
+                        model=model, status="error", error_type=error_type
+                    ).inc()
+
+                    # Handle 404 retry on error
                     if self._handle_404_error(e):
                         # Retry the original call with new LLM
                         current_attr = getattr(self._llm, name)
-                        return current_attr(*args, **kwargs)
+                        retry_start_time = time.perf_counter()
+                        try:
+                            result = current_attr(*args, **kwargs)
+                            retry_duration = time.perf_counter() - retry_start_time
+                            metrics.askany_llm_request_duration_seconds.labels(
+                                model=model, operation=operation
+                            ).observe(retry_duration)
+                            metrics.askany_llm_requests_total.labels(
+                                model=model, status="success", error_type="none"
+                            ).inc()
+                            return result
+                        except TimeoutError:
+                            retry_duration = time.perf_counter() - retry_start_time
+                            metrics.askany_llm_request_duration_seconds.labels(
+                                model=model, operation=operation
+                            ).observe(retry_duration)
+                            metrics.askany_llm_timeout_total.labels(model=model).inc()
+                            metrics.askany_llm_requests_total.labels(
+                                model=model, status="error", error_type="timeout"
+                            ).inc()
+                            raise
+                        except Exception as retry_e:
+                            retry_duration = time.perf_counter() - retry_start_time
+                            metrics.askany_llm_request_duration_seconds.labels(
+                                model=model, operation=operation
+                            ).observe(retry_duration)
+                            retry_error_type = type(retry_e).__name__
+                            metrics.askany_llm_connection_errors_total.labels(
+                                model=model, error_type=retry_error_type
+                            ).inc()
+                            metrics.askany_llm_requests_total.labels(
+                                model=model, status="error", error_type=retry_error_type
+                            ).inc()
+                            raise
+
                     raise
 
             return wrapper

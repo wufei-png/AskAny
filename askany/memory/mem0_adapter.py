@@ -10,9 +10,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any
 
 from askany.config import settings
+from askany.metrics import get_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -64,17 +66,32 @@ class Mem0Adapter:
         top_k = top_k or settings.mem0_top_k
         threshold = score_threshold or settings.mem0_score_threshold
 
+        metrics = get_metrics()
+        start_time = time.perf_counter()
+        status = "success"
+
         try:
             raw = self._memory.search(query, user_id=user_id, limit=top_k)
         except Exception:
             logger.exception("Mem0 search failed for user_id=%s", user_id)
+            metrics.askany_mem0_search_total.labels(status="error").inc()
             return []
 
         if not raw:
+            metrics.askany_mem0_search_total.labels(status=status).inc()
+            metrics.askany_mem0_search_duration_seconds.observe(
+                time.perf_counter() - start_time
+            )
+            metrics.askany_mem0_memories_retrieved.observe(0)
             return []
 
         raw_results = raw.get("results") if isinstance(raw, dict) else raw
         if not raw_results:
+            metrics.askany_mem0_search_total.labels(status=status).inc()
+            metrics.askany_mem0_search_duration_seconds.observe(
+                time.perf_counter() - start_time
+            )
+            metrics.askany_mem0_memories_retrieved.observe(0)
             return []
 
         results: list[dict[str, Any]] = raw_results  # type: ignore[assignment]
@@ -87,6 +104,11 @@ class Mem0Adapter:
             threshold,
             len(results),
         )
+        metrics.askany_mem0_search_total.labels(status=status).inc()
+        metrics.askany_mem0_search_duration_seconds.observe(
+            time.perf_counter() - start_time
+        )
+        metrics.askany_mem0_memories_retrieved.observe(len(results))
         return results
 
     def save_turn(
@@ -104,11 +126,21 @@ class Mem0Adapter:
             {"role": "user", "content": user_query},
             {"role": "assistant", "content": assistant_response},
         ]
+        metrics = get_metrics()
+        start_time = time.perf_counter()
+        status = "success"
         try:
             self._memory.add(messages, user_id=user_id)
             logger.debug("Mem0 saved turn for user_id=%s", user_id)
         except Exception:
             logger.exception("Mem0 save_turn failed for user_id=%s", user_id)
+            status = "error"
+            metrics.askany_mem0_save_total.labels(status=status).inc()
+        finally:
+            metrics.askany_mem0_save_total.labels(status=status).inc()
+            metrics.askany_mem0_save_duration_seconds.observe(
+                time.perf_counter() - start_time
+            )
 
     async def save_turn_async(
         self,

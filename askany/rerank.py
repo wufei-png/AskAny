@@ -1,10 +1,14 @@
 """Safe reranker wrapper that handles edge cases and prevents node loss."""
 
 import logging
+import time
 
 from llama_index.core.postprocessor import SentenceTransformerRerank
 from llama_index.core.postprocessor.types import BaseNodePostprocessor
 from llama_index.core.schema import NodeWithScore, QueryBundle
+
+from askany.config import settings
+from askany.metrics import get_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +58,13 @@ class SafeReranker(BaseNodePostprocessor):
         Returns:
             Reranked nodes, or original nodes if reranking is skipped or fails
         """
+        metrics = get_metrics()
+        model_name = (
+            getattr(settings, "reranker_model", "unknown")
+            if hasattr(settings, "reranker_model")
+            else "unknown"
+        )
+
         if not self.reranker or not nodes:
             return nodes
 
@@ -82,6 +93,11 @@ class SafeReranker(BaseNodePostprocessor):
             input_node_count,
         )
 
+        # Track input nodes
+        metrics.askany_rerank_input_nodes.labels(model=model_name).observe(
+            input_node_count
+        )
+
         # Log input node details for debugging
         for idx, node in enumerate(nodes):
             node_text_preview = (
@@ -95,11 +111,19 @@ class SafeReranker(BaseNodePostprocessor):
             )
 
         original_nodes = nodes  # Save original nodes as fallback
+        start_time = time.perf_counter()
+
         try:
             reranked_nodes = self.reranker.postprocess_nodes(
                 nodes, query_bundle=query_bundle
             )
             logger.debug("Reranker重排序完成 - 节点数: %d", len(reranked_nodes))
+
+            # Track duration
+            duration = time.perf_counter() - start_time
+            metrics.askany_rerank_duration_seconds.labels(model=model_name).observe(
+                duration
+            )
 
             # Log reranked node details
             if reranked_nodes:
@@ -116,12 +140,24 @@ class SafeReranker(BaseNodePostprocessor):
 
             # If reranker returns empty nodes, fall back to original nodes
             if reranked_nodes:
+                # Track success
+                metrics.askany_rerank_requests_total.labels(
+                    model=model_name, status="success"
+                ).inc()
+                metrics.askany_rerank_output_nodes.labels(model=model_name).observe(
+                    len(reranked_nodes)
+                )
                 return reranked_nodes
             else:
                 logger.warning(
                     "Reranker返回空节点，回退到原始节点 - 原始节点数: %d, reranker_top_n: %s",
                     len(original_nodes),
                     self.rerank_top_n,
+                )
+                # Track fallback
+                metrics.askany_rerank_fallback_total.labels(reason="empty_output").inc()
+                metrics.askany_rerank_output_nodes.labels(model=model_name).observe(
+                    len(original_nodes)
                 )
                 return original_nodes
         except Exception as e:
@@ -131,6 +167,11 @@ class SafeReranker(BaseNodePostprocessor):
                 len(original_nodes),
                 exc_info=True,
             )
+            # Track error fallback
+            metrics.askany_rerank_fallback_total.labels(reason="error").inc()
+            metrics.askany_rerank_requests_total.labels(
+                model=model_name, status="error"
+            ).inc()
             return original_nodes
 
     def __bool__(self) -> bool:

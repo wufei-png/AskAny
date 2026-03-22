@@ -27,6 +27,7 @@ from askany.ingest.custom_keyword_index import (
     CustomKeywordTableIndex,
     get_global_keyword_extractor,
 )
+from askany.metrics import get_metrics
 from askany.rag.provenance import ProvenanceRepository, build_provenance_record
 
 logger = getLogger(__name__)
@@ -146,13 +147,39 @@ class VectorStoreManager:
         Returns:
             psycopg2 connection object
         """
-        return psycopg2.connect(
-            host=settings.postgres_host,
-            port=settings.postgres_port,
-            user=settings.postgres_user,
-            password=settings.postgres_password.get_secret_value(),
-            database=settings.postgres_db,
-        )
+        metrics = get_metrics()
+        metrics.askany_db_connections_active.labels(pool="psycopg2").inc()
+        try:
+            conn = psycopg2.connect(
+                host=settings.postgres_host,
+                port=settings.postgres_port,
+                user=settings.postgres_user,
+                password=settings.postgres_password.get_secret_value(),
+                database=settings.postgres_db,
+            )
+            return conn
+        except psycopg2.OperationalError as e:
+            error_str = str(e).lower()
+            if "authentication" in error_str or "password" in error_str:
+                metrics.askany_db_connection_errors_total.labels(
+                    error_type="auth_failure"
+                ).inc()
+            elif "timeout" in error_str or "timed out" in error_str:
+                metrics.askany_db_connection_errors_total.labels(
+                    error_type="timeout"
+                ).inc()
+            elif "refused" in error_str or "connect" in error_str:
+                metrics.askany_db_connection_errors_total.labels(
+                    error_type="refused"
+                ).inc()
+            else:
+                metrics.askany_db_connection_errors_total.labels(
+                    error_type="connection_failed"
+                ).inc()
+            raise
+        finally:
+            # Decrement will be called by caller after connection use
+            pass
 
     def _wait_for_db_connection(
         self, max_retries: int = 5, retry_delay: float = 2.0
@@ -166,15 +193,25 @@ class VectorStoreManager:
         Returns:
             True if connection successful, False otherwise
         """
+        metrics = get_metrics()
         for attempt in range(max_retries):
             conn = None
+            wait_start = time.perf_counter()
             try:
                 conn = self._get_db_connection()
                 conn.close()
                 conn = None
+                wait_duration = time.perf_counter() - wait_start
+                metrics.askany_db_connection_wait_time_seconds.labels(
+                    pool="psycopg2"
+                ).observe(wait_duration)
                 logger.debug(f"Database connection successful on attempt {attempt + 1}")
                 return True
             except Exception as e:
+                wait_duration = time.perf_counter() - wait_start
+                metrics.askany_db_connection_wait_time_seconds.labels(
+                    pool="psycopg2"
+                ).observe(wait_duration)
                 if attempt < max_retries - 1:
                     logger.warning(
                         f"Database connection failed (attempt {attempt + 1}/{max_retries}): {e}. "
@@ -217,6 +254,7 @@ class VectorStoreManager:
         if not settings.enable_hnsw:
             return False
 
+        metrics = get_metrics()
         table_name = vector_store.table_name
         index_name = self._get_hnsw_index_name(table_name)
 
@@ -226,6 +264,7 @@ class VectorStoreManager:
             cursor = conn.cursor()
 
             # Check if index exists
+            check_start = time.perf_counter()
             cursor.execute(
                 """
                 SELECT EXISTS (
@@ -236,20 +275,34 @@ class VectorStoreManager:
                 """,
                 (index_name,),
             )
+            check_duration = time.perf_counter() - check_start
+            metrics.askany_db_query_duration_seconds.labels(
+                table=table_name, operation="SELECT"
+            ).observe(check_duration)
             index_exists = cursor.fetchone()[0]
 
             if index_exists:
                 logger.info(
                     f"Dropping HNSW index '{index_name}' for table '{table_name}'..."
                 )
+                drop_start = time.perf_counter()
                 cursor.execute(f'DROP INDEX IF EXISTS "{index_name}"')
                 conn.commit()
+                drop_duration = time.perf_counter() - drop_start
+                metrics.askany_db_query_duration_seconds.labels(
+                    table=table_name, operation="DROP_INDEX"
+                ).observe(drop_duration)
+                metrics.askany_hnsw_index_operations_total.labels(
+                    operation="drop"
+                ).inc()
+                metrics.askany_db_connections_active.labels(pool="psycopg2").dec()
                 logger.info(f"Successfully dropped HNSW index '{index_name}'")
                 cursor.close()
                 return True
             else:
                 logger.debug(f"HNSW index '{index_name}' does not exist, skipping drop")
                 cursor.close()
+                metrics.askany_db_connections_active.labels(pool="psycopg2").dec()
                 return False
         except Exception as e:
             logger.error(f"Error dropping HNSW index '{index_name}': {e}")
@@ -258,7 +311,10 @@ class VectorStoreManager:
             raise
         finally:
             if conn:
-                conn.close()
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
     def _create_hnsw_index(self, vector_store: PGVectorStore) -> None:
         """Create HNSW index for the vector store.
@@ -270,6 +326,7 @@ class VectorStoreManager:
             logger.warning("HNSW is disabled, skipping index creation")
             return
 
+        metrics = get_metrics()
         table_name = vector_store.table_name
         index_name = self._get_hnsw_index_name(table_name)
         hnsw_kwargs = self._get_hnsw_kwargs()
@@ -293,6 +350,7 @@ class VectorStoreManager:
             cursor = conn.cursor()
 
             # Check if index already exists
+            check_start = time.perf_counter()
             cursor.execute(
                 """
                 SELECT EXISTS (
@@ -303,6 +361,10 @@ class VectorStoreManager:
                 """,
                 (index_name,),
             )
+            check_duration = time.perf_counter() - check_start
+            metrics.askany_db_query_duration_seconds.labels(
+                table=table_name, operation="SELECT"
+            ).observe(check_duration)
             index_exists = cursor.fetchone()[0]
 
             if index_exists:
@@ -310,6 +372,7 @@ class VectorStoreManager:
                     f"HNSW index '{index_name}' already exists, skipping creation"
                 )
                 cursor.close()
+                metrics.askany_db_connections_active.labels(pool="psycopg2").dec()
                 return
 
             # Temporarily increase maintenance_work_mem for faster index creation
@@ -319,7 +382,12 @@ class VectorStoreManager:
                 f"Setting maintenance_work_mem to {maintenance_work_mem} for faster index creation..."
             )
             # Use parameterized query to prevent SQL injection
+            set_start = time.perf_counter()
             cursor.execute("SET maintenance_work_mem = %s", [maintenance_work_mem])
+            set_duration = time.perf_counter() - set_start
+            metrics.askany_db_query_duration_seconds.labels(
+                table=table_name, operation="SET"
+            ).observe(set_duration)
             # Note: No commit needed for SET commands, they're session-level
 
             # Build CREATE INDEX statement
@@ -339,8 +407,15 @@ class VectorStoreManager:
                 f"ef_construction={hnsw_kwargs.get('hnsw_ef_construction', 64)}, "
                 f"maintenance_work_mem={maintenance_work_mem}..."
             )
+            create_start = time.perf_counter()
             cursor.execute(create_index_sql)
             conn.commit()
+            create_duration = time.perf_counter() - create_start
+            metrics.askany_db_query_duration_seconds.labels(
+                table=table_name, operation="CREATE_INDEX"
+            ).observe(create_duration)
+            metrics.askany_hnsw_index_operations_total.labels(operation="create").inc()
+            metrics.askany_db_connections_active.labels(pool="psycopg2").dec()
             logger.info(f"Successfully created HNSW index '{index_name}'")
             cursor.close()
         except Exception as e:
@@ -350,7 +425,10 @@ class VectorStoreManager:
             raise
         finally:
             if conn:
-                conn.close()
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
     def initialize(self, table_name: str | None = None) -> None:
         """Initialize the vector store connection.
@@ -586,6 +664,7 @@ class VectorStoreManager:
         if not ref_doc_ids:
             return 0
 
+        metrics = get_metrics()
         actual_table_name = f"data_{table_name}"
 
         conn = None
@@ -597,9 +676,15 @@ class VectorStoreManager:
                 DELETE FROM "{actual_table_name}"
                 WHERE metadata_->>'ref_doc_id' = ANY(%s)
             """
+            delete_start = time.perf_counter()
             cursor.execute(delete_sql, (ref_doc_ids,))
             deleted_count = cursor.rowcount
             conn.commit()
+            delete_duration = time.perf_counter() - delete_start
+            metrics.askany_db_query_duration_seconds.labels(
+                table=actual_table_name, operation="DELETE"
+            ).observe(delete_duration)
+            metrics.askany_db_connections_active.labels(pool="psycopg2").dec()
             cursor.close()
 
             if deleted_count > 0:
@@ -614,7 +699,10 @@ class VectorStoreManager:
             return 0
         finally:
             if conn:
-                conn.close()
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
     def add_faq_documents(self, documents: list[Document]) -> None:
         """Add FAQ documents to the FAQ vector store.
@@ -1700,6 +1788,13 @@ class VectorStoreManager:
             logger.warning("No keyword index exists, creating it with all FAQs")
             # No keyword index exists, create it with all FAQs
             self._rebuild_faq_keyword_index(new_documents, json_dir, json_parser)
+
+        # Track FAQ update metrics
+        metrics = get_metrics()
+        if errors:
+            metrics.askany_faq_update_total.labels(status="error").inc()
+        else:
+            metrics.askany_faq_update_total.labels(status="success").inc()
 
         return {
             "inserted_count": inserted_count,

@@ -18,12 +18,15 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from llama_index.core.schema import NodeWithScore
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
 from askany.config import settings
 from askany.ingest import VectorStoreManager
 from askany.memory.mem0_adapter import get_mem0_adapter
+from askany.metrics import get_metrics
 from askany.rag import FAQQueryEngine
 from askany.rag.router import QueryRouter, QueryType
 from askany.workflow.workflow_filter import WorkflowFilter
@@ -116,6 +119,32 @@ embed_model = None
 agent_workflow_global: AgentWorkflow | None = None
 simple_agent_global = None  # Simple agent (min_langchain_agent) instance
 update_lock = threading.Lock()  # Lock for thread-safe updates
+
+
+class MetricsMiddleware(BaseHTTPMiddleware):
+    """Middleware to collect HTTP request metrics."""
+
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path == "/metrics":
+            return await call_next(request)
+
+        endpoint = request.url.path
+        method = request.method
+
+        metrics = get_metrics()
+
+        start_time = time.perf_counter()
+        response = await call_next(request)
+        duration = time.perf_counter() - start_time
+
+        metrics.askany_http_requests_total.labels(
+            endpoint=endpoint, method=method, status_code=response.status_code
+        ).inc()
+        metrics.askany_http_request_duration_seconds.labels(
+            endpoint=endpoint, method=method
+        ).observe(duration)
+
+        return response
 
 
 class UpdateFAQsRequest(BaseModel):
@@ -325,6 +354,9 @@ def create_app(
             )
         return await call_next(request)
 
+    # Metrics middleware
+    app.add_middleware(MetricsMiddleware)
+
     # Note: We use AgentWorkflow (LangGraph) directly instead of WorkflowServer/WorkflowClient
     # AgentWorkflow runs in-process and doesn't require a separate HTTP server
 
@@ -353,11 +385,29 @@ def create_app(
                 health_status["status"] = "degraded"
 
         status_code = 200 if health_status["status"] == "ok" else 503
+
+        # Update health status gauges
+        metrics = get_metrics()
+        metrics.askany_health_status.labels(component="workflow").set(
+            1 if agent_workflow_global else 0
+        )
+        metrics.askany_health_status.labels(component="simple_agent").set(
+            1 if simple_agent_global else 0
+        )
+        metrics.askany_health_status.labels(component="overall").set(
+            1 if (agent_workflow_global and simple_agent_global) else 0
+        )
+
         return Response(
             content=json.dumps(health_status),
             media_type="application/json",
             status_code=status_code,
         )
+
+    @app.get("/metrics")
+    async def metrics():
+        """Prometheus metrics endpoint."""
+        return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
     def _fallback_models_response() -> JSONResponse:
         """Return /v1/models response using configured openai_model when upstream fails."""
@@ -509,6 +559,12 @@ def create_app(
             user_query,
         )
 
+        # Track workflow selection
+        metrics = get_metrics()
+        metrics.askany_workflow_selected_total.labels(
+            workflow_type="deepsearch" if use_deepsearch else "simple_agent"
+        ).inc()
+
         # ── Mem0: extract user identity & retrieve memories ──
         user_id: str | None = raw_request.headers.get("x-openwebui-user-id")
         mem0_adapter = get_mem0_adapter()
@@ -544,6 +600,11 @@ def create_app(
 
             from askany.workflow.min_langchain_agent import astream_agent_response
 
+            # Track active streams
+            metrics.askany_active_streams.labels(endpoint="/v1/chat/completions").inc()
+            streaming_start_time = time.perf_counter()
+            model_name = request.model
+
             async def _build_content_stream() -> AsyncGenerator[str, None]:
                 """Build the content-level async generator for the chosen workflow."""
                 # Prepare mem0_qa_context for workflow path
@@ -567,6 +628,10 @@ def create_app(
                             query_type = QueryType.DOCS
                         elif "code" in system_content:
                             query_type = QueryType.CODE
+                    # Track query type routing
+                    metrics.askany_query_type_total.labels(
+                        query_type=str(query_type)
+                    ).inc()
                     # Pass mem0_qa_context to workflow
                     async for chunk in agent_workflow_global.astream_final_answer(
                         user_query, query_type, mem0_qa_context=mem0_qa_context
@@ -574,6 +639,8 @@ def create_app(
                         yield chunk
                 else:
                     # Simple agent streaming
+                    # Track query type as AUTO for simple agent
+                    metrics.askany_query_type_total.labels(query_type="auto").inc()
                     mem0_messages: list[dict[str, str]] = []
                     if memory_system_text:
                         mem0_messages = [
@@ -591,10 +658,24 @@ def create_app(
                     ):
                         yield chunk
 
+            async def _tracked_content_stream() -> AsyncGenerator[str, None]:
+                """Wrapper that tracks streaming metrics when stream completes."""
+                try:
+                    async for chunk in _build_content_stream():
+                        yield chunk
+                finally:
+                    streaming_duration = time.perf_counter() - streaming_start_time
+                    metrics.askany_http_streaming_duration_seconds.labels(
+                        endpoint="/v1/chat/completions", model=model_name
+                    ).observe(streaming_duration)
+                    metrics.askany_active_streams.labels(
+                        endpoint="/v1/chat/completions"
+                    ).dec()
+
             return StreamingResponse(
                 _sse_generator(
                     request.model,
-                    _build_content_stream(),
+                    _tracked_content_stream(),
                     mem0_adapter=mem0_adapter if user_id else None,
                     user_id=user_id,
                     user_query=user_query,
@@ -626,6 +707,9 @@ def create_app(
                     query_type = QueryType.DOCS
                 elif "code" in system_content:
                     query_type = QueryType.CODE
+
+            # Track query type routing
+            metrics.askany_query_type_total.labels(query_type=str(query_type)).inc()
 
             # Use process_query_with_subproblems to handle sub-problem decomposition
             # This function handles:
@@ -671,6 +755,9 @@ def create_app(
                 raise HTTPException(
                     status_code=500, detail="Simple agent not initialized"
                 )
+
+            # Track query type as AUTO for simple agent
+            metrics.askany_query_type_total.labels(query_type="auto").inc()
 
             try:
                 # Convert messages to format expected by simple agent

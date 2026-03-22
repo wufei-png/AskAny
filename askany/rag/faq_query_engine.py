@@ -1,5 +1,6 @@
 """FAQ query engine with KeywordTableIndex and VectorStoreIndex ensemble."""
 
+import time
 from logging import getLogger
 
 from llama_index.core import KeywordTableIndex, QueryBundle, VectorStoreIndex
@@ -13,6 +14,7 @@ from llama_index.core.retrievers.fusion_retriever import FUSION_MODES
 from llama_index.core.schema import NodeWithScore
 
 from askany.config import settings
+from askany.metrics import get_metrics
 from askany.rerank import SafeReranker
 
 logger = getLogger(__name__)
@@ -143,21 +145,43 @@ class FAQQueryEngine:
         Returns:
             Generated response with reference information
         """
+        metrics = get_metrics()
+        start_time = time.perf_counter()
 
-        # Synthesize answer from retrieved nodes
-        query_bundle = QueryBundle(query_str)
-        nodes = self.retrieve(query_str, metadata_filters)
-        response = self.query_engine.synthesize(query_bundle, nodes)
+        # Track FAQ RAG query
+        metrics.askany_rag_query_total.labels(engine="faq", query_type="faq").inc()
 
-        # Extract reference information from used nodes
-        references = self._extract_faq_references(nodes)
+        try:
+            # Synthesize answer from retrieved nodes
+            query_bundle = QueryBundle(query_str)
 
-        # Format response with references
-        response_text = str(response)
-        if references:
-            response_text += self._format_faq_references(references)
+            # Track retrieval stages
+            retrieval_start = time.perf_counter()
+            nodes = self.retrieve(query_str, metadata_filters)
+            retrieval_duration = time.perf_counter() - retrieval_start
+            metrics.askany_rag_retrieval_latency_seconds.labels(
+                stage="ensemble"
+            ).observe(retrieval_duration)
 
-        return response_text
+            # Track nodes retrieved
+            metrics.askany_rag_nodes_retrieved.labels(engine="faq").observe(len(nodes))
+
+            response = self.query_engine.synthesize(query_bundle, nodes)
+
+            # Extract reference information from used nodes
+            references = self._extract_faq_references(nodes)
+
+            # Format response with references
+            response_text = str(response)
+            if references:
+                response_text += self._format_faq_references(references)
+
+            return response_text
+        finally:
+            duration = time.perf_counter() - start_time
+            metrics.askany_rag_query_duration_seconds.labels(
+                engine="faq", query_type="faq"
+            ).observe(duration)
 
     def retrieve(
         self, query_str: str, metadata_filters: dict[str, str] | None = None
@@ -171,9 +195,37 @@ class FAQQueryEngine:
         Returns:
             List of retrieved nodes (filtered by metadata if filters provided)
         """
+        metrics = get_metrics()
 
         query_bundle = QueryBundle(query_str)
-        nodes = self.query_engine.retrieve(query_bundle)
+
+        # Track retrieval stages - keyword search
+        keyword_start = time.perf_counter()
+        keyword_nodes = self.keyword_index.as_retriever().retrieve(query_bundle)
+        keyword_duration = time.perf_counter() - keyword_start
+        metrics.askany_rag_retrieval_latency_seconds.labels(stage="keyword").observe(
+            keyword_duration
+        )
+
+        # Track retrieval stages - vector search
+        vector_start = time.perf_counter()
+        vector_nodes = self.vector_index.as_retriever().retrieve(query_bundle)
+        vector_duration = time.perf_counter() - vector_start
+        metrics.askany_rag_retrieval_latency_seconds.labels(stage="vector").observe(
+            vector_duration
+        )
+
+        # Combine results (ensemble)
+        nodes = keyword_nodes + vector_nodes
+
+        # Apply rerank if available
+        if self.reranker and nodes:
+            rerank_start = time.perf_counter()
+            nodes = self.reranker.postprocess_nodes(nodes, query_bundle=query_bundle)
+            rerank_duration = time.perf_counter() - rerank_start
+            metrics.askany_rag_retrieval_latency_seconds.labels(stage="rerank").observe(
+                rerank_duration
+            )
 
         # Apply metadata filtering if filters exist
         if metadata_filters:
@@ -202,12 +254,20 @@ class FAQQueryEngine:
         Returns:
             Tuple of (list of retrieved nodes, top score)
         """
+        metrics = get_metrics()
+        start_time = time.perf_counter()
 
-        nodes = self.retrieve(query_str, metadata_filters)
+        try:
+            nodes = self.retrieve(query_str, metadata_filters)
 
-        # Get the top score (highest similarity score)
-        top_score = nodes[0].score if nodes and nodes[0].score is not None else 0.0
-        return nodes, top_score
+            # Get the top score (highest similarity score)
+            top_score = nodes[0].score if nodes and nodes[0].score is not None else 0.0
+            return nodes, top_score
+        finally:
+            duration = time.perf_counter() - start_time
+            metrics.askany_rag_query_duration_seconds.labels(
+                engine="faq", query_type="auto"
+            ).observe(duration)
 
     def synthesize_from_nodes(self, query_str: str, nodes: list) -> str:
         """Synthesize answer from retrieved nodes without re-retrieving.
