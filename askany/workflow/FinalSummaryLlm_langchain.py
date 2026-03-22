@@ -688,15 +688,19 @@ def generate_final_answer(
 
 
 if __name__ == "__main__":
+    import logging
+
+    logger = logging.getLogger(__name__)
+
     from llama_index.core.schema import Node, NodeWithScore
 
     # Get configuration from settings
     api_base = settings.openai_api_base
     api_key = settings.openai_api_key if settings.openai_api_key else None
 
-    print(f"API Base: {api_base}")
-    print(f"Model: {settings.openai_model}")
-    print("-" * 80)
+    logger.info(f"API Base: {api_base}")
+    logger.info(f"Model: {settings.openai_model}")
+    logger.info("-" * 80)
 
     # Create generator
     generator = FinalAnswerGenerator()
@@ -758,20 +762,20 @@ https://ones.ainewera.com/wiki/#/team/JNwe8qUX/space/9CLVdLmf/page/Bu1LuN3E
 
     # Test the function
     result, reasoning = generator.generate_final_answer(query, nodes)
-    print("Final Answer:")
-    print(result)
-    print("Reasoning:")
-    print(reasoning)
-    print("-" * 80)
+    logger.info("Final Answer:")
+    logger.info(result)
+    logger.info("Reasoning:")
+    logger.info(reasoning)
+    logger.info("-" * 80)
 
     # Test extract_docs_references
     references = extract_docs_references(nodes)
-    print("Document References:")
-    print(references)
-    print("-" * 80)
+    logger.info("Document References:")
+    logger.info(references)
+    logger.info("-" * 80)
 
     # Test format_docs_references
     formatted_refs = format_docs_references(references)
-    print("Formatted References:")
-    print(formatted_refs)
-    print("-" * 80)
+    logger.info("Formatted References:")
+    logger.info(formatted_refs)
+    logger.info("-" * 80)

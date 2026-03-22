@@ -1,9 +1,12 @@
 """Wrapper for combining LLM and TF-IDF keyword extraction."""
 
+import logging
 import re
 import sys
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
@@ -207,7 +210,7 @@ class KeywordExtractorWrapper:
             # 只处理非中文的关键词
             if contains_chinese(keyword):
                 continue
-            print("keyword", keyword)
+            logger.debug("keyword: %s", keyword)
             # 如果包含空格，生成用-和_拼接的新词
             if " " in keyword:
                 parts = keyword.split()
@@ -311,10 +314,10 @@ class KeywordExtractorWrapper:
         """
         # Extract keywords using LLM
         llm_keywords = self.llm_extractor.extract_keywords(query)
-        print(f"LLM keywords: {llm_keywords}")
+        logger.info("LLM keywords: %s", llm_keywords)
         # Extract keywords using TF-IDF
         tfidf_keywords_set = self.tfidf_extractor.extract_keywords_set(query)
-        print(f"TF-IDF keywords: {tfidf_keywords_set}")
+        logger.info("TF-IDF keywords: %s", tfidf_keywords_set)
 
         if self.priority == "llm":
             # LLM 优先策略：LLM 关键词在前，TF-IDF 去重
@@ -332,23 +335,26 @@ class KeywordExtractorWrapper:
             ]
             # Combine: TF-IDF keywords first, then LLM keywords (without common ones)
             merged_keywords = tfidf_keywords_list + llm_keywords_filtered
-        print("test1")
+        logger.debug("test1")
 
         # 先根据与 custom 关键词的相似度过滤
         # 相似度超过阈值的关键词直接保留，不经过 LLM 判断
         custom_matched, remaining_keywords = self._filter_by_custom_similarity(
             merged_keywords, query
         )
-        print(
-            f"custom matched keywords (similarity >= {settings.custom_keyword_similarity_threshold}): {custom_matched}"
+        logger.info(
+            "custom matched keywords (similarity >= %s): %s",
+            settings.custom_keyword_similarity_threshold,
+            custom_matched,
         )
-        print(f"Remaining keywords for LLM filtering: {remaining_keywords}")
+        logger.info("Remaining keywords for LLM filtering: %s", remaining_keywords)
         # 过滤重复和子串关键词
         remaining_keywords = self._filter_duplicate_and_substring_keywords(
             remaining_keywords
         )
-        print(
-            f"Filtered remaining keywords (after duplicate and substring removal): {remaining_keywords}"
+        logger.info(
+            "Filtered remaining keywords (after duplicate and substring removal): %s",
+            remaining_keywords,
         )
         # 对剩余关键词进行 LLM 过滤
         if remaining_keywords:
@@ -357,7 +363,7 @@ class KeywordExtractorWrapper:
             )
         else:
             filtered_keywords = []
-        print("test2")
+        logger.debug("test2")
 
         # 合并结果：custom 匹配的关键词 + LLM 过滤后的关键词
         filtered_keywords = custom_matched + filtered_keywords
@@ -371,7 +377,7 @@ class KeywordExtractorWrapper:
         keywords_other = [
             kw for kw in merged_keywords if kw not in filtered_keywords_set
         ]
-        print("test3")
+        logger.debug("test3")
         # Split space and use - and _ to generate more keywords
         filtered_keywords = self._expand_keywords_with_separators(filtered_keywords)
         keywords_other = self._expand_keywords_with_separators(keywords_other)
@@ -385,8 +391,8 @@ class KeywordExtractorWrapper:
 
 if __name__ == "__main__":
     # Test KeywordExtractorWrapper
-    print("Testing KeywordExtractorWrapper...")
-    print("-" * 80)
+    logger.info("Testing KeywordExtractorWrapper...")
+    logger.info("-" * 80)
 
     # Initialize embedding model for similarity filtering
     from askany.main import initialize_llm
@@ -453,9 +459,9 @@ if __name__ == "__main__":
     ]
     for query in queries:
         keywords, _ = wrapper.extract_keywords(query)
-        print(f"Query: {query}")
-        print(f"Merged Keywords: {keywords}")
-        print("-" * 80)
+        logger.info("Query: %s", query)
+        logger.info("Merged Keywords: %s", keywords)
+        logger.info("-" * 80)
     # # Test query
     # query = "query？"
     # keywords = wrapper.extract_keywords(query)

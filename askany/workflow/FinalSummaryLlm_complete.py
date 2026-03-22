@@ -281,6 +281,9 @@ def format_docs_references(references: dict[str, list]) -> str:
 
 
 if __name__ == "__main__":
+    import logging
+
+    logger = logging.getLogger(__name__)
     from llama_index.core.schema import Node, NodeWithScore
 
     # Get configuration from settings
@@ -294,10 +297,10 @@ if __name__ == "__main__":
         base_url=api_base,
     )
 
-    print(f"Using LLM: {type(client)}")
-    print(f"API Base: {api_base}")
-    print(f"Model: {settings.openai_model}")
-    print("-" * 80)
+    logger.info(f"Using LLM: {type(client)}")
+    logger.info(f"API Base: {api_base}")
+    logger.info(f"Model: {settings.openai_model}")
+    logger.info("-" * 80)
 
     # Create test nodes
     query = "API响应没有收到，怎么办？"
@@ -356,11 +359,11 @@ API没有返回响应是一个可能性很多的问题, 下面按照数据流的
 
     # Test the function using completion interface
     result, reasoning = generate_final_answer_complete(query, nodes, client)
-    print("Final Answer:")
-    print(result)
-    print("Reasoning:")
-    print(reasoning)
-    print("-" * 80)
+    logger.info("Final Answer:")
+    logger.info(result)
+    logger.info("Reasoning:")
+    logger.info(reasoning)
+    logger.info("-" * 80)
 
     # # Test extract_docs_references
     # references = extract_docs_references(nodes)

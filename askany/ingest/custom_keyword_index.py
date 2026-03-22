@@ -1,5 +1,6 @@
 """Custom KeywordTableIndex and KeywordTableGPTRetriever with KeywordExtractorWrapper support."""
 
+import logging
 from typing import Any
 
 from llama_index.core import KeywordTableIndex
@@ -12,6 +13,8 @@ from llama_index.core.prompts import BasePromptTemplate
 
 from askany.config import settings
 from askany.ingest.keyword_extract_wrapper import KeywordExtractorWrapper
+
+logger = logging.getLogger(__name__)
 
 # Global KeywordExtractorWrapper instance (singleton pattern)
 _global_keyword_extractor: KeywordExtractorWrapper | None = None
@@ -73,7 +76,7 @@ class CustomKeywordTableIndex(KeywordTableIndex):
             show_progress=show_progress,
             **kwargs,
         )
-        print(
+        logger.info(
             f"CustomKeywordTableIndex initialized with keyword extractor: {self._keyword_extractor}"
         )
 

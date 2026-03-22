@@ -300,7 +300,7 @@ def create_rag_tool(
                 keyword_nodes_tmp, local_file_search
             )
             logger.debug("关键词搜索完成 - 节点数: %d", len(keyword_nodes))
-        print(f"keyword_nodes: {keyword_nodes}")
+        logger.debug("keyword_nodes: %s", keyword_nodes)
         # Merge keyword search results with RAG results
         if keyword_nodes and len(keyword_nodes) > 0:
             nodes = _merge_nodes(nodes, keyword_nodes, local_file_search)
@@ -1188,7 +1188,7 @@ def answer_test(query_list=None, multi_turn_conversations=None):
             # logger.info("=" * 80)
             # logger.info(f"Query: {question}")
             # logger.info("=" * 80)
-            print("question: ", question)
+            logger.debug("question: %s", question)
             try:
                 time_start = time.time()
 
@@ -1196,7 +1196,7 @@ def answer_test(query_list=None, multi_turn_conversations=None):
                 result = invoke_with_retry(
                     agent, {"messages": [{"role": "user", "content": question}]}
                 )
-                print("result: ", result)
+                logger.debug("result: %s", result)
                 raise Exception("test")
                 time_end = time.time()
 
@@ -1332,7 +1332,7 @@ def test_agent_ui():
             time_end = time.time()
 
             # Extract and format response
-            print("result: ", result)
+            logger.debug("result: %s", result)
             agent_response = extract_and_format_response(result)
             # logger.info(f"\nAgent: {agent_response}\n")
             tool_calls_list = extract_all_tool_calls(result)
@@ -1362,8 +1362,7 @@ if __name__ == "__main__":
     # test_agent_ui()
     # exit()
 
-    # logger.info("=" * 80)
-    print("=" * 80)
+    logger.info("=" * 80)
     # Run tests
     answer_test(
         query_list=[],

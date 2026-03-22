@@ -208,14 +208,14 @@ async def _main(args: argparse.Namespace) -> None:
 
             md_dir = args.markdown_dir or settings.markdown_dir
             count = await ingestor.ingest_directory(md_dir)
-            print(f"Markdown ingestion complete: {count} files")
+            logger.info("Markdown ingestion complete: %d files", count)
 
         if args.ingest_json:
             from askany.config import settings
 
             json_dir = args.json_dir or settings.json_dir
             count = await ingestor.ingest_json_faqs(json_dir)
-            print(f"JSON FAQ ingestion complete: {count} entries")
+            logger.info("JSON FAQ ingestion complete: %d entries", count)
 
 
 if __name__ == "__main__":

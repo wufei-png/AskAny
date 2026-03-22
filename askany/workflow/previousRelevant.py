@@ -5,10 +5,13 @@ try:
 except ImportError:
     get_langfuse_callback_handler = lambda: None  # noqa: E731
 
+import logging
 import sys
 from pathlib import Path
 
 from langchain_openai import ChatOpenAI
+
+logger = logging.getLogger(__name__)
 from pydantic import BaseModel, Field
 
 # Add project root to path to enable imports
@@ -52,10 +55,10 @@ class PreviousRelevantor:
                 callbacks=[_lf_handler] if _lf_handler else None,
             )
 
-            print(f"Using LLM: {type(self.llm)}")
-            print(f"API Base: {api_base}")
-            print(f"Model: {model}")
-            print("-" * 80)
+            logger.info(f"Using LLM: {type(self.llm)}")
+            logger.info(f"API Base: {api_base}")
+            logger.info(f"Model: {model}")
+            logger.debug("-" * 80)
         else:
             self.llm = llm
 
@@ -68,9 +71,9 @@ if __name__ == "__main__":
     api_base = settings.openai_api_base
     api_key = settings.openai_api_key if settings.openai_api_key else None
 
-    print(f"API Base: {api_base}")
-    print(f"Model: {settings.openai_model}")
-    print("-" * 80)
+    logger.info(f"API Base: {api_base}")
+    logger.info(f"Model: {settings.openai_model}")
+    logger.info("-" * 80)
 
     # Create generator
     generator = PreviousRelevantor()

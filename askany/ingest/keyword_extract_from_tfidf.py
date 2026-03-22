@@ -633,108 +633,108 @@ if __name__ == "__main__":
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
-    print("=" * 80)
-    print("KeywordExtractorFromTFIDF 使用示例")
-    print("=" * 80)
+    logger.info("=" * 80)
+    logger.info("KeywordExtractorFromTFIDF 使用示例")
+    logger.info("=" * 80)
 
     # ============================================================
     # 步骤 1: 初始化 KeywordExtractor
     # ============================================================
-    print("\n[步骤 1] 初始化 KeywordExtractorFromTFIDF...")
-    print("-" * 80)
+    logger.info("\n[步骤 1] 初始化 KeywordExtractorFromTFIDF...")
+    logger.info("-" * 80)
     keyword_extractor = KeywordExtractorFromTFIDF()
 
     # 检查是否已有持久化的模型
     if keyword_extractor.tfidf_matrix is not None:
-        print("✅ 检测到已持久化的模型，已自动加载！")
-        print(f"   - 特征数量: {len(keyword_extractor.feature_names)}")
-        print("\n[步骤 2-3] 跳过训练和持久化（模型已存在）")
-        print("-" * 80)
+        logger.info("✅ 检测到已持久化的模型，已自动加载！")
+        logger.info(f"   - 特征数量: {len(keyword_extractor.feature_names)}")
+        logger.info("\n[步骤 2-3] 跳过训练和持久化（模型已存在）")
+        logger.info("-" * 80)
     else:
-        print("ℹ️  未找到持久化的模型，需要重新训练")
+        logger.info("ℹ️  未找到持久化的模型，需要重新训练")
 
         # ============================================================
         # 步骤 2: 加载文档并训练模型
         # ============================================================
-        print("\n[步骤 2] 加载文档并训练模型...")
-        print("-" * 80)
+        logger.info("\n[步骤 2] 加载文档并训练模型...")
+        logger.info("-" * 80)
         markdown_dir = Path(settings.markdown_dir)
-        print(f"📂 文档目录: {markdown_dir}")
+        logger.info(f"📂 文档目录: {markdown_dir}")
 
         keyword_extractor.load_documents_from_directory(markdown_dir)
-        print(f"✅ 已加载 {len(keyword_extractor.documents)} 个文档")
+        logger.info(f"✅ 已加载 {len(keyword_extractor.documents)} 个文档")
 
-        print("\n🔧 开始训练 TF-IDF 模型...")
+        logger.info("\n🔧 开始训练 TF-IDF 模型...")
         keyword_extractor.train()
-        print(f"✅ 训练完成！特征数量: {len(keyword_extractor.feature_names)}")
+        logger.info(f"✅ 训练完成！特征数量: {len(keyword_extractor.feature_names)}")
 
         # ============================================================
         # 步骤 3: 持久化模型
         # ============================================================
-        print("\n[步骤 3] 持久化模型...")
-        print("-" * 80)
+        logger.info("\n[步骤 3] 持久化模型...")
+        logger.info("-" * 80)
         keyword_extractor.persist()
-        print("✅ 模型已保存到持久化目录")
+        logger.info("✅ 模型已保存到持久化目录")
 
     # ============================================================
     # 步骤 4: 重新加载模型（演示）
     # ============================================================
-    print("\n[步骤 4] 重新加载模型（演示）...")
-    print("-" * 80)
-    print("创建新的 KeywordExtractor 实例，应该会自动加载持久化的模型...")
+    logger.info("\n[步骤 4] 重新加载模型（演示）...")
+    logger.info("-" * 80)
+    logger.info("创建新的 KeywordExtractor 实例，应该会自动加载持久化的模型...")
     new_extractor = KeywordExtractorFromTFIDF()
 
     if new_extractor.tfidf_matrix is not None:
-        print("✅ 成功从持久化文件加载模型！")
-        print(f"   - 特征数量: {len(new_extractor.feature_names)}")
+        logger.info("✅ 成功从持久化文件加载模型！")
+        logger.info(f"   - 特征数量: {len(new_extractor.feature_names)}")
     else:
-        print("❌ 未能加载持久化的模型")
+        logger.error("❌ 未能加载持久化的模型")
 
     # ============================================================
     # 步骤 5: 使用模型提取关键词
     # ============================================================
-    print("\n[步骤 5] 使用模型提取关键词...")
-    print("-" * 80)
+    logger.info("\n[步骤 5] 使用模型提取关键词...")
+    logger.info("-" * 80)
 
     # 使用新加载的模型进行关键词提取
     test_queries = [
         """
-初始选择：你面前有三扇关闭的门 (门 1, 门 2, 门 3)，一扇后面是汽车，另外两扇后面是山羊。你随机选择一扇门（例如门 1），但先不打开。
-主持人操作：主持人知道汽车在哪。他会打开你没选的另外两扇门中（门 2 或门 3）的一扇，且这扇门后一定是山羊。
-关键抉择：主持人问你：“要不要换到剩下那扇未打开的门？”""",
+    初始选择：你面前有三扇关闭的门 (门 1, 门 2, 门 3)，一扇后面是汽车，另外两扇后面是山羊。你随机选择一扇门（例如门 1），但先不打开。
+    主持人操作：主持人知道汽车在哪。他会打开你没选的另外两扇门中（门 2 或门 3）的一扇，且这扇门后一定是山羊。
+    关键抉择：主持人问你："要不要换到剩下那扇未打开的门？"。""",
         "如何重启解析的多模态applet 服务?",
     ]
     # tokenize the test_queries
     for query in test_queries:
-        print(f"\n📝 查询: {query}")
+        logger.info(f"\n📝 查询: {query}")
         tokens = new_extractor.tokenize_text(query)
-        print("   分词结果:")
+        logger.info("   分词结果:")
         for token in tokens:
-            print(f"     - {token}")
-        print("-" * 80)
+            logger.info(f"     - {token}")
+        logger.info("-" * 80)
     # raise Exception("Stop here")
     for query in test_queries:
-        print(f"\n📝 查询: {query}")
+        logger.info(f"\n📝 查询: {query}")
         keywords = new_extractor.extract_keywords(query, top_k=5)
-        print("   关键词:")
+        logger.info("   关键词:")
         for keyword, score in keywords:
-            print(f"     - {keyword}: {score:.4f}")
+            logger.info(f"     - {keyword}: {score:.4f}")
 
         # 也可以获取关键词集合
         keyword_set = new_extractor.extract_keywords_set(query, top_k=5)
-        print(f"   关键词集合: {keyword_set}")
+        logger.info(f"   关键词集合: {keyword_set}")
 
     # ============================================================
     # 步骤 6: 获取文档的关键词（可选）
     # ============================================================
     if len(new_extractor.documents) > 0:
-        print("\n[步骤 6] 获取文档的关键词（示例）...")
-        print("-" * 80)
+        logger.info("\n[步骤 6] 获取文档的关键词（示例）...")
+        logger.info("-" * 80)
         doc_keywords = new_extractor.get_document_keywords(0, top_k=10)
-        print("文档 0 的 top 10 关键词:")
+        logger.info("文档 0 的 top 10 关键词:")
         for keyword, score in doc_keywords:
-            print(f"  - {keyword}: {score:.4f}")
+            logger.info(f"  - {keyword}: {score:.4f}")
 
-    print("\n" + "=" * 80)
-    print("✅ 完整流程演示完成！")
-    print("=" * 80)
+    logger.info("\n" + "=" * 80)
+    logger.info("✅ 完整流程演示完成！")
+    logger.info("=" * 80)

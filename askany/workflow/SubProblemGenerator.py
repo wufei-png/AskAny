@@ -1,5 +1,6 @@
 """SubProblemGenerator for decomposing user queries into sub-problems."""
 
+import logging
 import re
 import sys
 from pathlib import Path
@@ -12,6 +13,8 @@ sys.path.insert(0, str(project_root))
 
 from askany.config import settings
 from askany.prompts.prompt_manager import get_prompts
+
+logger = logging.getLogger(__name__)
 
 # Linux 文件系统中最基础的禁止字符
 FORBIDDEN_CHARS_PATTERN = re.compile(r"[\x00]")
@@ -54,10 +57,10 @@ class SubProblemGenerator:
                 base_url=api_base,
             )
 
-            print(f"Using LLM: {type(client)}")
-            print(f"API Base: {api_base}")
-            print(f"Model: {model}")
-            print("-" * 80)
+            logger.info(f"Using LLM: {type(client)}")
+            logger.info(f"API Base: {api_base}")
+            logger.info(f"Model: {model}")
+            logger.info("-" * 80)
         else:
             self.client = client
 
@@ -96,7 +99,7 @@ class SubProblemGenerator:
         response_content = completion.choices[0].message
         if not response_content.parsed:
             raise ValueError("Failed to parse sub-problem structure from LLM response")
-        print(f"SubProblemGenerator Response content: {response_content}")
+        logger.debug(f"SubProblemGenerator Response content: {response_content}")
         return response_content.parsed
 
 
@@ -108,38 +111,38 @@ if __name__ == "__main__":
     api_key = settings.openai_api_key if settings.openai_api_key else None
     model = settings.openai_model
 
-    print("Using LLM: SubProblemGenerator")
-    print(f"API Base: {api_base}")
-    print(f"Model: {model}")
-    print("-" * 80)
+    logger.info("Using LLM: SubProblemGenerator")
+    logger.info(f"API Base: {api_base}")
+    logger.info(f"Model: {model}")
+    logger.info("-" * 80)
 
     # Test SubProblemGenerator
     generator = SubProblemGenerator()
 
     # Test 1: Simple single question
-    print("Test 1: Simple single question")
+    logger.info("Test 1: Simple single question")
     query1 = "cassadnra组件的concurent_reads 有什么用"
     result1 = generator.generate(query1)
-    print(f"Query: {query1}")
-    print(f"Parallel groups: {result1.parallel_groups}")
-    # print(f"Reasoning: {result1.reasoning}")
-    print("-" * 80)
+    logger.info(f"Query: {query1}")
+    logger.info(f"Parallel groups: {result1.parallel_groups}")
+    # logger.info(f"Reasoning: {result1.reasoning}")
+    logger.info("-" * 80)
     raise Exception("Stop here")
     # Test 2: Complex question with multiple sub-problems
 
     # Test 3
-    print("Test 3")
+    logger.info("Test 3")
     query2 = "中美的关系现在如何？主要在针对什么问题进行交锋？"
     result2 = generator.generate(query2)
-    print(f"Query: {query2}")
-    print(f"Parallel groups: {result2.parallel_groups}")
-    # print(f"Reasoning: {result2.reasoning}")
-    print("-" * 80)
+    logger.info(f"Query: {query2}")
+    logger.info(f"Parallel groups: {result2.parallel_groups}")
+    # logger.info(f"Reasoning: {result2.reasoning}")
+    logger.info("-" * 80)
 
-    print("Test 5")
+    logger.info("Test 5")
     query2 = "https://xueqiu.com/8244815919/327993547 在这一文中的机器人技术中，与美国合作的厂家中有什么特别的吗"
     result2 = generator.generate(query2)
-    print(f"Query: {query2}")
-    print(f"Parallel groups: {result2.parallel_groups}")
-    # print(f"Reasoning: {result2.reasoning}")
-    print("-" * 80)
+    logger.info(f"Query: {query2}")
+    logger.info(f"Parallel groups: {result2.parallel_groups}")
+    # logger.info(f"Reasoning: {result2.reasoning}")
+    logger.info("-" * 80)

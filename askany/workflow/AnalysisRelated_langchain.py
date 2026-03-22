@@ -5,10 +5,13 @@ try:
 except ImportError:
     get_langfuse_callback_handler = lambda: None  # noqa: E731
 
+import logging
 import os
 import re
 import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -83,7 +86,7 @@ class RelevantResult(BaseModel):
                 f"【注意】特殊标识符（无需验证）: {special_identifiers}。"
             )
             # raise ValueError(error_message)//不raise 只是打印，避免整个问题失败
-            print(f"AnalysisRelated_langchain.py: {error_message}")
+            logger.warning("Validation failed for paths: %s", error_message)
         return paths
 
 
@@ -164,10 +167,10 @@ class RelevanceAnalyzer:
                 callbacks=[_lf_handler] if _lf_handler else None,
             )
 
-            print(f"Using LLM: {type(self.llm)}")
-            print(f"API Base: {api_base}")
-            print(f"Model: {model}")
-            print("-" * 80)
+            logger.info("Using LLM: %s", type(self.llm))
+            logger.info("API Base: %s", api_base)
+            logger.info("Model: %s", model)
+            logger.info("-" * 80)
         else:
             self.llm = llm
 
@@ -323,7 +326,7 @@ class RelevanceAnalyzer:
 
             try:
                 result = self.structured_llm_relevance.invoke(messages)
-                print(f"RelevanceAnalyzer Response content: {result}")
+                logger.info("RelevanceAnalyzer Response content: %s", result)
                 return result
             except Exception as e:
                 error_msg = str(e).lower()
@@ -709,9 +712,9 @@ if __name__ == "__main__":
     api_base = settings.openai_api_base
     api_key = settings.openai_api_key if settings.openai_api_key else None
 
-    print(f"API Base: {api_base}")
-    print(f"Model: {settings.openai_model}")
-    print("-" * 80)
+    logger.info("API Base: %s", api_base)
+    logger.info("Model: %s", settings.openai_model)
+    logger.info("-" * 80)
 
     # Create analyzer
     analyzer = RelevanceAnalyzer()
@@ -762,37 +765,37 @@ API没有返回响应是一个可能性很多的问题, 下面按照数据流的
 
     # Test the function
     result = analyzer.analyze_relevance_and_completeness(query, nodes, keywords)
-    print("Analysis Result1:")
-    print("Relevant file paths:", result.relevant_file_paths)
-    print("Is complete:", result.is_complete)
-    print("-" * 80)
+    logger.info("Analysis Result1:")
+    logger.info("Relevant file paths: %s", result.relevant_file_paths)
+    logger.info("Is complete: %s", result.is_complete)
+    logger.info("-" * 80)
 
     query = "API响应没有收到，怎么办？"
     keywords = ["API", "响应"]
 
     # Test the function
     result = analyzer.analyze_relevance_and_completeness(query, nodes, keywords)
-    print("Analysis Result2:")
-    print("Relevant file paths:", result.relevant_file_paths)
-    print("Is complete:", result.is_complete)
-    print("-" * 80)
+    logger.info("Analysis Result2:")
+    logger.info("Relevant file paths: %s", result.relevant_file_paths)
+    logger.info("Is complete: %s", result.is_complete)
+    logger.info("-" * 80)
     query = "数据没有在数据库中找到，怎么办？"
     keywords = ["数据", "数据库"]
 
     # Test the function
     result = analyzer.analyze_no_relevant(query, keywords)
-    print("Analysis Result3:")
-    print("Missing info keywords:", result.missing_info_keywords)
-    print("Sub queries:", result.sub_queries)
-    print("Hypothetical answer:", result.hypothetical_answer)
-    print("-" * 80)
+    logger.info("Analysis Result3:")
+    logger.info("Missing info keywords: %s", result.missing_info_keywords)
+    logger.info("Sub queries: %s", result.sub_queries)
+    logger.info("Hypothetical answer: %s", result.hypothetical_answer)
+    logger.info("-" * 80)
 
     query = "数据成功写入消息队列了，但没有在数据库中找到，怎么办？"
     keywords = ["数据", "数据库"]
 
     # Test the function
     result = analyzer.analyze_no_relevant_without_sub_queries(query, keywords)
-    print("Analysis Result4:")
-    print("Missing info keywords:", result.missing_info_keywords)
-    print("Hypothetical answer:", result.hypothetical_answer)
-    print("-" * 80)
+    logger.info("Analysis Result4:")
+    logger.info("Missing info keywords: %s", result.missing_info_keywords)
+    logger.info("Hypothetical answer: %s", result.hypothetical_answer)
+    logger.info("-" * 80)

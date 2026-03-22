@@ -132,7 +132,7 @@ if __name__ == "__main__":
     queries = ["介绍算法编排2.0", "app打包流程变更了吗？有什么变化"]
     for query in queries:
         result = query_rewrite_generator.generate(query)
-        print(result.rewritten_query)
+        logger.info(result.rewritten_query)
 
 # NVIDIA T4 GPU硬件部署与深度学习环境配置方法，包括CUDA驱动安装、AI模型特征数据库存储优化、大数据聚类归档系统兼容性设置
 # VPS部署的多模态AI应用（图像识别/视频分析）告警机制失效，如何排查特征数据库异常或大数据聚类归档导致的监控异常？
