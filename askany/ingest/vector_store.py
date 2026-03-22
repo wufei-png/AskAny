@@ -138,6 +138,11 @@ class VectorStoreManager:
     def _get_db_connection(self):
         """Get a database connection for direct SQL operations.
 
+        Uses a one-off ``psycopg2.connect()`` on purpose: callers are rare
+        (startup health check, HNSW DDL). Pooling would add lifecycle and
+        thread-safety complexity for negligible gain versus connect latency next
+        to index work. Hot query paths use LlamaIndex ``PGVectorStore`` instead.
+
         Returns:
             psycopg2 connection object
         """
