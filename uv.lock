@@ -138,6 +138,7 @@ dependencies = [
     { name = "deepl" },
     { name = "duckduckgo-search" },
     { name = "fastapi" },
+    { name = "gptcache" },
     { name = "hanlp" },
     { name = "httpx", extra = ["socks"] },
     { name = "huggingface-hub" },
@@ -202,6 +203,7 @@ requires-dist = [
     { name = "deepl", specifier = ">=1.27.0" },
     { name = "duckduckgo-search", specifier = ">=6.4.2" },
     { name = "fastapi", specifier = ">=0.104.0" },
+    { name = "gptcache", specifier = ">=0.1.44" },
     { name = "hanlp", specifier = ">=2.1.3" },
     { name = "httpx", extras = ["socks"], specifier = ">=0.28.1" },
     { name = "huggingface-hub", specifier = ">=0.36.0" },
@@ -774,6 +776,20 @@ dependencies = [
 sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/e5/7b/adfd75544c415c487b33061fe7ae526165241c1ea133f9a9125a56b39fd8/googleapis_common_protos-1.72.0.tar.gz", hash = "sha256:e55a601c1b32b52d7a3e65f43563e2aa61bcd737998ee672ac9b951cd49319f5", size = 147433, upload-time = "2025-11-06T18:29:24.087Z" }
 wheels = [
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/c4/ab/09169d5a4612a5f92490806649ac8d41e3ec9129c636754575b3553f4ea4/googleapis_common_protos-1.72.0-py3-none-any.whl", hash = "sha256:4299c5a82d5ae1a9702ada957347726b167f9f8d1fc352477702a1e851ff4038", size = 297515, upload-time = "2025-11-06T18:29:13.14Z" },
+]
+
+[[package]]
+name = "gptcache"
+version = "0.1.44"
+source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
+dependencies = [
+    { name = "cachetools" },
+    { name = "numpy" },
+    { name = "requests" },
+]
+sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/27/73/5cc20749e06017044106837550384f5d8ed00b8e9570689f17e7292e2d23/gptcache-0.1.44.tar.gz", hash = "sha256:d3d5e6a75c57594dc58212c2d6c53a7999c23ede30e0be66d213d885c0ad0be9", size = 95969, upload-time = "2024-08-01T11:26:33.601Z" }
+wheels = [
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/49/87/8dde0a3757bc207805f751b47878888b09db4a464ae48a55f386f091b488/gptcache-0.1.44-py3-none-any.whl", hash = "sha256:11ddd63b173dc3822b8c2eb7588ea947c825845ed0737b043038a238286bfec4", size = 131634, upload-time = "2024-08-01T11:26:27.449Z" },
 ]
 
 [[package]]
