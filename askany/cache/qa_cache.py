@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from gptcache import cache as gptcache
+from gptcache import Config
 from gptcache.manager import CacheBase, VectorBase, get_data_manager
 from gptcache.similarity_evaluation.distance import SearchDistanceEvaluation
 
@@ -16,6 +17,16 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Cosine distance for normalized vectors ranges 0-2:
+#   distance = 0 → identical (similarity = 1.0)
+#   distance = 2 → opposite (similarity = -1)
+# SearchDistanceEvaluation with positive=False: score = max_distance - distance
+# For our threshold logic to work: max_distance=1.0, positive=False
+#   score = 1.0 - distance
+#   threshold = similarity_threshold = 0.9
+#   HIT when: score >= 0.9 → distance <= 0.1 → similarity >= 0.9
+COSINE_MAX_DISTANCE = 1.0  # matches 0-1 similarity scale after normalization
+
 
 class QACacheManager:
     """Thin wrapper around GPTCache for QA response caching.
@@ -24,6 +35,13 @@ class QACacheManager:
     search, and PostgreSQL for response storage.
 
     Cache key = f"{query_type}:{query_text}"
+
+    Threshold behavior:
+        - Cosine distance (normalized embeddings): 0 = identical, 2 = opposite
+        - SearchDistanceEvaluation(positive=False): score = max_distance - distance
+        - With max_distance=1.0: score = 1.0 - distance
+        - Cache HIT when: score >= similarity_threshold (0.9)
+        - This means: distance <= 0.1 → similarity >= 0.9
     """
 
     def __init__(
@@ -80,11 +98,16 @@ class QACacheManager:
         table_name = settings.qa_cache_postgres_table
 
         # PGVector for embedding storage (HNSW index)
+        # Uses vector_cosine_ops by default (distance = cosine distance)
         vector_base = VectorBase(
             "pgvector",
             dimension=self._dimension,
             url=self._postgres_url,
             collection_name=table_name,
+            index_params={
+                "index_type": "cosine",
+                "params": {"lists": 100, "probes": 10},
+            },
         )
 
         # PostgreSQL for response storage
@@ -100,11 +123,19 @@ class QACacheManager:
             vector_base=vector_base,
         )
 
-        # Initialize GPTCache
+        # Initialize GPTCache with proper threshold configuration
+        # similarity_threshold=0.9 means: score >= 0.9 → HIT
+        # SearchDistanceEvaluation with positive=False: score = max_distance - distance
+        # With max_distance=1.0: score = 1.0 - distance
+        # HIT when: 1.0 - distance >= 0.9 → distance <= 0.1 → similarity >= 0.9
         gptcache.init(
             embedding_func=self._build_embedding_func(),
             data_manager=data_manager,
-            similarity_evaluation=SearchDistanceEvaluation(),
+            similarity_evaluation=SearchDistanceEvaluation(
+                max_distance=COSINE_MAX_DISTANCE,
+                positive=False,
+            ),
+            config=Config(similarity_threshold=settings.qa_cache_similarity_threshold),
         )
 
         self._initialized = True
@@ -130,47 +161,43 @@ class QACacheManager:
         cache_key = self.build_cache_key(query, query_type)
 
         try:
-            if gptcache.embedding_func is None:
-                logger.warning("GPTCache embedding_func not initialized")
-                return None
-
-            embedding = gptcache.embedding_func(cache_key)
-
-            if gptcache.data_manager is None:
-                logger.warning("GPTCache data_manager not initialized")
-                return None
-
-            search_results = gptcache.data_manager.search(embedding, top_k=1)
+            embedding_func = gptcache.embedding_func
+            assert embedding_func is not None
+            embedding = embedding_func(cache_key)
+            search_results = gptcache.data_manager.search(embedding, top_k=1)  # type: ignore[union-attr]
 
             if not search_results:
                 logger.debug(f"Cache MISS: key={cache_key[:50]}... (no search results)")
                 return None
 
-            score = search_results[0][0]
-            threshold = settings.qa_cache_similarity_threshold
-            max_distance = 1.0 - threshold
+            # search_results[0] is (distance, id) tuple from vector store
+            distance = search_results[0][0]
 
-            if score > max_distance:
+            # Apply threshold: score = max_distance - distance, HIT when score >= threshold
+            # This gives: 1.0 - distance >= 0.9 → distance <= 0.1 → similarity >= 0.9
+            score = COSINE_MAX_DISTANCE - distance
+            threshold = settings.qa_cache_similarity_threshold
+
+            if score < threshold:
                 logger.debug(
-                    f"Cache MISS: key={cache_key[:50]}... (score={score:.4f} > {max_distance:.4f})"
+                    f"Cache MISS: key={cache_key[:50]}... "
+                    f"(score={score:.4f} < {threshold:.4f}, distance={distance:.4f})"
                 )
                 return None
 
-            res_data = search_results[0]
-            cache_data = gptcache.data_manager.get_scalar_data(res_data)
+            # Get the cached data
+            cache_data = gptcache.data_manager.get_scalar_data(search_results[0])
 
             if cache_data is None:
-                logger.debug(
-                    f"Cache MISS: key={cache_key[:50]}... (no cache data found)"
-                )
+                logger.debug(f"Cache MISS: key={cache_key[:50]}... (no cache data)")
                 return None
 
+            # Extract answer from cache data
             if hasattr(cache_data, "answers") and cache_data.answers:
                 answer = cache_data.answers[0]
-                if hasattr(answer, "answer"):
-                    response: str | None = answer.answer
-                else:
-                    response = str(answer) if answer is not None else None
+                response: str | None = (
+                    answer.answer if hasattr(answer, "answer") else str(answer)
+                )
             else:
                 response = str(cache_data) if cache_data is not None else None
 
@@ -195,28 +222,37 @@ class QACacheManager:
         cache_key = self.build_cache_key(query, query_type)
 
         try:
-            if gptcache.embedding_func is None or gptcache.data_manager is None:
-                logger.warning("GPTCache not fully initialized")
-                return
-
-            embedding = gptcache.embedding_func(cache_key)
-
-            gptcache.data_manager.save(
-                question=cache_key,
-                answer=response,
-                embedding_data=embedding,
+            embedding_func = gptcache.embedding_func
+            assert embedding_func is not None
+            embedding = embedding_func(cache_key)
+            gptcache.data_manager.save(  # type: ignore[union-attr]
+                cache_key,  # question
+                response,  # answer
+                embedding,  # embedding_data
             )
             logger.debug(f"Cache SET: key={cache_key[:50]}...")
         except Exception as e:
             logger.error(f"Cache set error: {e}")
 
     def clear(self) -> None:
-        """Clear all cache entries."""
+        """Clear all cache entries from both PGVector and PostgreSQL."""
         if not self._initialized:
             return
         try:
-            gptcache.flush()
-            logger.info("Cache cleared")
+            dm = gptcache.data_manager
+            scalar_storage = getattr(dm, "s", None)
+            vector_storage = getattr(dm, "v", None)
+            if scalar_storage is None or vector_storage is None:
+                return
+
+            all_ids = scalar_storage.get_ids(deleted=False)
+            if all_ids:
+                vector_storage.delete(all_ids)
+                for oid in all_ids:
+                    scalar_storage.mark_deleted(oid)
+                scalar_storage.clear_deleted_data()
+
+            logger.info(f"Cache cleared: deleted {len(all_ids)} entries")
         except Exception as e:
             logger.error(f"Cache clear error: {e}")
 

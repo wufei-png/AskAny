@@ -133,20 +133,39 @@ class TestQACacheManager:
             manager.set("如何配置API", "FAQ", "FAQ answer")
 
             mock_gptcache.data_manager.save.assert_called_once()
-            call_kwargs = mock_gptcache.data_manager.save.call_args.kwargs
-            assert call_kwargs["question"] == "FAQ:如何配置API"
-            assert call_kwargs["answer"] == "FAQ answer"
+            call_args = mock_gptcache.data_manager.save.call_args
+            assert call_args.args[0] == "FAQ:如何配置API"
+            assert call_args.args[1] == "FAQ answer"
 
-    def test_clear_flushes_cache(self, mock_embed_model):
-        """Cache clear calls gptcache.flush."""
+    def test_clear_deletes_all_entries(self, mock_embed_model):
+        """Cache clear deletes all entries from underlying storage."""
         from askany.cache.qa_cache import QACacheManager
 
+        mock_scalar = MagicMock()
+        mock_scalar.get_ids.return_value = [1, 2, 3]
+        mock_vector = MagicMock()
+
+        mock_dm = MagicMock()
+        mock_dm.s = mock_scalar
+        mock_dm.v = mock_vector
+
         with patch("askany.cache.qa_cache.gptcache") as mock_gptcache:
+            mock_gptcache.data_manager = mock_dm
             manager = QACacheManager(embed_model=mock_embed_model)
             manager._initialized = True
             manager.clear()
 
-            mock_gptcache.flush.assert_called_once()
+            mock_scalar.get_ids.assert_called_once_with(deleted=False)
+            mock_vector.delete.assert_called_once_with([1, 2, 3])
+            self._assert_mark_deleted_calls(mock_scalar, [1, 2, 3])
+            mock_scalar.clear_deleted_data.assert_called_once()
+
+    def _assert_mark_deleted_calls(self, mock_scalar, expected_ids):
+        """Helper to verify mark_deleted was called for each ID."""
+        calls = mock_scalar.mark_deleted.call_args_list
+        assert len(calls) == len(expected_ids)
+        for i, oid in enumerate(expected_ids):
+            assert calls[i].args[0] == oid
 
     def test_get_skips_when_not_initialized(self, mock_embed_model):
         """Cache get returns None when not initialized."""
