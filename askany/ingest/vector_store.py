@@ -162,9 +162,11 @@ class VectorStoreManager:
             True if connection successful, False otherwise
         """
         for attempt in range(max_retries):
+            conn = None
             try:
                 conn = self._get_db_connection()
                 conn.close()
+                conn = None
                 logger.debug(f"Database connection successful on attempt {attempt + 1}")
                 return True
             except Exception as e:
@@ -179,6 +181,12 @@ class VectorStoreManager:
                         f"Database connection failed after {max_retries} attempts: {e}"
                     )
                     return False
+            finally:
+                if conn is not None:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
         return False
 
     def _get_hnsw_index_name(self, table_name: str) -> str:
