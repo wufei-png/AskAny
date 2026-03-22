@@ -77,19 +77,38 @@ class QueryRouter:
         # Parse filters from query (will be passed to engines)
         cleaned_query, metadata_filters = parse_query_filters(query)
 
+        # Cache lookup for explicit query types
+        if settings.enable_qa_cache:
+            from askany.rag import get_qa_cache_manager
+
+            cache_manager = get_qa_cache_manager()
+            if cache_manager and cache_manager.is_initialized:
+                cached = cache_manager.get(cleaned_query, query_type.value)
+                if cached:
+                    logger.info(f"Cache hit for query: {cleaned_query[:50]}...")
+                    return cached
+
         if query_type == QueryType.AUTO:
             return self._route_auto(cleaned_query, metadata_filters)
 
         if query_type == QueryType.FAQ and self.faq_query_engine:
-            return self.faq_query_engine.query(cleaned_query, metadata_filters)
+            response = self.faq_query_engine.query(cleaned_query, metadata_filters)
         elif query_type == QueryType.DOCS:
-            return self.docs_query_engine.query(cleaned_query, metadata_filters)
+            response = self.docs_query_engine.query(cleaned_query, metadata_filters)
         elif query_type == QueryType.CODE:
-            # TODO: Implement code search
-            return "Code search not yet implemented"
+            response = "Code search not yet implemented"
         else:
-            # Fallback to docs
-            return self.docs_query_engine.query(cleaned_query, metadata_filters)
+            response = self.docs_query_engine.query(cleaned_query, metadata_filters)
+
+        # Cache set for explicit query types
+        if settings.enable_qa_cache:
+            from askany.rag import get_qa_cache_manager
+
+            cache_manager = get_qa_cache_manager()
+            if cache_manager and cache_manager.is_initialized:
+                cache_manager.set(cleaned_query, query_type.value, response)
+
+        return response
 
     def _route_auto(
         self, query: str, metadata_filters: dict[str, str] | None = None
@@ -109,6 +128,17 @@ class QueryRouter:
         Returns:
             Generated response
         """
+        # Cache lookup for AUTO
+        if settings.enable_qa_cache:
+            from askany.rag import get_qa_cache_manager
+
+            cache_manager = get_qa_cache_manager()
+            if cache_manager and cache_manager.is_initialized:
+                cached = cache_manager.get(query, "AUTO")
+                if cached:
+                    logger.info(f"Cache hit for query: {query[:50]}...")
+                    return cached
+
         # Step 1: Check if it's code-related
         if self._is_code_query(query):
             # TODO: Implement code search
@@ -128,9 +158,19 @@ class QueryRouter:
         # Step 3: Check if FAQ score is sufficient
         if top_score >= settings.faq_score_threshold and faq_nodes:
             # FAQ score is good enough, synthesize answer from already retrieved nodes
-            return self.faq_query_engine.synthesize_from_nodes(
+            response = self.faq_query_engine.synthesize_from_nodes(
                 query, faq_nodes
             )  # 压缩信息，调用llm总结
+
+            # Cache set for FAQ synthesis
+            if settings.enable_qa_cache:
+                from askany.rag import get_qa_cache_manager
+
+                cache_manager = get_qa_cache_manager()
+                if cache_manager and cache_manager.is_initialized:
+                    cache_manager.set(query, "AUTO", response)
+
+            return response
 
         # Step 4: FAQ score is insufficient or no results, enhance with docs
 
@@ -169,9 +209,19 @@ class QueryRouter:
             enhanced_query = query
 
         # Synthesize final answer with merged nodes (FAQ + docs)
-        return self.docs_query_engine.synthesize_from_nodes(
+        response = self.docs_query_engine.synthesize_from_nodes(
             query_str=enhanced_query, nodes=all_nodes, context=None
         )
+
+        # Cache set for docs synthesis
+        if settings.enable_qa_cache:
+            from askany.rag import get_qa_cache_manager
+
+            cache_manager = get_qa_cache_manager()
+            if cache_manager and cache_manager.is_initialized:
+                cache_manager.set(query, "AUTO", response)
+
+        return response
 
     def _mark_faq_nodes_with_low_reliability(
         self, faq_nodes: list[NodeWithScore], score: float
