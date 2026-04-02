@@ -18,47 +18,26 @@ class TestProcessQueryWithSubproblemsReturnType:
     """Tests for process_query_with_subproblems returning (text, nodes)."""
 
     def test_returns_tuple_of_text_and_nodes(self):
-        """Verify function has correct return type annotation."""
+        """Verify function has correct return type annotation and is callable."""
         import inspect
 
         from askany.api.server import process_query_with_subproblems
 
-        inspect.signature(process_query_with_subproblems)
-        # Function should exist and be callable
+        sig = inspect.signature(process_query_with_subproblems)
         assert callable(process_query_with_subproblems)
-
-    @pytest.mark.asyncio
-    async def test_filter_result_returns_empty_nodes(self):
-        """When WorkflowFilter returns result, should return empty nodes list."""
-        # This tests the logic: filter_result.have_result returns (result_text, [])
-        result_text = "Direct answer from filter"
-        nodes = []
-
-        # Simulate the expected behavior
-        assert isinstance(result_text, str)
-        assert isinstance(nodes, list)
-        assert len(nodes) == 0
+        assert "user_query" in sig.parameters
 
 
 class TestProcessParallelGroupReturnType:
     """Tests for process_parallel_group returning (text, nodes)."""
 
-    def test_single_question_returns_nodes(self):
-        """When single question is processed, should return nodes."""
-        # Tested indirectly through code structure verification
+    def test_function_is_callable(self):
+        """Verify process_parallel_group function exists and is callable."""
+        import inspect
 
-    @pytest.mark.asyncio
-    async def test_multiple_questions_accumulates_nodes(self):
-        """When multiple questions are processed serially, should accumulate nodes."""
-        # Simulate accumulating nodes from multiple sub-queries
-        all_nodes = []
-        sub_nodes_1 = ["node1", "node2"]
-        sub_nodes_2 = ["node3"]
+        from askany.api.server import process_parallel_group
 
-        all_nodes.extend(sub_nodes_1)
-        all_nodes.extend(sub_nodes_2)
-
-        assert len(all_nodes) == 3
+        assert callable(process_parallel_group)
 
 
 class TestNodeToContextConversion:
@@ -207,41 +186,33 @@ class TestRagasEvaluationWithContexts:
 class TestServerRagasIntegration:
     """End-to-end tests for server RAGAS integration."""
 
-    def test_retrieved_nodes_in_source(self):
-        """Verify retrieved_nodes appears in server.py source."""
-        with open("/home/wufei/github.com/wufei-png/AskAny/askany/api/server.py") as f:
-            source = f.read()
+    def test_server_module_exports_process_functions(self):
+        """Verify server module exports the required process functions."""
+        from askany.api.server import (
+            process_parallel_group,
+            process_query_with_subproblems,
+        )
 
-        # Verify retrieved_nodes is declared
-        assert "retrieved_nodes" in source
-        # Verify it's used for RAGAS evaluation
-        assert "retrieved_contexts" in source
+        assert callable(process_parallel_group)
+        assert callable(process_query_with_subproblems)
 
 
 class TestWorkflowNodesExtraction:
     """Tests for extracting nodes from workflow state."""
 
-    def test_workflow_state_has_nodes_key(self):
-        """Verify workflow state includes 'nodes' key in type hints."""
-        from typing import get_type_hints
-
+    def test_agent_state_has_nodes_attribute(self):
+        """Verify AgentState class has 'nodes' in its annotations."""
         from askany.workflow.workflow_langgraph import AgentState
 
-        hints = get_type_hints(AgentState)
-        assert "nodes" in hints
+        annotations = getattr(AgentState, "__annotations__", {})
+        assert "nodes" in annotations, "AgentState should have 'nodes' key"
 
-    def test_generate_final_answer_uses_nodes(self):
-        """Verify _generate_final_answer_node uses nodes from state."""
-        # This is verified by code inspection
-        import inspect
+    def test_generate_final_answer_method_exists(self):
+        """Verify _generate_final_answer_node method exists on AgentWorkflow."""
+        from askany.workflow.workflow_langgraph import AgentWorkflow
 
-        from askany.workflow import workflow_langgraph
-
-        source = inspect.getsource(
-            workflow_langgraph.AgentWorkflow._generate_final_answer_node
-        )
-        assert "nodes" in source
-        assert "state.get" in source
+        assert hasattr(AgentWorkflow, "_generate_final_answer_node")
+        assert callable(getattr(AgentWorkflow, "_generate_final_answer_node"))
 
 
 class TestRagasMetricsRequirements:

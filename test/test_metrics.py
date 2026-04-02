@@ -25,16 +25,21 @@ def test_counter_increment():
 
 
 def test_histogram_observe():
-    """Test histogram observe."""
-    from askany.metrics import get_metrics
+    """Test histogram observe records values to Prometheus registry."""
+    from prometheus_client import Counter, Histogram, generate_latest, CollectorRegistry
 
-    metrics = get_metrics()
-    histogram = metrics.askany_llm_request_duration_seconds.labels(
-        model="test", operation="chat"
+    registry = CollectorRegistry()
+    test_histogram = Histogram(
+        "test_duration_seconds", "Test histogram", ["model"], registry=registry
     )
-    histogram.observe(0.5)
-    # Histogram should have recorded the observation
-    assert True  # No exception means success
+    child = test_histogram.labels(model="test")
+
+    child.observe(0.5)
+    child.observe(1.0)
+
+    output = generate_latest(registry).decode("utf-8")
+    assert "test_duration_seconds" in output
+    assert 'model="test"' in output
 
 
 def test_gauge_set():
@@ -50,16 +55,30 @@ def test_gauge_set():
 
 
 def test_timing_context_manager():
-    """Test Timer context manager."""
+    """Test Timer records elapsed time correctly when used with explicit enter/exit."""
     import time
 
-    from askany.metrics import timer_context
+    from askany.metrics import get_timer
 
-    with timer_context(
+    timer = get_timer(
         "askany_llm_request_duration_seconds", model="test", operation="chat"
-    ):
-        time.sleep(0.01)
-    # No exception means success
+    )
+    timer.__enter__()
+    time.sleep(0.05)
+    elapsed_before_exit = timer.elapsed
+    assert elapsed_before_exit is not None, (
+        "Timer should track elapsed during execution"
+    )
+    assert elapsed_before_exit >= 0.04, (
+        f"Elapsed {elapsed_before_exit:.3f}s should be >= 40ms"
+    )
+
+    timer.__exit__(None, None, None)
+    elapsed_after_exit = timer.elapsed
+    assert elapsed_after_exit is not None, "Timer should record elapsed after exit"
+    assert elapsed_after_exit >= 0.04, (
+        f"Final elapsed {elapsed_after_exit:.3f}s should be >= 40ms"
+    )
 
 
 def test_all_metrics_defined():
@@ -68,58 +87,57 @@ def test_all_metrics_defined():
 
     metrics = get_metrics()
 
-    # API Layer
-    assert hasattr(metrics, "askany_http_requests_total")
-    assert hasattr(metrics, "askany_http_request_duration_seconds")
-    assert hasattr(metrics, "askany_http_streaming_duration_seconds")
-    assert hasattr(metrics, "askany_active_streams")
-    assert hasattr(metrics, "askany_workflow_selected_total")
-    assert hasattr(metrics, "askany_query_type_total")
-    assert hasattr(metrics, "askany_health_status")
+    expected_metrics = [
+        # API Layer
+        "askany_http_requests_total",
+        "askany_http_request_duration_seconds",
+        "askany_http_streaming_duration_seconds",
+        "askany_active_streams",
+        "askany_workflow_selected_total",
+        "askany_query_type_total",
+        "askany_health_status",
+        # LLM API
+        "askany_llm_requests_total",
+        "askany_llm_request_duration_seconds",
+        "askany_llm_tokens_total",
+        "askany_llm_timeout_total",
+        "askany_llm_404_retries_total",
+        "askany_llm_stream_chunks_total",
+        "askany_llm_connection_errors_total",
+        # Database
+        "askany_db_connections_active",
+        "askany_db_connection_errors_total",
+        "askany_db_query_duration_seconds",
+        "askany_vector_search_duration_seconds",
+        "askany_keyword_search_duration_seconds",
+        "askany_hnsw_index_operations_total",
+        "askany_faq_update_total",
+        # RAG
+        "askany_rag_query_total",
+        "askany_rag_query_duration_seconds",
+        "askany_rag_retrieval_latency_seconds",
+        "askany_rag_nodes_retrieved",
+        "askany_rerank_requests_total",
+        "askany_rerank_duration_seconds",
+        "askany_rerank_fallback_total",
+        "askany_relevance_judgment_total",
+        # Workflow
+        "askany_workflow_execution_total",
+        "askany_workflow_execution_duration_seconds",
+        "askany_workflow_node_execution_total",
+        "askany_workflow_node_duration_seconds",
+        # Web Search
+        "askany_websearch_requests_total",
+        "askany_websearch_duration_seconds",
+        "askany_websearch_timeout_total",
+        "askany_websearch_results_count",
+        # Mem0
+        "askany_mem0_search_total",
+        "askany_mem0_save_total",
+    ]
 
-    # LLM API
-    assert hasattr(metrics, "askany_llm_requests_total")
-    assert hasattr(metrics, "askany_llm_request_duration_seconds")
-    assert hasattr(metrics, "askany_llm_tokens_total")
-    assert hasattr(metrics, "askany_llm_timeout_total")
-    assert hasattr(metrics, "askany_llm_404_retries_total")
-    assert hasattr(metrics, "askany_llm_stream_chunks_total")
-    assert hasattr(metrics, "askany_llm_connection_errors_total")
-
-    # Database
-    assert hasattr(metrics, "askany_db_connections_active")
-    assert hasattr(metrics, "askany_db_connection_errors_total")
-    assert hasattr(metrics, "askany_db_query_duration_seconds")
-    assert hasattr(metrics, "askany_vector_search_duration_seconds")
-    assert hasattr(metrics, "askany_keyword_search_duration_seconds")
-    assert hasattr(metrics, "askany_hnsw_index_operations_total")
-    assert hasattr(metrics, "askany_faq_update_total")
-
-    # RAG
-    assert hasattr(metrics, "askany_rag_query_total")
-    assert hasattr(metrics, "askany_rag_query_duration_seconds")
-    assert hasattr(metrics, "askany_rag_retrieval_latency_seconds")
-    assert hasattr(metrics, "askany_rag_nodes_retrieved")
-    assert hasattr(metrics, "askany_rerank_requests_total")
-    assert hasattr(metrics, "askany_rerank_duration_seconds")
-    assert hasattr(metrics, "askany_rerank_fallback_total")
-    assert hasattr(metrics, "askany_relevance_judgment_total")
-
-    # Workflow
-    assert hasattr(metrics, "askany_workflow_execution_total")
-    assert hasattr(metrics, "askany_workflow_execution_duration_seconds")
-    assert hasattr(metrics, "askany_workflow_node_execution_total")
-    assert hasattr(metrics, "askany_workflow_node_duration_seconds")
-
-    # Web Search
-    assert hasattr(metrics, "askany_websearch_requests_total")
-    assert hasattr(metrics, "askany_websearch_duration_seconds")
-    assert hasattr(metrics, "askany_websearch_timeout_total")
-    assert hasattr(metrics, "askany_websearch_results_count")
-
-    # Mem0
-    assert hasattr(metrics, "askany_mem0_search_total")
-    assert hasattr(metrics, "askany_mem0_save_total")
+    for metric_name in expected_metrics:
+        assert hasattr(metrics, metric_name), f"Missing metric: {metric_name}"
 
 
 def test_metrics_endpoint():

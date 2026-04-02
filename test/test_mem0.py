@@ -221,6 +221,10 @@ class TestGetMem0AdapterSingleton:
 
     def test_returns_none_when_disabled(self):
         """Should return None when enable_mem0 is False."""
+        import askany.memory.mem0_adapter as mem0_module
+
+        mem0_module._adapter_instance = None
+
         with patch("askany.memory.mem0_adapter.settings") as mock_settings:
             mock_settings.enable_mem0 = False
 
@@ -228,6 +232,46 @@ class TestGetMem0AdapterSingleton:
 
             result = get_mem0_adapter()
             assert result is None
+
+    def test_returns_same_instance_on_multiple_calls(self):
+        """Multiple calls should return the same singleton instance."""
+        import askany.memory.mem0_adapter as mem0_module
+
+        mem0_module._adapter_instance = None
+
+        with patch("askany.memory.mem0_adapter.settings") as mock_settings:
+            mock_settings.enable_mem0 = True
+            mock_settings.mem0_top_k = 5
+            mock_settings.mem0_score_threshold = 0.1
+            mock_settings.postgres_user = "wufei"
+            mock_settings.postgres_password = MagicMock()
+            mock_settings.postgres_password.get_secret_value.return_value = "123456"
+            mock_settings.postgres_host = "localhost"
+            mock_settings.postgres_port = 5432
+            mock_settings.postgres_db = "askany"
+            mock_settings.mem0_collection_name = "askany_mem0_test_singleton"
+            mock_settings.vector_dimension = 1024
+            mock_settings.openai_model = "test-model"
+            mock_settings.openai_api_base = "http://127.0.0.1:8081/v1"
+            mock_settings.openai_api_key = "dummy"
+            mock_settings.mem0_llm_model = None
+            mock_settings.mem0_llm_api_base = None
+            mock_settings.mem0_llm_api_key = None
+            mock_settings.mem0_llm_provider = "openai"
+            mock_settings.embedding_model = "BAAI/bge-m3"
+            mock_settings.mem0_embedder_model = None
+            mock_settings.mem0_embedder_provider = "huggingface"
+
+            from askany.memory.mem0_adapter import get_mem0_adapter
+
+            adapter1 = get_mem0_adapter()
+            if adapter1 is None:
+                pytest.skip("Mem0 not enabled")
+
+            adapter2 = get_mem0_adapter()
+            assert adapter1 is adapter2, (
+                "get_mem0_adapter() should return same singleton instance"
+            )
 
 
 class TestMem0Config:
@@ -248,10 +292,11 @@ class TestMem0Config:
 class TestMem0ServerIntegration:
     """Test mem0 integration in server.py."""
 
-    def test_header_key_format(self):
-        """Test header key format."""
-        header_key = "x-openwebui-user-id"
-        assert header_key.lower() == "x-openwebui-user-id"
+    def test_mem0_adapter_import(self):
+        """Verify Mem0Adapter can be imported."""
+        from askany.memory.mem0_adapter import Mem0Adapter
+
+        assert Mem0Adapter is not None
 
 
 class TestMem0E2E:

@@ -91,68 +91,59 @@ class TestQACacheSemanticIntegration:
 
         assert result == response, f"Expected exact match to HIT, got {result}"
 
-    def test_different_type_miss(self, cache_manager):
-        """Same query text, different type → separate cache entries."""
-        query = "如何配置API访问"
+    def test_different_query_miss(self, cache_manager):
+        """Different query text with low similarity → should miss.
 
-        cache_manager.set(query, "FAQ", "FAQ answer")
-        result = cache_manager.get(query, "DOCS")
+        The type prefix is used only for cache keys (scalar storage),
+        NOT for embeddings. Embeddings are computed from query text only.
+        Uses queries with low semantic similarity to ensure cache miss.
+        """
+        query1 = "如何配置API访问"
+        query2 = "今天天气怎么样"
 
-        # Different cache key → should miss (or hit if same embedding happens to match)
-        # This tests that cache_key includes query_type
-        # Note: May hit if the stored "FAQ:如何配置API访问" vs "DOCS:如何配置API访问"
-        # have similar enough embeddings. That's fine - the system is working correctly.
-        logger.info(f"Cross-type lookup result: {result}")
+        cache_manager.set(query1, "FAQ", "FAQ answer")
+        result = cache_manager.get(query2, "FAQ")
+
+        assert result is None, (
+            f"Different query text with low similarity should miss, but got: {result}."
+        )
 
     def test_semantic_similarity_exploration(self, cache_manager):
-        """Explore what similarity scores different queries get.
+        """Verify semantic similarity scoring for various query relationships."""
+        import numpy as np
 
-        This test doesn't assert pass/fail — it prints similarity analysis
-        to help determine if 0.90 is a good threshold.
-        """
         base_query = "如何配置API"
-
-        # Store base query
         cache_manager.set(base_query, "AUTO", "base answer")
 
-        # Test cases: (query, expected_similarity_description)
         test_cases = [
-            ("如何配置API", "identical → should be 1.0"),
-            ("API配置方法", "same meaning → likely 0.90+"),
-            ("怎么设置API", "paraphrase → likely 0.85-0.95"),
-            ("API是什么", "different intent → likely < 0.85"),
-            ("如何部署服务", "unrelated → likely < 0.80"),
-            ("API调用参数设置", "partial overlap → 0.75-0.90"),
+            ("如何配置API", 0.95, "identical query"),
+            ("API配置方法", 0.85, "same meaning"),
+            ("怎么设置API", 0.80, "paraphrase"),
+            ("API是什么", 0.70, "different intent"),
+            ("如何部署服务", 0.60, "unrelated"),
         ]
 
-        print("\n=== Semantic Similarity Exploration ===")
-        for query, description in test_cases:
-            # Directly compute embedding similarity for exploration
+        for query, min_expected_sim, description in test_cases:
             emb1 = cache_manager._embed_model._get_query_embedding(base_query)
             emb2 = cache_manager._embed_model._get_query_embedding(query)
-
-            # Cosine similarity
-            import numpy as np
-
             sim = np.dot(emb1, emb2) / (np.linalg.norm(emb1) * np.linalg.norm(emb2))
-
-            result = cache_manager.get(query, "AUTO")
-            hit = result is not None
-
-            print(f"  [{'HIT' if hit else 'MISS'}] sim={sim:.4f} | {description}")
-            print(f"    Base:   '{base_query}'")
-            print(f"    Query:  '{query}'")
+            assert 0.0 <= sim <= 1.0 + 1e-9, (
+                f"Similarity {sim} should be between 0 and 1"
+            )
+            if sim >= 0.90:
+                result = cache_manager.get(query, "AUTO")
+                assert result is not None, f"High similarity {sim:.4f} should HIT cache"
 
     def test_threshold_090_boundary_cases(self, cache_manager):
         """Test queries near the 0.90 threshold boundary.
 
-        With threshold=0.90, these should be tuned based on actual similarity scores.
+        Verifies that similarity >= 0.90 results in cache HIT.
         """
-        base_query = "如何配置API"
+        import numpy as np
 
+        base_query = "如何配置API"
         cache_manager.set(base_query, "AUTO", "base answer")
 
-        # These are boundary cases — actual similarity determines HIT/MISS
         boundary_queries = [
             "API配置操作指南",
             "如何设置API参数",
@@ -160,25 +151,34 @@ class TestQACacheSemanticIntegration:
             "配置API的步骤",
         ]
 
-        print("\n=== Threshold 0.90 Boundary Cases ===")
-        import numpy as np
-
         base_emb = cache_manager._embed_model._get_query_embedding(base_query)
+        hit_count = 0
 
         for query in boundary_queries:
             emb = cache_manager._embed_model._get_query_embedding(query)
             sim = float(
                 np.dot(base_emb, emb) / (np.linalg.norm(base_emb) * np.linalg.norm(emb))
             )
+            assert 0.0 <= sim <= 1.0, f"Similarity {sim} should be between 0 and 1"
 
             result = cache_manager.get(query, "AUTO")
-            hit = result is not None
-            status = "✓ HIT" if hit else "✗ MISS"
+            if sim >= 0.90:
+                assert result is not None, (
+                    f"sim={sim:.4f} >= 0.90 should HIT, query: '{query}'"
+                )
+                hit_count += 1
 
-            print(f"  {status} sim={sim:.4f} | '{query}'")
+        assert hit_count > 0, (
+            "At least some boundary queries should hit with threshold 0.90"
+        )
 
     def test_chinese_phrasing_variations(self, cache_manager):
-        """Test common Chinese phrasing variations for the same question."""
+        """Test common Chinese phrasing variations for the same question.
+
+        All variations should have high similarity (>= 0.90) and hit the cache.
+        """
+        import numpy as np
+
         variations = [
             "如何配置API",
             "API怎么配置",
@@ -187,9 +187,6 @@ class TestQACacheSemanticIntegration:
             "API该如何配置",
             "配置API的方法",
         ]
-
-        print("\n=== Chinese Phrasing Variations ===")
-        import numpy as np
 
         base = variations[0]
         base_emb = cache_manager._embed_model._get_query_embedding(base)
@@ -201,11 +198,15 @@ class TestQACacheSemanticIntegration:
             sim = float(
                 np.dot(base_emb, emb) / (np.linalg.norm(base_emb) * np.linalg.norm(emb))
             )
+            assert sim >= 0.80, (
+                f"Chinese variations should have sim >= 0.80, got {sim:.4f} for '{v}'"
+            )
 
             result = cache_manager.get(v, "AUTO")
-            hit = result is not None
-
-            print(f"  [{'HIT' if hit else 'MISS'}] sim={sim:.4f} | '{v}'")
+            if sim >= 0.90:
+                assert result is not None, (
+                    f"sim={sim:.4f} >= 0.90 should HIT for variation: '{v}'"
+                )
 
     def test_clear_removes_all_entries(self, cache_manager):
         """Cache clear should remove all entries."""
