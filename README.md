@@ -1,5 +1,9 @@
 # AskAny
 
+<p align="center">
+  <img src="images/cover/cover1.png" alt="AskAny Cover" width="100%">
+</p>
+
 [中文版](README_CN.md) | English
 
 A Chinese-optimized RAG (Retrieval-Augmented Generation) QA assistant for operations, development, and testing teams.

@@ -1,5 +1,9 @@
 # AskAny
 
+<p align="center">
+  <img src="images/cover/cover1.png" alt="AskAny 封面" width="100%">
+</p>
+
 [English](README.md) | 中文版
 
 面向运维、开发、测试团队的中文优化 RAG（检索增强生成）问答助手。
