@@ -2,8 +2,6 @@
 
 <p align="center">
   <img src="images/cover/cover1.png" alt="AskAny 封面" width="100%">
-  <br>
-  <img src="images/cover/cover2.png" alt="AskAny 封面 2" width="100%">
 </p>
 
 [English](README.md) | 中文版
