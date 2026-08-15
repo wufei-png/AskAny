@@ -563,7 +563,7 @@ class RAGQueryEngine:
                     seen_faq_ids.add(faq_id)
 
                     # Extract answer from node text
-                    node_text = node.node.text if hasattr(node.node, "text") else ""
+                    node_text = node.node.get_content()
                     answer = ""
                     if "答案:" in node_text:
                         answer = node_text.split("答案:")[-1].strip()

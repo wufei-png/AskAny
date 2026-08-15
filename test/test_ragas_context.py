@@ -9,9 +9,12 @@ These tests verify that:
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
+logger = logging.getLogger(__name__)
 
 
 class TestProcessQueryWithSubproblemsReturnType:
@@ -33,7 +36,6 @@ class TestProcessParallelGroupReturnType:
 
     def test_function_is_callable(self):
         """Verify process_parallel_group function exists and is callable."""
-        import inspect
 
         from askany.api.server import process_parallel_group
 
@@ -100,8 +102,8 @@ class TestTraceIdRetrievalLogging:
         trace_id = None
         try:
             trace_id = mock_handler.get_trace_id()
-        except Exception:
-            pass
+        except Exception as trace_error:
+            logger.debug("Mock handler did not provide a trace ID: %s", trace_error)
 
         assert trace_id == "trace-123"
 
@@ -114,8 +116,8 @@ class TestTraceIdRetrievalLogging:
         trace_id = None
         try:
             trace_id = mock_handler.get_trace_id()
-        except Exception:
-            pass
+        except Exception as trace_error:
+            logger.debug("Mock handler did not provide a trace ID: %s", trace_error)
 
         assert trace_id is None
 
@@ -128,8 +130,8 @@ class TestTraceIdRetrievalLogging:
         if handler is not None:
             try:
                 trace_id = handler.get_trace_id()
-            except Exception:
-                pass
+            except Exception as trace_error:
+                logger.debug("Handler did not provide a trace ID: %s", trace_error)
 
         assert trace_id is None
 
@@ -212,7 +214,7 @@ class TestWorkflowNodesExtraction:
         from askany.workflow.workflow_langgraph import AgentWorkflow
 
         assert hasattr(AgentWorkflow, "_generate_final_answer_node")
-        assert callable(getattr(AgentWorkflow, "_generate_final_answer_node"))
+        assert callable(AgentWorkflow._generate_final_answer_node)
 
 
 class TestRagasMetricsRequirements:
@@ -388,7 +390,3 @@ class TestMetricsIntegrationWithPlumbing:
         assert len(retrieved_contexts) == 2
         assert retrieved_contexts[0] == "First context about Python."
         assert retrieved_contexts[1] == "Second context about programming."
-
-
-# Mark all async tests
-pytestmark = pytest.mark.asyncio

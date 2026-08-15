@@ -6,7 +6,7 @@ import tempfile
 import time
 from logging import getLogger
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import psycopg2
 from llama_index.core import (
@@ -20,6 +20,7 @@ from llama_index.core.embeddings import BaseEmbedding
 from llama_index.core.schema import BaseNode
 from llama_index.core.storage.storage_context import StorageContext
 from llama_index.vector_stores.postgres import PGVectorStore
+from psycopg2 import sql
 from tqdm import tqdm
 
 from askany.config import settings
@@ -84,7 +85,10 @@ def _wrap_loaded_keyword_index(
     custom_index._object_map = loaded_index._object_map
     # Copy index_id if it exists
     if hasattr(loaded_index, "_index_id"):
-        custom_index._index_id = loaded_index._index_id
+        # LlamaIndex does not expose this persisted identifier in its stubs.
+        custom_index_any = cast(Any, custom_index)
+        loaded_index_any = cast(Any, loaded_index)
+        custom_index_any._index_id = loaded_index_any._index_id
     return custom_index
 
 
@@ -227,8 +231,10 @@ class VectorStoreManager:
                 if conn is not None:
                     try:
                         conn.close()
-                    except Exception:
-                        pass
+                    except Exception as close_error:
+                        logger.warning(
+                            "Failed to close database connection: %s", close_error
+                        )
         return False
 
     def _get_hnsw_index_name(self, table_name: str) -> str:
@@ -279,14 +285,19 @@ class VectorStoreManager:
             metrics.askany_db_query_duration_seconds.labels(
                 table=table_name, operation="SELECT"
             ).observe(check_duration)
-            index_exists = cursor.fetchone()[0]
+            index_row = cursor.fetchone()
+            index_exists = bool(index_row and index_row[0])
 
             if index_exists:
                 logger.info(
                     f"Dropping HNSW index '{index_name}' for table '{table_name}'..."
                 )
                 drop_start = time.perf_counter()
-                cursor.execute(f'DROP INDEX IF EXISTS "{index_name}"')
+                cursor.execute(
+                    sql.SQL("DROP INDEX IF EXISTS {}").format(
+                        sql.Identifier(index_name)
+                    )
+                )
                 conn.commit()
                 drop_duration = time.perf_counter() - drop_start
                 metrics.askany_db_query_duration_seconds.labels(
@@ -313,8 +324,10 @@ class VectorStoreManager:
             if conn:
                 try:
                     conn.close()
-                except Exception:
-                    pass
+                except Exception as close_error:
+                    logger.warning(
+                        "Failed to close database connection: %s", close_error
+                    )
 
     def _create_hnsw_index(self, vector_store: PGVectorStore) -> None:
         """Create HNSW index for the vector store.
@@ -365,7 +378,8 @@ class VectorStoreManager:
             metrics.askany_db_query_duration_seconds.labels(
                 table=table_name, operation="SELECT"
             ).observe(check_duration)
-            index_exists = cursor.fetchone()[0]
+            index_row = cursor.fetchone()
+            index_exists = bool(index_row and index_row[0])
 
             if index_exists:
                 logger.info(
@@ -391,15 +405,23 @@ class VectorStoreManager:
             # Note: No commit needed for SET commands, they're session-level
 
             # Build CREATE INDEX statement
-            create_index_sql = f"""
-                CREATE INDEX "{index_name}"
-                ON "{table_name}"
+            create_index_sql = sql.SQL("""
+                CREATE INDEX {index_name}
+                ON {table_name}
                 USING hnsw (embedding {opclass})
                 WITH (
-                    m = {hnsw_kwargs.get("hnsw_m", 16)},
-                    ef_construction = {hnsw_kwargs.get("hnsw_ef_construction", 64)}
+                    m = {m},
+                    ef_construction = {ef_construction}
                 )
-            """
+            """).format(
+                index_name=sql.Identifier(index_name),
+                table_name=sql.Identifier(table_name),
+                opclass=sql.SQL(opclass),
+                m=sql.Literal(hnsw_kwargs.get("hnsw_m", 16)),
+                ef_construction=sql.Literal(
+                    hnsw_kwargs.get("hnsw_ef_construction", 64)
+                ),
+            )
 
             logger.info(
                 f"Creating HNSW index '{index_name}' for table '{table_name}' "
@@ -427,8 +449,10 @@ class VectorStoreManager:
             if conn:
                 try:
                     conn.close()
-                except Exception:
-                    pass
+                except Exception as close_error:
+                    logger.warning(
+                        "Failed to close database connection: %s", close_error
+                    )
 
     def initialize(self, table_name: str | None = None) -> None:
         """Initialize the vector store connection.
@@ -444,7 +468,7 @@ class VectorStoreManager:
             database=settings.postgres_db,
             host=settings.postgres_host,
             password=settings.postgres_password.get_secret_value(),
-            port=settings.postgres_port,
+            port=str(settings.postgres_port),
             user=settings.postgres_user,
             table_name=table_name,
             embed_dim=settings.vector_dimension,
@@ -508,7 +532,7 @@ class VectorStoreManager:
             database=settings.postgres_db,
             host=settings.postgres_host,
             password=settings.postgres_password.get_secret_value(),
-            port=settings.postgres_port,
+            port=str(settings.postgres_port),
             user=settings.postgres_user,
             table_name=table_name,
             embed_dim=settings.vector_dimension,
@@ -568,7 +592,7 @@ class VectorStoreManager:
             database=settings.postgres_db,
             host=settings.postgres_host,
             password=settings.postgres_password.get_secret_value(),
-            port=settings.postgres_port,
+            port=str(settings.postgres_port),
             user=settings.postgres_user,
             table_name=table_name,
             embed_dim=settings.vector_dimension,
@@ -672,10 +696,10 @@ class VectorStoreManager:
             conn = self._get_db_connection()
             cursor = conn.cursor()
 
-            delete_sql = f"""
-                DELETE FROM "{actual_table_name}"
+            delete_sql = sql.SQL("""
+                DELETE FROM {table_name}
                 WHERE metadata_->>'ref_doc_id' = ANY(%s)
-            """
+            """).format(table_name=sql.Identifier(actual_table_name))
             delete_start = time.perf_counter()
             cursor.execute(delete_sql, (ref_doc_ids,))
             deleted_count = cursor.rowcount
@@ -701,8 +725,10 @@ class VectorStoreManager:
             if conn:
                 try:
                     conn.close()
-                except Exception:
-                    pass
+                except Exception as close_error:
+                    logger.warning(
+                        "Failed to close database connection: %s", close_error
+                    )
 
     def add_faq_documents(self, documents: list[Document]) -> None:
         """Add FAQ documents to the FAQ vector store.
@@ -743,8 +769,12 @@ class VectorStoreManager:
                         self.faq_keyword_index.delete_ref_doc(
                             doc_id, delete_from_docstore=True
                         )
-                    except Exception:
-                        pass
+                    except Exception as index_error:
+                        logger.warning(
+                            "Failed to delete FAQ keyword document %s: %s",
+                            doc_id,
+                            index_error,
+                        )
 
         # Check if splitting is enabled
         if settings.faq_split_documents:
@@ -915,7 +945,8 @@ class VectorStoreManager:
             logger.info(
                 f"Dropping HNSW index (if exists) before inserting {total_nodes} nodes for faster insertion..."
             )
-            index_dropped = self._drop_hnsw_index(self.docs_vector_store)
+            if self.docs_vector_store is not None:
+                index_dropped = self._drop_hnsw_index(self.docs_vector_store)
             if not index_dropped:
                 logger.info("No existing HNSW index found, will insert without index")
 
@@ -969,7 +1000,8 @@ class VectorStoreManager:
                 logger.info(
                     "Auto-creating HNSW index after insertion (auto_create_index=True)..."
                 )
-                self._create_hnsw_index(self.docs_vector_store)
+                if self.docs_vector_store is not None:
+                    self._create_hnsw_index(self.docs_vector_store)
                 logger.info("HNSW index created successfully")
             elif settings.enable_hnsw:
                 logger.info(
@@ -984,7 +1016,8 @@ class VectorStoreManager:
                     f"Insertion failed, attempting to recreate HNSW index before re-raising error: {e}"
                 )
                 try:
-                    self._create_hnsw_index(self.docs_vector_store)
+                    if self.docs_vector_store is not None:
+                        self._create_hnsw_index(self.docs_vector_store)
                 except Exception as recreate_error:
                     logger.error(
                         f"Failed to recreate HNSW index after insertion failure: {recreate_error}"
@@ -1176,8 +1209,9 @@ class VectorStoreManager:
         if persist:
             storage_context.persist(persist_dir=str(persist_dir))
 
-        self.faq_keyword_index = keyword_index
-        return keyword_index
+        typed_keyword_index = cast(KeywordTableIndex, keyword_index)
+        self.faq_keyword_index = typed_keyword_index
+        return typed_keyword_index
 
     def create_docs_keyword_index(
         self,
@@ -1249,7 +1283,7 @@ class VectorStoreManager:
             elif isinstance(item, BaseNode):
                 # Convert Node to Document
                 doc = Document(
-                    text=item.text if hasattr(item, "text") else "",
+                    text=item.get_content() if hasattr(item, "get_content") else "",
                     metadata=item.metadata if hasattr(item, "metadata") else {},
                     id_=item.id_ if hasattr(item, "id_") and item.id_ else None,
                 )
@@ -1336,8 +1370,9 @@ class VectorStoreManager:
         if persist:
             storage_context.persist(persist_dir=str(persist_dir))
 
-        self.docs_keyword_index = keyword_index
-        return keyword_index
+        typed_keyword_index = cast(KeywordTableIndex, keyword_index)
+        self.docs_keyword_index = typed_keyword_index
+        return typed_keyword_index
 
     def load_docs_keyword_index(self) -> KeywordTableIndex | None:
         """Load docs keyword index from persisted storage.
@@ -1395,7 +1430,9 @@ class VectorStoreManager:
                         # Try to get index_ids from index_store if available
                         try:
                             if hasattr(storage_context.index_store, "index_ids"):
-                                index_ids = storage_context.index_store.index_ids()
+                                index_ids = cast(
+                                    Any, storage_context.index_store
+                                ).index_ids()
                                 logger.info("Available index_ids: %s", index_ids)
                                 # Try loading each index_id
                                 for idx_id in index_ids:
@@ -1410,10 +1447,17 @@ class VectorStoreManager:
                                                 idx_id,
                                             )
                                             break
-                                    except Exception:
+                                    except Exception as index_error:
+                                        logger.debug(
+                                            "Could not load index %s: %s",
+                                            idx_id,
+                                            index_error,
+                                        )
                                         continue
-                        except Exception:
-                            pass
+                        except Exception as index_store_error:
+                            logger.warning(
+                                "Could not inspect index store: %s", index_store_error
+                            )
                 except Exception as load_e:
                     logger.warning("Failed to load indices from storage: %s", load_e)
                     # Fallback: try loading without index_id (if only one index exists)
@@ -1504,7 +1548,9 @@ class VectorStoreManager:
                         # Try to get index_ids from index_store if available
                         try:
                             if hasattr(storage_context.index_store, "index_ids"):
-                                index_ids = storage_context.index_store.index_ids()
+                                index_ids = cast(
+                                    Any, storage_context.index_store
+                                ).index_ids()
                                 logger.info("Available index_ids: %s", index_ids)
                                 # Try loading each index_id
                                 for idx_id in index_ids:
@@ -1519,10 +1565,17 @@ class VectorStoreManager:
                                                 idx_id,
                                             )
                                             break
-                                    except Exception:
+                                    except Exception as index_error:
+                                        logger.debug(
+                                            "Could not load index %s: %s",
+                                            idx_id,
+                                            index_error,
+                                        )
                                         continue
-                        except Exception:
-                            pass
+                        except Exception as index_store_error:
+                            logger.warning(
+                                "Could not inspect index store: %s", index_store_error
+                            )
                 except Exception as load_e:
                     logger.warning("Failed to load indices from storage: %s", load_e)
                     # Fallback: try loading without index_id (if only one index exists)
@@ -1695,7 +1748,7 @@ class VectorStoreManager:
                         doc_ids_to_delete.append(doc_id)
 
                 except Exception as e:
-                    errors.append(f"Error processing FAQ item: {str(e)}")
+                    errors.append(f"Error processing FAQ item: {e!s}")
                     continue
 
             if doc_ids_to_delete:
@@ -1711,8 +1764,12 @@ class VectorStoreManager:
                             self.faq_keyword_index.delete_ref_doc(
                                 doc_id, delete_from_docstore=True
                             )
-                        except Exception:
-                            pass
+                        except Exception as delete_error:
+                            logger.warning(
+                                "Failed to delete updated FAQ keyword document %s: %s",
+                                doc_id,
+                                delete_error,
+                            )
             else:
                 inserted_count = len(faq_items)
         finally:
@@ -1720,8 +1777,12 @@ class VectorStoreManager:
             try:
                 if temp_file_path.exists():
                     os.unlink(temp_file_path)
-            except Exception:
-                pass
+            except Exception as cleanup_error:
+                logger.warning(
+                    "Failed to remove temporary FAQ file %s: %s",
+                    temp_file_path,
+                    cleanup_error,
+                )
 
         if not new_documents:
             return {
@@ -1780,7 +1841,7 @@ class VectorStoreManager:
                     "Keyword index incremental update failed, rebuilding: %s", e
                 )
                 errors.append(
-                    f"Keyword index incremental update failed, rebuilding: {str(e)}"
+                    f"Keyword index incremental update failed, rebuilding: {e!s}"
                 )
                 # Rebuild keyword index with all FAQs
                 self._rebuild_faq_keyword_index(new_documents, json_dir, json_parser)

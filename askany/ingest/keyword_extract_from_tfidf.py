@@ -1,16 +1,18 @@
 """Keyword extraction using TF-IDF with HanLP tokenization."""
 
+import json
 import logging
+import math
 import os
-import pickle
 import sys
 import zipfile
 from pathlib import Path
+from typing import Any, cast
 
 # Add parent directory to path to import askany modules
 # This allows the script to be run directly: python askany/ingest/keyword_extract.py
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from askany.config import settings  # noqa: E402
+from askany.config import settings
 
 # Set HanLP home directory to use local cache
 # This helps HanLP find local files without downloading
@@ -21,8 +23,10 @@ elif "HANLP_HOME" not in os.environ:
     os.environ["HANLP_HOME"] = str(Path.home() / ".hanlp")
 
 import hanlp
+import numpy as np
 from cachetools import LRUCache, cachedmethod
-from sklearn.feature_extraction.text import TfidfVectorizer
+from scipy import sparse
+from sklearn.feature_extraction.text import TfidfTransformer, TfidfVectorizer
 
 from askany.config import settings
 from tool.keyword_utils import (
@@ -33,43 +37,11 @@ from tool.keyword_utils import (
 logger = logging.getLogger(__name__)
 
 
-class CustomUnpickler(pickle.Unpickler):
-    """Custom unpickler to handle module path issues when loading from different entry points.
-
-    This fixes the issue where pickle tries to load _whitespace_tokenizer from
-    the wrong module (e.g., askany.main instead of askany.ingest.keyword_extract)
-    when running with -m flag.
-
-    This is a compatibility fix that works for both:
-    - Direct execution: python askany/ingest/keyword_extract.py
-    - Module execution: python -m askany.main
-    """
-
-    def find_class(self, module, name):
-        """Override find_class to redirect to correct module for _whitespace_tokenizer."""
-        # If trying to load _whitespace_tokenizer from wrong module, redirect to correct one
-        if (
-            name == "_whitespace_tokenizer"
-            and module != "askany.ingest.keyword_extract"
-        ):
-            # Return the function from the current module (this module)
-            # This avoids circular import issues and works regardless of entry point
-            return _whitespace_tokenizer
-        # For all other cases, use default behavior
-        try:
-            return super().find_class(module, name)
-        except AttributeError:
-            # If class not found, try alternative module paths
-            if name == "_whitespace_tokenizer":
-                return _whitespace_tokenizer
-            raise
-
-
 def _whitespace_tokenizer(text: str) -> list[str]:
     """Tokenize text by splitting on whitespace.
 
-    This is a module-level function that can be pickled, used as a tokenizer
-    for TfidfVectorizer. The text should already be tokenized and space-separated.
+    This is a module-level function used as a tokenizer for TfidfVectorizer.
+    The text should already be tokenized and space-separated.
 
     Args:
         text: Space-separated tokenized text.
@@ -118,7 +90,9 @@ class KeywordExtractorFromTFIDF:
                     f"HanLP tokenizer path configured but not found: {model_path}. "
                     "Falling back to default pretrained model."
                 )
-                self.tok = hanlp.load(hanlp.pretrained.tok.COARSE_ELECTRA_SMALL_ZH)
+                self.tok = hanlp.load(
+                    cast(Any, hanlp).pretrained.tok.COARSE_ELECTRA_SMALL_ZH
+                )
                 return
 
             logger.info(f"Loading HanLP tokenizer from local path: {model_path}")
@@ -159,7 +133,9 @@ class KeywordExtractorFromTFIDF:
                 self.tok = hanlp.load(str(model_path))
         else:
             # Use default pretrained model
-            self.tok = hanlp.load(hanlp.pretrained.tok.COARSE_ELECTRA_SMALL_ZH)
+            self.tok = hanlp.load(
+                cast(Any, hanlp).pretrained.tok.COARSE_ELECTRA_SMALL_ZH
+            )
 
         # Load custom dictionary
         if custom_dict_path is None:
@@ -179,18 +155,21 @@ class KeywordExtractorFromTFIDF:
 
         # Create HanLP pipeline for sentence splitting and tokenization
         self.hanlp_pipeline = (
-            hanlp.pipeline().append(hanlp.utils.rules.split_sentence).append(self.tok)
+            hanlp.pipeline()
+            .append(cast(Any, hanlp).utils.rules.split_sentence)
+            .append(self.tok)
         )
 
         # Initialize TF-IDF vectorizer
         # We'll use space-separated tokenized text, so we use a simple tokenizer
         # that splits by whitespace
-        # Note: Using module-level function instead of lambda for pickle compatibility
-        self.vectorizer = TfidfVectorizer(
+        # The module-level tokenizer keeps the vectorizer configuration stable
+        # when the safe JSON/NPZ persistence format is reconstructed.
+        self.vectorizer = cast(Any, TfidfVectorizer)(
             max_features=max_features,
             min_df=min_df,
             max_df=max_df,
-            tokenizer=_whitespace_tokenizer,  # Module-level function (pickle-compatible)
+            tokenizer=_whitespace_tokenizer,
             token_pattern=None,  # Disable regex pattern since we use custom tokenizer
             lowercase=False,  # Keep original case for Chinese
             sublinear_tf=True,
@@ -203,7 +182,7 @@ class KeywordExtractorFromTFIDF:
         # Store trained documents and their tokenized versions
         self.documents: list[str] = []
         self.tokenized_documents: list[str] = []
-        self.tfidf_matrix = None
+        self.tfidf_matrix: Any = None
         self.feature_names: list[str] = []
 
         # Load domain keywords from word_freq.txt for filtering
@@ -276,9 +255,14 @@ class KeywordExtractorFromTFIDF:
         """Get the path to the persisted model file.
 
         Returns:
-            Path to the model pickle file.
+            Path to the JSON model metadata file.
         """
-        return self._get_persist_dir() / "tfidf_model.pkl"
+        return self._get_persist_dir() / "tfidf_model.json"
+
+    def _get_matrix_file(self) -> Path:
+        """Get the path to the persisted sparse TF-IDF matrix."""
+
+        return self._get_persist_dir() / "tfidf_matrix.npz"
 
     def _load_persisted_model(self) -> bool:
         """Load persisted TF-IDF model if it exists.
@@ -287,28 +271,95 @@ class KeywordExtractorFromTFIDF:
             True if model was loaded successfully, False otherwise.
         """
         model_file = self._get_model_file()
-        if not model_file.exists():
-            logger.info("No persisted model found. Will train new model.")
+        matrix_file = self._get_matrix_file()
+        legacy_model_file = self._get_persist_dir() / "tfidf_model.pkl"
+        if not model_file.exists() or not matrix_file.exists():
+            if legacy_model_file.exists():
+                logger.warning(
+                    "Ignoring legacy pickle TF-IDF cache; will train a new model."
+                )
+            elif model_file.exists() or matrix_file.exists():
+                logger.warning(
+                    "Incomplete persisted TF-IDF model metadata/matrix; "
+                    "will train a new model."
+                )
+            else:
+                logger.info("No persisted model found. Will train new model.")
             return False
 
         try:
             logger.info(f"Loading persisted model from {model_file}...")
-            with open(model_file, "rb") as f:
-                # Use custom unpickler to handle module path issues
-                unpickler = CustomUnpickler(f)
-                data = unpickler.load()
+            with open(model_file, encoding="utf-8") as f:
+                data: Any = json.load(f)
+            if not isinstance(data, dict):
+                raise ValueError("TF-IDF model metadata must be a JSON object")
 
-            self.vectorizer = data["vectorizer"]
-            self.feature_names = data["feature_names"]
-            self.tfidf_matrix = data.get("tfidf_matrix")  # Optional, may be None
+            vocabulary = data.get("vocabulary")
+            feature_names = data.get("feature_names")
+            idf_values = data.get("idf")
+            if not isinstance(vocabulary, dict):
+                raise ValueError("TF-IDF vocabulary must be a JSON object")
+            if not isinstance(feature_names, list) or not all(
+                isinstance(name, str) for name in feature_names
+            ):
+                raise ValueError("TF-IDF feature_names must be a list[str]")
+            if not isinstance(idf_values, list) or not all(
+                isinstance(value, (int, float))
+                and not isinstance(value, bool)
+                and math.isfinite(float(value))
+                for value in idf_values
+            ):
+                raise ValueError("TF-IDF idf must be a finite numeric list")
+            if len(vocabulary) != len(feature_names) or len(idf_values) != len(
+                feature_names
+            ):
+                raise ValueError("TF-IDF metadata lengths do not match")
+
+            normalized_vocabulary: dict[str, int] = {}
+            for term, index in vocabulary.items():
+                if not isinstance(term, str) or not isinstance(index, int):
+                    raise ValueError("TF-IDF vocabulary entries must be string/integer")
+                normalized_vocabulary[term] = index
+            expected_indices = set(range(len(feature_names)))
+            if set(normalized_vocabulary.values()) != expected_indices:
+                raise ValueError("TF-IDF vocabulary indices are not contiguous")
+            if any(
+                normalized_vocabulary.get(name) != index
+                for index, name in enumerate(feature_names)
+            ):
+                raise ValueError("TF-IDF feature_names do not match vocabulary")
+
+            matrix = sparse.load_npz(matrix_file)
+            if matrix.ndim != 2 or matrix.shape[1] != len(feature_names):
+                raise ValueError("TF-IDF matrix shape does not match metadata")
+
+            vectorizer = cast(Any, TfidfVectorizer)(
+                tokenizer=_whitespace_tokenizer,
+                token_pattern=None,
+                lowercase=False,
+                sublinear_tf=True,
+                vocabulary=normalized_vocabulary,
+            )
+            transformer = cast(Any, TfidfTransformer)(
+                norm="l2",
+                use_idf=True,
+                smooth_idf=True,
+                sublinear_tf=True,
+            )
+            transformer.idf_ = np.asarray(idf_values, dtype=float)
+            vectorizer._tfidf = transformer
+            vectorizer.fixed_vocabulary_ = True
+            vectorizer.vocabulary_ = normalized_vocabulary
+            vectorizer.stop_words_ = None
+
+            self.vectorizer = vectorizer
+            self.feature_names = feature_names
+            self.tfidf_matrix = matrix
 
             logger.info(
                 f"✅ Loaded persisted model with {len(self.feature_names)} features"
             )
-            if self.tfidf_matrix is not None:
-                logger.info(
-                    f"Loaded TF-IDF matrix with shape {self.tfidf_matrix.shape}"
-                )
+            logger.info(f"Loaded TF-IDF matrix with shape {matrix.shape}")
             return True
         except Exception as e:
             logger.error(f"Error loading persisted model: {e}")
@@ -318,7 +369,7 @@ class KeywordExtractorFromTFIDF:
     def persist(self) -> None:
         """Persist the trained TF-IDF model to disk.
 
-        Saves the vectorizer, feature names, and TF-IDF matrix to the storage directory.
+        Saves JSON vectorizer metadata and a SciPy sparse matrix to the storage directory.
         """
         if self.tfidf_matrix is None:
             raise ValueError("Model not trained. Call train() first.")
@@ -327,17 +378,27 @@ class KeywordExtractorFromTFIDF:
         persist_dir.mkdir(parents=True, exist_ok=True)
 
         model_file = self._get_model_file()
+        matrix_file = self._get_matrix_file()
 
         try:
             logger.info(f"Persisting model to {model_file}...")
-            data = {
-                "vectorizer": self.vectorizer,
+            if not sparse.issparse(self.tfidf_matrix):
+                raise ValueError("TF-IDF matrix must be a SciPy sparse matrix")
+            vectorizer = cast(Any, self.vectorizer)
+            vocabulary = vectorizer.vocabulary_
+            idf_values = np.asarray(vectorizer.idf_, dtype=float).reshape(-1).tolist()
+            if not isinstance(vocabulary, dict):
+                raise ValueError("TF-IDF vectorizer has no vocabulary")
+            metadata = {
+                "version": 1,
+                "vocabulary": vocabulary,
                 "feature_names": self.feature_names,
-                "tfidf_matrix": self.tfidf_matrix,
+                "idf": idf_values,
             }
 
-            with open(model_file, "wb") as f:
-                pickle.dump(data, f)
+            sparse.save_npz(matrix_file, self.tfidf_matrix)
+            with open(model_file, "w", encoding="utf-8") as f:
+                json.dump(metadata, f, ensure_ascii=False, indent=2)
 
             logger.info(
                 f"✅ Model persisted successfully: {len(self.feature_names)} features, "

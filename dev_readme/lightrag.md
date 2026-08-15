@@ -29,9 +29,10 @@ Key files:
 | `askany/rag/lightrag_adapter.py` | Adapter: wraps LightRAG, converts results to LlamaIndex `NodeWithScore` |
 | `askany/rag/lightrag_ingest.py` | CLI tool for ingesting docs into LightRAG's KG |
 | `askany/workflow/min_langchain_agent.py` | Agent integration: calls adapter in `rag_search` tool |
-| `askany/workflow/question.py` | `lightrag_questions` array (13 test questions) |
-| `test/test_lightrag_retrieval.py` | Standalone retrieval test |
-| `test/test_lightrag_e2e_comparison.py` | End-to-end comparison (LightRAG ON vs OFF) |
+| `test/lightrag_question_loader.py` | Shared validated loader for the gitignored local question file |
+| `test/fixtures/lightrag_questions.example.json` | Example `list[str]` question file (copy locally; do not commit the `.local.json` file) |
+| `test/test_lightrag_retrieval.py` | Opt-in retrieval integration test |
+| `test/test_lightrag_e2e_comparison.py` | Manual end-to-end comparison (LightRAG ON vs OFF) |
 
 ## Prerequisites
 
@@ -91,21 +92,22 @@ PGPASSWORD=123456 psql -h localhost -U wufei -d askany -c "
 
 ## Testing
 
-### 1. Standalone retrieval test
+### 1. Retrieval integration test
 
 Tests that `LightRAGAdapter` can initialize, query the KG, and return well-formed `NodeWithScore` objects.
 
 ```bash
-# Direct execution (no pytest needed)
-python test/test_lightrag_retrieval.py
-
-# Via pytest
-python -m pytest test/test_lightrag_retrieval.py -v -s
+# Via pytest (opt in; requires all external prerequisites)
+ASKANY_RUN_LIGHTRAG_INTEGRATION=1 python -m pytest test/test_lightrag_retrieval.py -v -s
 ```
 
-This runs all 13 questions from `lightrag_questions` and prints results (chunks, entities, relations counts) for each. Requires PostgreSQL + ingested data + LLM endpoint.
+The test reads `test/fixtures/lightrag_questions.local.json` by default. Set
+`ASKANY_LIGHTRAG_QUESTIONS_FILE` to inject another JSON `list[str]` file. A
+missing or empty file, missing LightRAG dependency/model/database, or missing
+ingested data is an explicit skip; malformed JSON, non-string items, and blank
+questions fail. Local skips are not LightRAG validation.
 
-### 2. End-to-end comparison test
+### 2. Manual end-to-end comparison script
 
 Runs the full `min_langchain_agent` on 5 questions twice — with LightRAG disabled (baseline) and enabled (augmented) — then writes a side-by-side comparison.
 
@@ -113,7 +115,14 @@ Runs the full `min_langchain_agent` on 5 questions twice — with LightRAG disab
 python test/test_lightrag_e2e_comparison.py
 ```
 
-Results are saved to `test/e2e_comparison_results.json`. Requires the full AskAny stack (PostgreSQL, LlamaIndex vector tables, LightRAG tables, LLM endpoint).
+The script uses the same question loader and `ASKANY_LIGHTRAG_QUESTIONS_FILE`
+override. It is manual-only and requires the full AskAny stack (PostgreSQL,
+LlamaIndex vector tables, LightRAG tables, LLM endpoint). Without a question
+file it prints `SKIPPED` and exits 0; it never reports a zero-question success.
+Results are saved to `test/e2e_comparison_results.json` only after questions
+are actually loaded. If any question returns `ERROR`, the script prints
+`FAILED` and exits non-zero; a clean run prints `PASSED`. Setup failures also
+print `FAILED` and do not claim a comparison result.
 
 ## Configuration
 

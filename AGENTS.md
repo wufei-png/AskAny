@@ -36,8 +36,8 @@ python -m askany.main --query --query-text "question" --query-type AUTO
 
 ### Code Quality
 ```bash
-uv run --locked ruff check askany test
-uv run --locked ruff format --check askany test
+uv run --locked ruff check askany test tool/keyword_utils.py tool/langdetect.py
+uv run --locked ruff format --check askany test tool/keyword_utils.py tool/langdetect.py
 uv run --locked --all-extras pyright
 uv run --locked pre-commit run --all-files
 ```
@@ -50,7 +50,8 @@ uv run --locked pytest -q test --cov=askany --cov-report=html
 ```
 
 Ruff and Pyright cover the production files reachable from the LangGraph and
-LangChain-agent API modes. Archived migration code and separately operated
+LangChain-agent API modes, including the shared `tool/keyword_utils.py` and
+`tool/langdetect.py` helpers. Archived migration code and separately operated
 utilities are intentionally outside this gate; see `archive/README.md`.
 
 ## Architecture

@@ -26,7 +26,7 @@ def test_counter_increment():
 
 def test_histogram_observe():
     """Test histogram observe records values to Prometheus registry."""
-    from prometheus_client import Counter, Histogram, generate_latest, CollectorRegistry
+    from prometheus_client import CollectorRegistry, Histogram, generate_latest
 
     registry = CollectorRegistry()
     test_histogram = Histogram(

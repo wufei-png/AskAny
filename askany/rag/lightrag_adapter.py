@@ -40,7 +40,7 @@ import hashlib
 import logging
 import os
 import time
-from typing import Any
+from typing import Any, cast
 
 import psycopg2
 
@@ -53,6 +53,11 @@ logger = logging.getLogger(__name__)
 # Lazy imports: LightRAG is an optional dependency.  If it is not installed
 # the adapter simply returns an empty node list (graceful degradation).
 # ---------------------------------------------------------------------------
+LightRAG: Any = None
+QueryParam: Any = None
+openai_complete_if_cache: Any = None
+EmbeddingFunc: Any = None
+
 try:
     from lightrag import LightRAG, QueryParam
     from lightrag.llm.openai import openai_complete_if_cache
@@ -100,8 +105,8 @@ try:
     _langfuse_sec = os.environ.get("LANGFUSE_SECRET_KEY", "")
     if _langfuse_pub and _langfuse_sec:
         from langfuse import get_client as _lf_get_client
-        from langfuse import observe as _lf_observe  # noqa: F401 – used below
-        from langfuse import propagate_attributes as _lf_propagate  # noqa: F401
+        from langfuse import observe as _lf_observe
+        from langfuse import propagate_attributes as _lf_propagate
 
         _langfuse_client = _lf_get_client()
         _LANGFUSE_ENABLED = True
@@ -219,7 +224,7 @@ class LightRAGAdapter:
             uses a Chinese-optimised default with DevOps entity types.
         """
         if not _LIGHTRAG_AVAILABLE:
-            self._rag: LightRAG | None = None
+            self._rag: Any | None = None
             return
 
         # --- resolve settings ---------------------------------------------------
@@ -229,7 +234,7 @@ class LightRAGAdapter:
             "LIGHTRAG_WORKING_DIR",
             getattr(_settings, "lightrag_working_dir", "./lightrag_data"),
         )
-        llm_model = (
+        llm_model = str(
             llm_model
             or getattr(_settings, "lightrag_llm_model", None)
             or _settings.openai_model
@@ -252,19 +257,21 @@ class LightRAGAdapter:
         )
 
         # --- resolve new chunking / extraction params from settings ----------------
-        chunk_token_size = chunk_token_size or getattr(
-            _settings, "lightrag_chunk_token_size", 800
+        chunk_token_size = int(
+            chunk_token_size or getattr(_settings, "lightrag_chunk_token_size", 800)
         )
-        chunk_overlap_token_size = chunk_overlap_token_size or getattr(
-            _settings, "lightrag_chunk_overlap_token_size", 150
+        chunk_overlap_token_size = int(
+            chunk_overlap_token_size
+            or getattr(_settings, "lightrag_chunk_overlap_token_size", 150)
         )
         entity_extract_max_gleaning = (
             entity_extract_max_gleaning
             if entity_extract_max_gleaning is not None
             else getattr(_settings, "lightrag_entity_extract_max_gleaning", 1)
         )
-        summary_max_tokens = summary_max_tokens or getattr(
-            _settings, "lightrag_summary_max_tokens", 1500
+        summary_max_tokens = int(
+            summary_max_tokens
+            or getattr(_settings, "lightrag_summary_max_tokens", 1500)
         )
 
         # Default addon_params: Chinese language + DevOps-specific entity types.
@@ -305,7 +312,7 @@ class LightRAGAdapter:
         ) -> str:
             if history_messages is None:
                 history_messages = []
-            return await openai_complete_if_cache(
+            return await cast(Any, openai_complete_if_cache)(
                 _llm_model,
                 prompt,
                 system_prompt=system_prompt,
@@ -534,8 +541,11 @@ class LightRAGAdapter:
         logger.info("LightRAGAdapter: storages initialised")
 
     async def _ensure_graph_loaded(self) -> None:
-        kg = self._rag.chunk_entity_relation_graph
-        entities_vdb = self._rag.entities_vdb
+        rag = self._rag
+        if rag is None:
+            return
+        kg = rag.chunk_entity_relation_graph
+        entities_vdb = rag.entities_vdb
 
         all_nodes = await kg.get_all_nodes()
         await kg.get_all_edges()
@@ -567,7 +577,7 @@ class LightRAGAdapter:
 
         logger.info("Loading relations into NetworkX graph...")
 
-        relations_vdb = self._rag.relationships_vdb
+        relations_vdb = rag.relationships_vdb
         all_relations = await relations_vdb.query("", top_k=5000)
 
         loaded_edges = 0
@@ -757,6 +767,7 @@ class LightRAGAdapter:
         mode: str | None = None,
         top_k: int | None = None,
         chunk_top_k: int | None = None,
+        raise_on_error: bool = False,
     ) -> list[NodeWithScore]:
         """Retrieve relevant nodes from LightRAG and return as ``NodeWithScore`` list.
 
@@ -771,6 +782,10 @@ class LightRAGAdapter:
             Override for number of entities/relations retrieved.
         chunk_top_k:
             Override for number of text chunks retrieved.
+        raise_on_error:
+            Re-raise a LightRAG query exception for diagnostic callers.  The
+            default keeps the production retrieval path graceful by logging
+            the exception and returning an empty result.
 
         Returns
         -------
@@ -784,7 +799,7 @@ class LightRAGAdapter:
         if not self._initialized:
             await self.initialize()
 
-        param = QueryParam(
+        param = cast(Any, QueryParam)(
             mode=mode or self._default_mode,
             only_need_context=True,
             top_k=top_k or self._top_k,
@@ -816,6 +831,8 @@ class LightRAGAdapter:
                             "LightRAGAdapter: query failed – %s", exc, exc_info=True
                         )
                         status = "error"
+                        if raise_on_error:
+                            raise
                         return []
                     nodes = self._convert_to_nodes(result, query)
                     _span.update(
@@ -854,6 +871,8 @@ class LightRAGAdapter:
                         "LightRAGAdapter: query failed – %s", exc, exc_info=True
                     )
                     status = "error"
+                    if raise_on_error:
+                        raise
                     return []
                 nodes = self._convert_to_nodes(result, query)
         finally:
@@ -924,7 +943,7 @@ class LightRAGAdapter:
             return node
 
         file_path = metadata.get("file_path") or metadata.get("source", "")
-        content = node.node.text if hasattr(node.node, "text") else ""
+        content = node.node.get_content()
         if source_kind == "lightrag_chunk" and file_path and content:
             record = build_provenance_record(
                 retrieval_origin="lightrag",
@@ -1111,7 +1130,9 @@ class LightRAGAdapter:
 
 def _stable_id(text: str) -> str:
     """Generate a stable, deterministic node ID from content."""
-    return hashlib.md5(text.encode("utf-8", errors="replace")).hexdigest()
+    return hashlib.md5(
+        text.encode("utf-8", errors="replace"), usedforsecurity=False
+    ).hexdigest()
 
 
 def _get_or_create_loop() -> asyncio.AbstractEventLoop:

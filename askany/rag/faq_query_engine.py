@@ -31,7 +31,7 @@ class FAQQueryEngine:
         similarity_top_k: int = 5,
         response_mode: ResponseMode = ResponseMode.COMPACT,
         reranker_model: str | None = None,
-        ensemble_weights: list[float] = None,
+        ensemble_weights: list[float] | None = None,
         device: str | None = None,
     ):
         """Initialize FAQ query engine.
@@ -322,7 +322,7 @@ class FAQQueryEngine:
 
             # Extract answer from node text
             # FAQ text format: "问题: {question}\n答案: {answer}"
-            node_text = node.node.text if hasattr(node.node, "text") else ""
+            node_text = node.node.get_content()
             answer = ""
             if "答案:" in node_text:
                 answer = node_text.split("答案:")[-1].strip()

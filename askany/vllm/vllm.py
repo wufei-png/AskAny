@@ -2,6 +2,7 @@
 
 import time
 from logging import getLogger
+from typing import Any
 
 import httpx
 from llama_index.core.base.llms.types import LLMMetadata, MessageRole
@@ -28,7 +29,7 @@ def get_first_available_model(api_base: str) -> str | None:
         models_url = f"{base_url}/v1/models"
 
         logger.info("Fetching available models from %s", models_url)
-        with httpx.Client(timeout=10.0, proxies=None, trust_env=False) as client:
+        with httpx.Client(timeout=10.0, proxy=None, trust_env=False) as client:
             response = client.get(models_url)
             response.raise_for_status()
             data = response.json()
@@ -142,7 +143,7 @@ class AutoRetryVLLM:
 
                 current_attr = attr
                 try:
-                    result = current_attr(*args, **kwargs)
+                    result: Any = current_attr(*args, **kwargs)
                     duration = time.perf_counter() - start_time
 
                     # Record duration and success
@@ -173,13 +174,16 @@ class AutoRetryVLLM:
                                 model=model
                             ).inc(chunk_count)
                             metrics.askany_llm_tokens_total.labels(
-                                model=model, token_type="prompt"
+                                model=model,
+                                token_type="prompt",  # noqa: S106 - metric category label
                             ).inc(prompt_tokens)
                             metrics.askany_llm_tokens_total.labels(
-                                model=model, token_type="completion"
+                                model=model,
+                                token_type="completion",  # noqa: S106 - metric category label
                             ).inc(completion_tokens)
                             metrics.askany_llm_tokens_total.labels(
-                                model=model, token_type="total"
+                                model=model,
+                                token_type="total",  # noqa: S106 - metric category label
                             ).inc(prompt_tokens + completion_tokens)
 
                         return token_counter()
@@ -192,13 +196,16 @@ class AutoRetryVLLM:
                             prompt_tokens = raw.usage.prompt_tokens or 0
                             completion_tokens = raw.usage.completion_tokens or 0
                             metrics.askany_llm_tokens_total.labels(
-                                model=model, token_type="prompt"
+                                model=model,
+                                token_type="prompt",  # noqa: S106 - metric category label
                             ).inc(prompt_tokens)
                             metrics.askany_llm_tokens_total.labels(
-                                model=model, token_type="completion"
+                                model=model,
+                                token_type="completion",  # noqa: S106 - metric category label
                             ).inc(completion_tokens)
                             metrics.askany_llm_tokens_total.labels(
-                                model=model, token_type="total"
+                                model=model,
+                                token_type="total",  # noqa: S106 - metric category label
                             ).inc(prompt_tokens + completion_tokens)
 
                     return result

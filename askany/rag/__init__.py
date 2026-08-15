@@ -4,7 +4,7 @@ from .faq_query_engine import FAQQueryEngine
 from .rag_query_engine import RAGQueryEngine
 from .router import QueryRouter, create_query_router
 
-__all__ = ["RAGQueryEngine", "FAQQueryEngine", "QueryRouter", "create_query_router"]
+__all__ = ["FAQQueryEngine", "QueryRouter", "RAGQueryEngine", "create_query_router"]
 
 # QA Cache Manager singleton
 from askany.cache.qa_cache import QACacheManager

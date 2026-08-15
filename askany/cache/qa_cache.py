@@ -162,7 +162,9 @@ class QACacheManager:
 
         try:
             embedding_func = gptcache.embedding_func
-            assert embedding_func is not None
+            if embedding_func is None:
+                logger.warning("Cache embedding function is not configured")
+                return None
             embedding = embedding_func(cache_key)
             search_results = gptcache.data_manager.search(embedding, top_k=1)  # type: ignore[union-attr]
 
@@ -223,7 +225,9 @@ class QACacheManager:
 
         try:
             embedding_func = gptcache.embedding_func
-            assert embedding_func is not None
+            if embedding_func is None:
+                logger.warning("Cache embedding function is not configured")
+                return
             embedding = embedding_func(cache_key)
             gptcache.data_manager.save(  # type: ignore[union-attr]
                 cache_key,  # question

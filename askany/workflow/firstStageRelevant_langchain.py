@@ -8,7 +8,7 @@ except ImportError:
 import re
 import sys
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -19,7 +19,7 @@ sys.path.insert(0, str(project_root))
 
 import logging
 
-from askany.config import settings  # noqa: E402
+from askany.config import settings
 from askany.ingest.keyword_extract_from_tfidf import KeywordExtractorFromTFIDF
 from askany.prompts.prompt_manager import get_prompts
 
@@ -92,11 +92,11 @@ class DirectAnswerGenerator:
             _lf_handler = get_langfuse_callback_handler()
             self.llm = ChatOpenAI(
                 model=model,
-                api_key=client_api_key,
+                api_key=cast(Any, client_api_key),
                 base_url=api_base,
                 temperature=settings.temperature,
-                max_tokens=settings.output_tokens,
-                callbacks=[_lf_handler] if _lf_handler else None,
+                max_completion_tokens=settings.output_tokens,
+                callbacks=cast(Any, [_lf_handler] if _lf_handler else None),
             )
 
             logger.info(f"Using LLM: {type(self.llm)}")
@@ -136,9 +136,8 @@ class DirectAnswerGenerator:
             ]
         )
         # assert result is DirectAnswerResult
-        assert isinstance(result, DirectAnswerResult), (
-            f"Expected DirectAnswerResult, got {type(result)}"
-        )
+        if not isinstance(result, DirectAnswerResult):
+            raise TypeError(f"Expected DirectAnswerResult, got {type(result)}")
         result = cast(DirectAnswerResult, result)
 
         # recheck can_direct_answer
@@ -202,11 +201,11 @@ class WebOrRagAnswerGenerator:
             _lf_handler = get_langfuse_callback_handler()
             self.llm = ChatOpenAI(
                 model=model,
-                api_key=client_api_key,
+                api_key=cast(Any, client_api_key),
                 base_url=api_base,
                 temperature=settings.temperature,
-                max_tokens=settings.output_tokens,
-                callbacks=[_lf_handler] if _lf_handler else None,
+                max_completion_tokens=settings.output_tokens,
+                callbacks=cast(Any, [_lf_handler] if _lf_handler else None),
             )
 
             logger.info(f"Using LLM: {type(self.llm)}")
@@ -253,9 +252,8 @@ class WebOrRagAnswerGenerator:
         )
 
         # Type assertion to ensure result is WebOrRagAnswer for IDE type checking
-        assert isinstance(result, WebOrRagAnswer), (
-            f"Expected WebOrRagAnswer, got {type(result)}"
-        )
+        if not isinstance(result, WebOrRagAnswer):
+            raise TypeError(f"Expected WebOrRagAnswer, got {type(result)}")
         result = cast(WebOrRagAnswer, result)
 
         # recheck need_rag_search

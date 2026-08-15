@@ -4,28 +4,23 @@ import logging
 import re
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-import numpy as np  # noqa: E402
+import numpy as np
 from cachetools import LRUCache, cachedmethod
 
-from askany.config import settings  # noqa: E402
-from askany.ingest.custom_keyword import KNOWLEDGE_EMBEDDING_KEYWORDS  # noqa: E402
-from askany.ingest.keyword_extract_from_llm import KeywordExtractorFromLLM  # noqa: E402
-from askany.ingest.keyword_extract_from_tfidf import (  # noqa: E402
+from askany.config import settings
+from askany.ingest.custom_keyword import KNOWLEDGE_EMBEDDING_KEYWORDS
+from askany.ingest.keyword_extract_from_llm import KeywordExtractorFromLLM
+from askany.ingest.keyword_extract_from_tfidf import (
     KeywordExtractorFromTFIDF,
 )
-from tool.langdetect import contains_chinese  # noqa: E402
-
-try:
-    from llama_index.core.embeddings import BaseEmbedding
-except ImportError:
-    BaseEmbedding = None  # type: ignore
+from tool.langdetect import contains_chinese
 
 
 class KeywordExtractorWrapper:
@@ -33,12 +28,12 @@ class KeywordExtractorWrapper:
 
     def __init__(
         self,
-        llm_client: Optional = None,
+        llm_client: Any = None,
         llm_max_keywords: int = 2,
         tfidf_extractor: KeywordExtractorFromTFIDF | None = None,
         priority: str = "llm",
         topn: int | None = None,
-        embed_model: BaseEmbedding | None = None,
+        embed_model: Any | None = None,
     ):
         """初始化 KeywordExtractorWrapper
 

@@ -14,7 +14,7 @@ import re
 import sys
 from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
@@ -433,6 +433,11 @@ def _merge_nodes(
             next_start = next_node.node.metadata.get("start_line")
             next_end = next_node.node.metadata.get("end_line")
 
+            if not isinstance(current_path, str) or not isinstance(next_path, str):
+                merged.append(current)
+                current = next_node
+                continue
+
             # 检查是否有有效的行号
             if (
                 current_start is None
@@ -568,13 +573,11 @@ def _get_overlap_content(
         )
         if content:
             return content
-    except Exception:
-        pass
+    except Exception as read_error:
+        logger.debug("Could not read overlap file content: %s", read_error)
 
     # Fallback: extract from node content if file read fails
-    node_content = (
-        node.node.get_content() if hasattr(node.node, "get_content") else node.node.text
-    )
+    node_content = node.node.get_content()
     if node_content:
         # Simple extraction: split by lines and get overlap range
         lines = node_content.split("\n")
@@ -608,11 +611,7 @@ def create_web_search_tool(web_search_tool_instance: WebSearchTool):
         # Format nodes as string
         result_parts = []
         for i, node in enumerate(nodes, 1):
-            content = (
-                node.node.get_content()
-                if hasattr(node.node, "get_content")
-                else node.node.text
-            )
+            content = node.node.get_content()
             source = (
                 node.node.metadata.get("source")
                 or node.node.metadata.get("url")
@@ -788,12 +787,13 @@ def create_agent_with_tools(
     # Use at least 8192 max_tokens to reduce "Invalid JSON: EOF while parsing" when
     # model outputs long tool_calls or structured response that gets truncated
     _lf_handler = get_langfuse_callback_handler()
-    chat_llm = ChatOpenAI(
+    # LangChain's stubs reject the SecretStr-compatible runtime values.
+    chat_llm = cast(Any, ChatOpenAI)(
         model=settings.openai_model,
         api_key=api_key,
         base_url=api_base,
         temperature=settings.temperature,
-        max_tokens=max(settings.output_tokens, 8192),
+        max_completion_tokens=max(settings.output_tokens, 8192),
         timeout=settings.llm_timeout,
         callbacks=[_lf_handler] if _lf_handler else None,
     )
@@ -862,7 +862,7 @@ def create_agent_with_tools(
             initial_delay=1.0,  # Initial delay in seconds
             max_delay=60.0,  # Maximum delay cap (won't exceed 60s)
             jitter=True,  # Add random jitter to avoid thundering herd problem
-            on_failure="return_message",  # Return error message instead of raising exception
+            on_failure=lambda exc: str(exc),
         ),
         # 6. Summarization: Automatically summarize conversation history when approaching token limits
         # Should be after retries to avoid summarizing during retry attempts

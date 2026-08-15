@@ -5,9 +5,9 @@ from __future__ import annotations
 import asyncio
 import functools
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
-from typing import Any, ParamSpec, TypeVar
+from typing import Any, ParamSpec, TypeVar, cast
 
 from prometheus_client import Histogram
 
@@ -20,7 +20,7 @@ T = TypeVar("T")
 class Timer:
     """Context manager for timing operations with a Prometheus histogram."""
 
-    __slots__ = ("_histogram", "_labels", "_start_time", "_end_time")
+    __slots__ = ("_end_time", "_histogram", "_labels", "_start_time")
 
     def __init__(self, histogram: Histogram, **labels: str) -> None:
         """Initialize timer with histogram and labels.
@@ -91,14 +91,15 @@ def timed_operation(
 
         @functools.wraps(func)
         async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+            async_func = cast(Callable[P, Awaitable[T]], func)
             metrics = get_metrics()
             histogram = metrics.get_histogram(histogram_name)
             if histogram is None:
-                return await func(*args, **kwargs)
+                return await async_func(*args, **kwargs)
 
             timer = Timer(histogram, **labels)
             with timer:
-                return await func(*args, **kwargs)
+                return await async_func(*args, **kwargs)
 
         if asyncio.iscoroutinefunction(func):
             return async_wrapper  # type: ignore[return-value]
@@ -111,7 +112,7 @@ def timed_operation(
 def timer_context(
     histogram_name: str,
     **labels: str,
-) -> Timer:
+) -> Iterator[Timer]:
     """Context manager to time operations and record to a Prometheus histogram.
 
     Args:

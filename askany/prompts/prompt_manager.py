@@ -161,6 +161,6 @@ def get_prompts(language: LanguageType | None = None) -> PromptManager:
         language = getattr(settings, "language", "cn")
 
     if _prompt_manager is None or _prompt_manager.language != language:
-        _prompt_manager = PromptManager(language)
+        _prompt_manager = PromptManager(language or "cn")
 
     return _prompt_manager

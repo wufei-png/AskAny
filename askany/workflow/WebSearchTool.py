@@ -107,7 +107,6 @@ class WebSearchTool:
                     self.api_url,
                     json=data,
                     timeout=self.timeout,
-                    proxies={"http": None, "https": None, "all": None},
                 )
 
             if response.status_code != 200:
@@ -241,11 +240,11 @@ class WebSearchTool:
                 1 if status == "success" else 0
             )
             if prompt_tokens > 0 or completion_tokens > 0:
-                metrics.askany_websearch_tokens_total.labels(token_type="prompt").inc(
-                    prompt_tokens
-                )
                 metrics.askany_websearch_tokens_total.labels(
-                    token_type="completion"
+                    token_type="prompt"  # noqa: S106 - metric category label
+                ).inc(prompt_tokens)
+                metrics.askany_websearch_tokens_total.labels(
+                    token_type="completion"  # noqa: S106 - metric category label
                 ).inc(completion_tokens)
 
 
@@ -265,7 +264,7 @@ if __name__ == "__main__":
     nodes = web_search_tool.search("中美的关系现在如何？")
     print("root2")
     for node in nodes:
-        logger.info(node.node.text)
+        logger.info(node.node.get_content())
         logger.info(node.node.metadata)
         logger.info(node.score)
         logger.info("-" * 100)

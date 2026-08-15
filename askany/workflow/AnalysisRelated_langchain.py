@@ -10,6 +10,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -158,12 +159,13 @@ class RelevanceAnalyzer:
             # Create ChatOpenAI client from configuration
             client_api_key = api_key if api_key else ""
             _lf_handler = get_langfuse_callback_handler()
-            self.llm = ChatOpenAI(
+            # LangChain's stubs reject the SecretStr-compatible runtime values.
+            self.llm = cast(Any, ChatOpenAI)(
                 model=model,
                 api_key=client_api_key,
                 base_url=api_base,
                 temperature=settings.temperature,
-                max_tokens=settings.output_tokens,
+                max_completion_tokens=settings.output_tokens,
                 callbacks=[_lf_handler] if _lf_handler else None,
             )
 
@@ -229,11 +231,7 @@ class RelevanceAnalyzer:
             file_path = node.node.metadata.get("file_path") or node.node.metadata.get(
                 "source", "Unknown File"
             )
-            content = (
-                node.node.get_content()
-                if hasattr(node.node, "get_content")
-                else node.node.text
-            )
+            content = node.node.get_content()
             context_parts.append(
                 f"### 参考文件路径: {file_path}\n"
                 f"内容:\n"
@@ -325,7 +323,9 @@ class RelevanceAnalyzer:
                 ]
 
             try:
-                result = self.structured_llm_relevance.invoke(messages)
+                result = cast(
+                    RelevantResult, self.structured_llm_relevance.invoke(messages)
+                )
                 logger.info("RelevanceAnalyzer Response content: %s", result)
                 return result
             except Exception as e:
@@ -361,6 +361,13 @@ class RelevanceAnalyzer:
                         exc_info=True,
                     )
                     raise
+
+        # The retry loop always either returns a result or raises; keep a typed
+        # fallback for static analyzers if the retry policy is changed later.
+        return RelevantResult(
+            is_complete=False,
+            reasoning="Relevance analysis did not produce a result.",
+        )
 
     def filter_relevant_nodes(
         self, nodes: list[NodeWithScore], relevant_file_paths: list[str]
@@ -473,7 +480,8 @@ class RelevanceAnalyzer:
         # Call LLM with structured output using LangChain
         result = self.structured_llm_no_relevant.invoke(messages)
 
-        assert isinstance(result, NoRelevantResult)
+        if not isinstance(result, NoRelevantResult):
+            raise TypeError(f"Expected NoRelevantResult, got {type(result).__name__}")
         # Check and filter duplicate keywords
         original_keywords = result.missing_info_keywords.copy()
         filtered_keywords = [
@@ -582,7 +590,8 @@ class RelevanceAnalyzer:
 
         # Call LLM with structured output using LangChain
         result = self.structured_llm_generate_keywords.invoke(messages)
-        assert isinstance(result, GenerateKeywords)
+        if not isinstance(result, GenerateKeywords):
+            raise TypeError(f"Expected GenerateKeywords, got {type(result).__name__}")
         return result.missing_info_keywords
 
     def analyze_no_relevant_without_sub_queries(
@@ -642,7 +651,11 @@ class RelevanceAnalyzer:
 
         # Call LLM with structured output using LangChain
         result = self.structured_llm_no_relevant_without_sub.invoke(messages)
-        assert isinstance(result, NoRelevantResultWithoutSubQueries)
+        if not isinstance(result, NoRelevantResultWithoutSubQueries):
+            raise TypeError(
+                "Expected NoRelevantResultWithoutSubQueries, "
+                f"got {type(result).__name__}"
+            )
         # Check and filter duplicate keywords
         original_keywords = result.missing_info_keywords.copy()
         filtered_keywords = [
@@ -722,7 +735,7 @@ if __name__ == "__main__":
     # Create test nodes
     query = "如何更新系统组件？需要哪些步骤？"
     nodes = []
-    node1 = Node(
+    node1 = cast(Any, Node)(
         metadata={"file_path": "data/markdown/system-update-guide.md"},
     )
     node1.set_content(
@@ -743,7 +756,7 @@ https://docs.example.com/system-update-guide
 
 """
     )
-    node2 = Node(
+    node2 = cast(Any, Node)(
         metadata={"file_path": "data/markdown/api-troubleshooting-guide.md"},
     )
     node2.set_content(

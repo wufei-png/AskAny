@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import logging
 from collections import defaultdict
-from typing import Any
+from typing import Any, cast
 
 from llama_index.core import QueryBundle
 from llama_index.core.schema import NodeWithScore
@@ -22,9 +22,7 @@ def render_node_with_enrichment(
     node: NodeWithScore, *, max_related_items: int = 3
 ) -> str:
     """Render node text plus primary LightRAG enrichments for LLM context/output."""
-    content = (
-        node.node.get_content() if hasattr(node.node, "get_content") else node.node.text
-    )
+    content = node.node.get_content()
     metadata = node.node.metadata if hasattr(node.node, "metadata") else {}
     parts = [content]
 
@@ -266,11 +264,7 @@ def _attach_related_chunk(
         "origin_id": _origin_id(chunk),
         "file_path": _metadata(chunk).get("file_path")
         or _metadata(chunk).get("source"),
-        "content": (
-            chunk.node.get_content()
-            if hasattr(chunk.node, "get_content")
-            else chunk.node.text
-        ),
+        "content": chunk.node.get_content(),
         "primary_overlap": primary_overlap,
         **overlap,
     }
@@ -300,11 +294,7 @@ def _secondary_payload(node: NodeWithScore) -> dict[str, Any]:
         payload.update(
             {
                 "entity_name": metadata.get("entity_name", ""),
-                "description": (
-                    node.node.get_content()
-                    if hasattr(node.node, "get_content")
-                    else node.node.text
-                ),
+                "description": node.node.get_content(),
             }
         )
     else:
@@ -312,11 +302,7 @@ def _secondary_payload(node: NodeWithScore) -> dict[str, Any]:
             {
                 "src_id": metadata.get("src_id", ""),
                 "tgt_id": metadata.get("tgt_id", ""),
-                "description": (
-                    node.node.get_content()
-                    if hasattr(node.node, "get_content")
-                    else node.node.text
-                ),
+                "description": node.node.get_content(),
             }
         )
     return payload
@@ -351,6 +337,10 @@ def _calculate_overlap(
     chunk_end = chunk_meta.get("end_line")
 
     if None not in (survivor_start, survivor_end, chunk_start, chunk_end):
+        survivor_start = int(cast(Any, survivor_start))
+        survivor_end = int(cast(Any, survivor_end))
+        chunk_start = int(cast(Any, chunk_start))
+        chunk_end = int(cast(Any, chunk_end))
         if survivor_start <= chunk_end and survivor_end >= chunk_start:
             overlap_start = max(survivor_start, chunk_start)
             overlap_end = min(survivor_end, chunk_end)
@@ -436,9 +426,7 @@ def _resolve_range_with_local_search(
     file_path = metadata.get("file_path") or metadata.get("source")
     if not file_path:
         return None
-    content = (
-        node.node.get_content() if hasattr(node.node, "get_content") else node.node.text
-    )
+    content = node.node.get_content()
     resolved = local_file_search.find_text_line_range(file_path=file_path, text=content)
     if resolved:
         return resolved
@@ -558,9 +546,7 @@ def _ensure_node_provenance(
     if not file_path:
         return node
 
-    content = (
-        node.node.get_content() if hasattr(node.node, "get_content") else node.node.text
-    )
+    content = node.node.get_content()
     start_line = metadata.get("start_line")
     end_line = metadata.get("end_line")
     if start_line is None or end_line is None:

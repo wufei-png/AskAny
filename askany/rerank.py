@@ -2,6 +2,8 @@
 
 import logging
 import time
+from importlib import import_module
+from typing import Any, cast
 
 from llama_index.core.postprocessor import SentenceTransformerRerank
 from llama_index.core.postprocessor.types import BaseNodePostprocessor
@@ -73,7 +75,7 @@ class SafeReranker(BaseNodePostprocessor):
         # Check if we should skip reranking
         # If reranker's top_n is set and input nodes are fewer, skip reranking
         # This prevents reranker from filtering out all nodes when top_n > input_count
-        if (self.rerank_top_n < 0) or (
+        if (self.rerank_top_n is not None and self.rerank_top_n < 0) or (
             self.rerank_top_n is not None
             and self.rerank_top_n > 0
             and input_node_count <= self.rerank_top_n
@@ -100,9 +102,7 @@ class SafeReranker(BaseNodePostprocessor):
 
         # Log input node details for debugging
         for idx, node in enumerate(nodes):
-            node_text_preview = (
-                node.node.text[:100] if hasattr(node.node, "text") else "N/A"
-            )
+            node_text_preview = node.node.get_content()[:100]
             logger.debug(
                 "输入节点 %d: score=%.4f, text_preview=%s",
                 idx,
@@ -128,9 +128,7 @@ class SafeReranker(BaseNodePostprocessor):
             # Log reranked node details
             if reranked_nodes:
                 for idx, node in enumerate(reranked_nodes):
-                    node_text_preview = (
-                        node.node.text[:100] if hasattr(node.node, "text") else "N/A"
-                    )
+                    node_text_preview = node.node.get_content()[:100]
                     logger.debug(
                         "重排序后节点 %d: score=%.4f, text_preview=%s",
                         idx,
@@ -226,13 +224,13 @@ class SafeReranker(BaseNodePostprocessor):
                 # Try to use FlagEmbeddingReranker if available
                 try:
                     try:
-                        from llama_index.postprocessor.flag_embedding_reranker import (
-                            FlagEmbeddingReranker,
-                        )
+                        FlagEmbeddingReranker = import_module(
+                            "llama_index.postprocessor.flag_embedding_reranker"
+                        ).FlagEmbeddingReranker
                     except ImportError:
-                        from llama_index.core.postprocessor.flag_embedding_reranker import (
-                            FlagEmbeddingReranker,
-                        )
+                        FlagEmbeddingReranker = import_module(
+                            "llama_index.core.postprocessor.flag_embedding_reranker"
+                        ).FlagEmbeddingReranker
 
                     base_reranker = FlagEmbeddingReranker(
                         model=reranker_model,
@@ -266,7 +264,7 @@ class SafeReranker(BaseNodePostprocessor):
                         logger.info(
                             "This may take a while if the model needs to be downloaded or loaded..."
                         )
-                    base_reranker = SentenceTransformerRerank(
+                    base_reranker = cast(Any, SentenceTransformerRerank)(
                         model=reranker_model,
                         top_n=top_n,
                         trust_remote_code=True,

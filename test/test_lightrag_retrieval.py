@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Standalone LightRAG retrieval test.
+"""Opt-in LightRAG retrieval integration test.
 
 Verifies that the LightRAGAdapter can initialise, query the knowledge graph,
 and return well-formed NodeWithScore objects.
@@ -12,27 +12,32 @@ Prerequisites
 Usage
 -----
     python -m pytest test/test_lightrag_retrieval.py -v -s
-    # or directly:
-    python test/test_lightrag_retrieval.py
 """
 
 from __future__ import annotations
 
-import asyncio
+import importlib.util
 import logging
+import os
 import sys
 from pathlib import Path
 
 # Ensure project root is on sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent))
 
+import psycopg2
 import pytest
 import pytest_asyncio
+from lightrag_question_loader import load_lightrag_questions
+from lightrag_test_support import (
+    is_lightrag_prerequisite_error,
+    prerequisite_error_reason,
+    skip_if_no_lightrag_data,
+)
 
+from askany.config import settings
 from askany.rag.lightrag_adapter import LightRAGAdapter, get_lightrag_adapter
-
-# Use a small subset of lightrag_questions for quick validation
-from askany.workflow.question import lightrag_questions
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -40,17 +45,97 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+pytestmark = [pytest.mark.integration, pytest.mark.lightrag]
+
+
+def _check_database() -> None:
+    """Skip with a precise reason when the configured PostgreSQL is unavailable."""
+    try:
+        connection = psycopg2.connect(
+            host=settings.postgres_host,
+            port=settings.postgres_port,
+            user=settings.postgres_user,
+            password=settings.postgres_password.get_secret_value(),
+            database=settings.postgres_db,
+            connect_timeout=3,
+        )
+    except (
+        psycopg2.OperationalError,
+        psycopg2.InterfaceError,
+        ConnectionError,
+        OSError,
+        TimeoutError,
+    ) as exc:
+        pytest.skip(
+            "LightRAG retrieval skipped: PostgreSQL is unavailable "
+            f"({prerequisite_error_reason(exc)})."
+        )
+    else:
+        connection.close()
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
-TEST_QUERY = lightrag_questions[0]  # cross-component data flow question
+
+@pytest.fixture(scope="module", autouse=True)
+def lightrag_questions() -> list[str]:
+    """Load questions during test execution so prerequisite skips exit cleanly."""
+    try:
+        questions = load_lightrag_questions()
+    except FileNotFoundError as exc:
+        pytest.skip(
+            "LightRAG retrieval skipped: question file is missing "
+            f"({exc.filename}); provide ASKANY_LIGHTRAG_QUESTIONS_FILE or create the "
+            "gitignored local fixture."
+        )
+    if not questions:
+        pytest.skip(
+            "LightRAG retrieval skipped: the question file contains no questions."
+        )
+    if os.environ.get("ASKANY_RUN_LIGHTRAG_INTEGRATION") != "1":
+        pytest.skip(
+            "LightRAG retrieval skipped: opt-in integration; set "
+            "ASKANY_RUN_LIGHTRAG_INTEGRATION=1 to run it."
+        )
+    return questions
 
 
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
-async def adapter() -> LightRAGAdapter:
+async def adapter(lightrag_questions: list[str]) -> LightRAGAdapter:
     """Reuse one adapter on one event loop for the whole module."""
-    adapter = LightRAGAdapter()
+    if importlib.util.find_spec("lightrag") is None:
+        pytest.skip(
+            "LightRAG retrieval skipped: the optional lightrag-hku dependency is not installed."
+        )
+    _check_database()
+    try:
+        adapter = LightRAGAdapter()
+    except Exception as exc:
+        if not is_lightrag_prerequisite_error(exc):
+            raise
+        pytest.skip(
+            "LightRAG retrieval skipped: the embedding model or adapter could not "
+            f"be initialized ({prerequisite_error_reason(exc)})."
+        )
+    if adapter._rag is None:
+        pytest.skip(
+            "LightRAG retrieval skipped: LightRAG dependency is unavailable at runtime."
+        )
+    try:
+        await adapter.initialize()
+        probe_nodes = await adapter.retrieve_async(
+            lightrag_questions[0], raise_on_error=True
+        )
+    except Exception as exc:
+        if not is_lightrag_prerequisite_error(exc):
+            raise
+        pytest.skip(
+            "LightRAG retrieval skipped: database tables or model endpoint are "
+            f"unavailable ({prerequisite_error_reason(exc)})."
+        )
+    skip_if_no_lightrag_data(probe_nodes)
     yield adapter
     if adapter._initialized:
         await adapter.finalize()
@@ -89,14 +174,17 @@ class TestLightRAGAdapter:
         assert adapter._initialized is True
 
     @pytest.mark.asyncio(loop_scope="module")
-    async def test_retrieve_returns_nodes(self, adapter: LightRAGAdapter):
+    async def test_retrieve_returns_nodes(
+        self, adapter: LightRAGAdapter, lightrag_questions: list[str]
+    ):
         """A retrieval query should return a non-empty list of NodeWithScore."""
         await adapter.initialize()
-        nodes = await adapter.retrieve_async(TEST_QUERY)
+        test_query = lightrag_questions[0]
+        nodes = await adapter.retrieve_async(test_query)
 
         assert isinstance(nodes, list), f"Expected list, got {type(nodes)}"
         assert len(nodes) > 0, (
-            f"Expected non-empty results for query: {TEST_QUERY!r}. "
+            f"Expected non-empty results for query: {test_query!r}. "
             "Has viper-v5.5 data been ingested?"
         )
 
@@ -105,7 +193,7 @@ class TestLightRAGAdapter:
             assert hasattr(node_with_score, "score"), "Missing 'score' attribute"
             assert hasattr(node_with_score, "node"), "Missing 'node' attribute"
             assert isinstance(node_with_score.score, (int, float))
-            assert node_with_score.node.text, "Node text should be non-empty"
+            assert node_with_score.node.get_content(), "Node text should be non-empty"
 
             metadata = node_with_score.node.metadata
             assert "type" in metadata, f"Missing 'type' in metadata: {metadata}"
@@ -117,10 +205,12 @@ class TestLightRAGAdapter:
             ), f"Unexpected type: {metadata['type']}"
 
     @pytest.mark.asyncio(loop_scope="module")
-    async def test_retrieve_node_metadata_keys(self, adapter: LightRAGAdapter):
+    async def test_retrieve_node_metadata_keys(
+        self, adapter: LightRAGAdapter, lightrag_questions: list[str]
+    ):
         """Chunk nodes should have expected metadata keys."""
         await adapter.initialize()
-        nodes = await adapter.retrieve_async(TEST_QUERY)
+        nodes = await adapter.retrieve_async(lightrag_questions[0])
 
         chunk_nodes = [
             n for n in nodes if n.node.metadata.get("type") == "lightrag_chunk"
@@ -154,15 +244,19 @@ class TestLightRAGAdapter:
             assert "tgt_id" in meta
 
     @pytest.mark.asyncio(loop_scope="module")
-    async def test_retrieve_sync_wrapper(self, adapter: LightRAGAdapter):
+    async def test_retrieve_sync_wrapper(
+        self, adapter: LightRAGAdapter, lightrag_questions: list[str]
+    ):
         """The synchronous retrieve() wrapper should also work."""
         await adapter.initialize()
-        nodes = adapter.retrieve(TEST_QUERY)
+        nodes = adapter.retrieve(lightrag_questions[0])
 
         assert isinstance(nodes, list)
 
     @pytest.mark.asyncio(loop_scope="module")
-    async def test_retrieve_multiple_questions(self, adapter: LightRAGAdapter):
+    async def test_retrieve_multiple_questions(
+        self, adapter: LightRAGAdapter, lightrag_questions: list[str]
+    ):
         """Run a few lightrag_questions and print results for manual inspection."""
         await adapter.initialize()
 
@@ -176,7 +270,7 @@ class TestLightRAGAdapter:
 
             for i, n in enumerate(nodes[:5]):  # show top 5
                 node_type = n.node.metadata.get("type", "unknown")
-                text_preview = n.node.text[:200].replace("\n", " ")
+                text_preview = n.node.get_content()[:200].replace("\n", " ")
                 print(
                     f"  [{i + 1}] ({node_type}, score={n.score:.2f}) {text_preview}..."
                 )
@@ -190,71 +284,3 @@ class TestLightRAGAdapter:
         """finalize() should close connections cleanly."""
         await adapter.finalize()
         assert adapter._initialized is False
-
-
-# ---------------------------------------------------------------------------
-# CLI runner (for running outside pytest)
-# ---------------------------------------------------------------------------
-
-
-async def _run_manual():
-    """Manual test runner with verbose output."""
-    print("=" * 80)
-    print("LightRAG Standalone Retrieval Test")
-    print("=" * 80)
-
-    adapter = get_lightrag_adapter()
-    print(f"\n✓ Adapter created (LightRAG available: {adapter._rag is not None})")
-
-    if adapter._rag is None:
-        print("✗ LightRAG not available — install lightrag-hku")
-        return False
-
-    await adapter.initialize()
-    print("✓ Adapter initialised")
-
-    success = True
-    for i, question in enumerate(lightrag_questions):
-        print(f"\n{'─' * 80}")
-        print(f"Question [{i + 1}/{len(lightrag_questions)}]: {question}")
-
-        try:
-            nodes = await adapter.retrieve_async(question)
-            print(f"  → {len(nodes)} nodes returned")
-
-            chunks = [
-                n for n in nodes if n.node.metadata.get("type") == "lightrag_chunk"
-            ]
-            entities = [
-                n for n in nodes if n.node.metadata.get("type") == "lightrag_entity"
-            ]
-            rels = [
-                n for n in nodes if n.node.metadata.get("type") == "lightrag_relation"
-            ]
-            print(
-                f"    Chunks: {len(chunks)}, Entities: {len(entities)}, Relations: {len(rels)}"
-            )
-
-            if not nodes:
-                print("  ⚠ No results (data may not be ingested)")
-            else:
-                # Show top 3 nodes
-                for j, n in enumerate(nodes[:3]):
-                    text_preview = n.node.text[:150].replace("\n", " ")
-                    print(
-                        f"    [{j + 1}] ({n.node.metadata.get('type')}, score={n.score:.2f}) {text_preview}"
-                    )
-
-        except Exception as e:
-            print(f"  ✗ Error: {type(e).__name__}: {e}")
-            success = False
-
-    await adapter.finalize()
-    print(f"\n{'=' * 80}")
-    print(f"✓ Test complete ({'PASS' if success else 'FAIL'})")
-    return success
-
-
-if __name__ == "__main__":
-    result = asyncio.run(_run_manual())
-    sys.exit(0 if result else 1)

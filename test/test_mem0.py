@@ -8,6 +8,7 @@ Tests cover:
 4. Integration points in server.py
 """
 
+import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -264,7 +265,11 @@ class TestGetMem0AdapterSingleton:
 
             from askany.memory.mem0_adapter import get_mem0_adapter
 
-            adapter1 = get_mem0_adapter()
+            with patch(
+                "mem0.Memory.from_config",
+                return_value=MagicMock(),
+            ):
+                adapter1 = get_mem0_adapter()
             if adapter1 is None:
                 pytest.skip("Mem0 not enabled")
 
@@ -299,6 +304,10 @@ class TestMem0ServerIntegration:
         assert Mem0Adapter is not None
 
 
+@pytest.mark.skipif(
+    os.environ.get("ASKANY_RUN_MEM0_INTEGRATION") != "1",
+    reason="Mem0 integration tests require explicit ASKANY_RUN_MEM0_INTEGRATION=1",
+)
 class TestMem0E2E:
     """End-to-end tests for mem0 functionality.
 

@@ -86,9 +86,31 @@ extend-exclude = [
     "askany_mcp",
     "build",
     "dist",
-    "tool",
+    "tool/backup_and_clear.py",
+    "tool/check_dump_version.py",
+    "tool/check_insert_progress.py",
+    "tool/clear_all_data.py",
+    "tool/compare_table_data.py",
+    "tool/delete_migrated_docs_by_id.py",
+    "tool/dw_model.py",
+    "tool/export_keywords.py",
+    "tool/export_vector_data.py",
+    "tool/hanlp_tokenizer.py",
+    "tool/import_vector_data.py",
+    "tool/ingest_check.py",
+    "tool/load_keyword_fromidx.py",
+    "tool/migrate_docs_by_date.py",
+    "tool/query_hnsw_structure.py",
+    "tool/query_test.py",
+    "tool/query_direct_from_vector_test.py",
+    "tool/test_embedding.py",
+    "tool/test_embedding_simple.py",
+    "tool/test_merge_e2e.py",
+    "tool/test_reranker_simple.py",
+    "tool/visualize_graph.py",
     "askany/rag/lightrag_ingest.py",
     "askany/workflow/visual_workflow_langgraph.py",
+    "test/tok_stl.ipynb",
 ]
 
 [tool.ruff.lint]
@@ -119,8 +141,19 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "lf"
 
+[tool.pytest.ini_options]
+markers = [
+    "integration: tests that require explicitly provisioned external services or data",
+    "lightrag: opt-in integration test requiring LightRAG, PostgreSQL, models, and ingested data",
+    "slow: tests that are intentionally longer-running or externally provisioned",
+]
+
 [tool.pyright]
-include = ["askany"]
+include = [
+    "askany",
+    "tool/keyword_utils.py",
+    "tool/langdetect.py",
+]
 exclude = [
     "askany/rag/lightrag_ingest.py",
     "askany/workflow/visual_workflow_langgraph.py",

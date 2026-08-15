@@ -4,6 +4,7 @@ import time
 from copy import deepcopy
 from enum import StrEnum
 from logging import getLogger
+from typing import Any
 
 from llama_index.core.schema import NodeWithScore, TextNode
 
@@ -22,7 +23,7 @@ try:
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
-    torch = None
+    torch: Any = None
 
 
 def get_device() -> str:
@@ -260,26 +261,19 @@ class QueryRouter:
 
             # Add reliability warning prefix to the node content
             if isinstance(marked_node.node, TextNode):
-                original_text = marked_node.node.text
+                original_text = marked_node.node.get_content()
                 reliability_prefix = (
                     f"[FAQ-低相关性:分数={score:.2f},阈值={settings.faq_score_threshold:.2f}] "
                     f"以下内容来自FAQ库，相关性较低，请谨慎参考：\n\n"
                 )
-                marked_node.node.text = reliability_prefix + original_text
+                marked_node.node.set_content(reliability_prefix + original_text)
             else:
-                # For non-TextNode, try to modify text_resource if available
-                if (
-                    hasattr(marked_node.node, "text_resource")
-                    and marked_node.node.text_resource
-                ):
-                    original_text = marked_node.node.text_resource.text or ""
-                    reliability_prefix = (
-                        f"[FAQ-低相关性:分数={score:.2f},阈值={settings.faq_score_threshold:.2f}] "
-                        f"以下内容来自FAQ库，相关性较低，请谨慎参考：\n\n"
-                    )
-                    marked_node.node.text_resource.text = (
-                        reliability_prefix + original_text
-                    )
+                original_text = marked_node.node.get_content()
+                reliability_prefix = (
+                    f"[FAQ-低相关性:分数={score:.2f},阈值={settings.faq_score_threshold:.2f}] "
+                    f"以下内容来自FAQ库，相关性较低，请谨慎参考：\n\n"
+                )
+                marked_node.node.set_content(reliability_prefix + original_text)
 
             # Apply penalty to score
             if marked_node.score is not None:
@@ -309,8 +303,8 @@ class QueryRouter:
         if hasattr(node.node, "hash"):
             try:
                 return node.node.hash
-            except Exception:
-                pass
+            except Exception as hash_error:
+                logger.debug("Could not read node hash: %s", hash_error)
         # Last resort: use node_id from NodeWithScore
         if hasattr(node, "node_id") and node.node_id:
             return node.node_id

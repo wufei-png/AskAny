@@ -2,13 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from prometheus_client import Counter, Gauge, Histogram
-
-if TYPE_CHECKING:
-    from prometheus_client import HistogramBase
-
 
 # Default histogram buckets for latency metrics (in seconds)
 DEFAULT_LATENCY_BUCKETS: list[float] = [
@@ -379,7 +373,7 @@ class MetricsRegistry:
             ["cache_type"],
         )
 
-    def get_histogram(self, name: str) -> HistogramBase | None:
+    def get_histogram(self, name: str) -> Histogram | None:
         """Get a histogram by attribute name for external timing support."""
         return getattr(self, name, None)
 

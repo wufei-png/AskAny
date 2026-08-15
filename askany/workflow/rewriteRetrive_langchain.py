@@ -5,8 +5,10 @@ try:
 except ImportError:
     get_langfuse_callback_handler = lambda: None  # noqa: E731
 
+import logging
 import sys
 from pathlib import Path
+from typing import Any, cast
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -15,7 +17,9 @@ from pydantic import BaseModel, Field
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from askany.config import settings  # noqa: E402
+from askany.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class QueryRewriteResult(BaseModel):
@@ -68,11 +72,11 @@ class QueryRewriteGenerator:
             _lf_handler = get_langfuse_callback_handler()
             self.llm = ChatOpenAI(
                 model=model,
-                api_key=client_api_key,
+                api_key=cast(Any, client_api_key),
                 base_url=api_base,
                 temperature=settings.temperature,
-                max_tokens=settings.output_tokens,
-                callbacks=[_lf_handler] if _lf_handler else None,
+                max_completion_tokens=settings.output_tokens,
+                callbacks=cast(Any, [_lf_handler] if _lf_handler else None),
             )
 
             print(f"Using LLM: {type(self.llm)}")
@@ -111,7 +115,7 @@ class QueryRewriteGenerator:
             ]
         )
 
-        return result
+        return cast(QueryRewriteResult, result)
 
     def _format_prompt(self, query: str) -> str:
         """Format prompt for query rewrite generation.

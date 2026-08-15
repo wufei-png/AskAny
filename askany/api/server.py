@@ -30,7 +30,11 @@ from askany.metrics import get_metrics
 from askany.rag import FAQQueryEngine
 from askany.rag.router import QueryRouter, QueryType
 from askany.workflow.workflow_filter import WorkflowFilter
-from askany.workflow.workflow_langgraph import AgentWorkflow, process_parallel_group
+from askany.workflow.workflow_langgraph import (
+    AgentState,
+    AgentWorkflow,
+    process_parallel_group,
+)
 
 logger = getLogger(__name__)
 
@@ -38,6 +42,27 @@ logger = getLogger(__name__)
 _device: str | None = None
 
 _background_tasks: set[asyncio.Task[Any]] = set()  # prevent GC of fire-and-forget tasks
+
+
+def _log_background_task_result(task: asyncio.Task[Any]) -> None:
+    """Consume and log a fire-and-forget task result without callback errors."""
+
+    if task.cancelled():
+        logger.debug("Background Mem0 save task was cancelled")
+        return
+
+    try:
+        error = task.exception()
+    except asyncio.CancelledError:
+        logger.debug("Background Mem0 save task was cancelled")
+        return
+
+    if error is not None:
+        logger.error(
+            "Background Mem0 save task failed: %s",
+            error,
+            exc_info=(type(error), error, error.__traceback__),
+        )
 
 
 def set_device(device: str) -> None:
@@ -260,7 +285,7 @@ async def _sse_generator(
         logger.exception("Error during SSE streaming")
         yield _make_sse_chunk(
             model,
-            content=f"[Error: {type(e).__name__}] {str(e)}",
+            content=f"[Error: {type(e).__name__}] {e!s}",
             chunk_id=chunk_id,
         )
     finally:
@@ -268,9 +293,12 @@ async def _sse_generator(
         yield "data: [DONE]\n\n"
         if mem0_adapter and user_id and user_query and collected_content:
             response_text = "".join(collected_content)
-            asyncio.create_task(
+            save_turn_task = asyncio.create_task(
                 mem0_adapter.save_turn_async(user_query, response_text, user_id)
             )
+            _background_tasks.add(save_turn_task)
+            save_turn_task.add_done_callback(_background_tasks.discard)
+            save_turn_task.add_done_callback(_log_background_task_result)
 
 
 def create_app(
@@ -321,8 +349,8 @@ def create_app(
 
             shutdown_langfuse()
             shutdown_ragas()
-        except ImportError:
-            pass
+        except ImportError as observability_error:
+            logger.debug("Observability shutdown unavailable: %s", observability_error)
         except Exception:
             logger.exception("Error during observability shutdown")
 
@@ -605,6 +633,8 @@ def create_app(
             streaming_start_time = time.perf_counter()
             model_name = request.model
 
+            deepsearch_workflow = agent_workflow_global
+
             async def _build_content_stream() -> AsyncGenerator[str, None]:
                 """Build the content-level async generator for the chosen workflow."""
                 # Prepare mem0_qa_context for workflow path
@@ -616,6 +646,8 @@ def create_app(
 
                 if use_deepsearch and len(user_messages) == 1:
                     # Deepsearch single-query streaming
+                    if deepsearch_workflow is None:
+                        raise RuntimeError("AgentWorkflow not initialized")
                     query_type = QueryType.AUTO
                     system_messages = [
                         msg for msg in request.messages if msg.role == "system"
@@ -633,7 +665,7 @@ def create_app(
                         query_type=str(query_type)
                     ).inc()
                     # Pass mem0_qa_context to workflow
-                    async for chunk in agent_workflow_global.astream_final_answer(
+                    async for chunk in deepsearch_workflow.astream_final_answer(
                         user_query, query_type, mem0_qa_context=mem0_qa_context
                     ):
                         yield chunk
@@ -727,9 +759,14 @@ def create_app(
             retrieved_contexts: list[str] = []
 
             try:
+                active_workflow_filter = workflow_filter_global
+                if active_workflow_filter is None:
+                    raise HTTPException(
+                        status_code=500, detail="Workflow filter not initialized"
+                    )
                 response_text, retrieved_nodes = await process_query_with_subproblems(
                     agent_workflow_global,
-                    workflow_filter_global,
+                    active_workflow_filter,
                     user_query,
                     query_type,
                     mem0_qa_context=mem0_qa_context,
@@ -836,10 +873,14 @@ def create_app(
             )
 
             _lf_handler = get_langfuse_callback_handler()
-            _trace_id = None
+            _trace_id: str | None = None
             if _lf_handler is not None:
                 try:
-                    _trace_id = _lf_handler.get_trace_id()
+                    get_trace_id = getattr(_lf_handler, "get_trace_id", None)
+                    trace_id_value = get_trace_id() if callable(get_trace_id) else None
+                    _trace_id = (
+                        trace_id_value if isinstance(trace_id_value, str) else None
+                    )
                     if _trace_id:
                         logger.debug(
                             "Retrieved trace_id from Langfuse handler: %s", _trace_id
@@ -860,8 +901,8 @@ def create_app(
             )
             _background_tasks.add(ragas_task)
             ragas_task.add_done_callback(_background_tasks.discard)
-        except ImportError:
-            pass  # observability package not installed
+        except ImportError as observability_error:
+            logger.debug("RAGAS evaluation unavailable: %s", observability_error)
         except Exception:
             logger.debug("RAGAS evaluation task creation failed", exc_info=True)
 
@@ -895,7 +936,7 @@ def create_app(
                 except Exception as e:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Failed to decode base64 JSON: {str(e)}",
+                        detail=f"Failed to decode base64 JSON: {e!s}",
                     ) from e
 
                 # Ensure faq_data is a list
@@ -922,6 +963,10 @@ def create_app(
                     device = get_device()
 
                     # Recreate FAQ query engine with updated indexes
+                    if router is None:
+                        raise HTTPException(
+                            status_code=500, detail="Query router not initialized"
+                        )
                     router.faq_query_engine = FAQQueryEngine(
                         vector_index=faq_vector_index,
                         keyword_index=faq_keyword_index,
@@ -953,7 +998,7 @@ def create_app(
             except Exception as e:
                 return UpdateFAQsResponse(
                     success=False,
-                    message=f"Failed to update FAQs: {str(e)}",
+                    message=f"Failed to update FAQs: {e!s}",
                     inserted=0,
                     updated=0,
                     errors=[str(e)],
@@ -1072,7 +1117,7 @@ async def process_query_with_subproblems(
         logger.debug("子问题分解失败，直接处理原始查询")
         # 直接调用 AgentWorkflow 的异步方法
         # 使用 workflow_filter 返回的 need_web_search 和 need_rag_search 作为缓存结果
-        initial_state = {
+        initial_state: AgentState = {
             "query": user_query,
             "query_type": query_type,
             "can_direct_answer": False,
@@ -1090,6 +1135,10 @@ async def process_query_with_subproblems(
             "is_inner_sub_query_workflow": False,
             "is_outer_sub_query_workflow": False,
             "result": None,
+            "middle_results": [],
+            "metadata_filters": None,
+            "no_complete_answer": False,
+            "_stream_mode": False,
         }
         result = await agent_workflow.graph.ainvoke(initial_state)
         answer = result.get("result", "抱歉，无法生成答案。")
@@ -1104,7 +1153,7 @@ async def process_query_with_subproblems(
         logger.debug("只有一个问题，直接处理")
         # 直接调用 AgentWorkflow 的异步方法
         # 使用 workflow_filter 返回的 need_web_search 和 need_rag_search 作为缓存结果
-        initial_state = {
+        initial_state: AgentState = {
             "query": sub_problem_structure.parallel_groups[0][0],
             "query_type": query_type,
             "can_direct_answer": False,
@@ -1122,6 +1171,10 @@ async def process_query_with_subproblems(
             "is_inner_sub_query_workflow": False,
             "is_outer_sub_query_workflow": False,
             "result": None,
+            "middle_results": [],
+            "metadata_filters": None,
+            "no_complete_answer": False,
+            "_stream_mode": False,
         }
         result = await agent_workflow.graph.ainvoke(initial_state)
         answer = result.get("result", "抱歉，无法生成答案。")
@@ -1158,10 +1211,10 @@ async def process_query_with_subproblems(
         all_results = []
         all_nodes = []
         for idx, result in enumerate(results):
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 logger.error("并行组 %d 处理失败: %s", idx + 1, str(result))
                 all_results.append(
-                    f"问题组 {idx + 1}: 抱歉，处理问题时发生错误: {str(result)}"
+                    f"问题组 {idx + 1}: 抱歉，处理问题时发生错误: {result!s}"
                 )
             else:
                 result_text, result_nodes = result

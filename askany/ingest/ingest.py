@@ -1,11 +1,13 @@
 """Document ingestion functions."""
 
 import hashlib
-import pickle
+import json
 from logging import getLogger
 from pathlib import Path
+from typing import cast
 
 from llama_index.core import Document, Settings
+from llama_index.core.schema import BaseNode, TextNode
 
 from askany.config import settings
 
@@ -109,32 +111,23 @@ def ingest_documents(embed_model, llm=None):
         # Generate cache file path based on markdown_dir and split_mode
         # Use hash of absolute path + split_mode to create unique cache file
         cache_key = f"{markdown_dir.resolve()}_{settings.markdown_split_mode}"
-        cache_hash = hashlib.md5(cache_key.encode()).hexdigest()
+        cache_hash = hashlib.md5(cache_key.encode(), usedforsecurity=False).hexdigest()
         cache_dir = Path(settings.storage_dir) / "docs_cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
-        cache_file = cache_dir / f"docs_nodes_{cache_hash}.pkl"
+        cache_file = cache_dir / f"docs_nodes_{cache_hash}.json"
 
         # Try to load from cache
         if cache_file.exists():
             try:
                 logger.info(f"Loading cached docs nodes from {cache_file}...")
-                with open(cache_file, "rb") as f:
-                    try:
-                        docs_docs = pickle.load(f)
-                    except Exception as pickle_err:
-                        logger.warning(
-                            f"Pickle load failed: {pickle_err}. Trying JSON..."
-                        )
-                        # Fallback: try loading as JSON (safer alternative)
-                        import json
-
-                        f.seek(0)
-                        try:
-                            docs_docs = json.load(f)
-                        except Exception as e:
-                            raise ValueError(
-                                "Cache file is neither valid pickle nor JSON"
-                            ) from e
+                with open(cache_file, encoding="utf-8") as f:
+                    cached_nodes = json.load(f)
+                if not isinstance(cached_nodes, list):
+                    raise ValueError("Document cache must contain a JSON list")
+                docs_docs = cast(
+                    list[BaseNode],
+                    [TextNode.model_validate(item) for item in cached_nodes],
+                )
                 logger.info(f"Loaded {len(docs_docs)} cached Markdown nodes")
                 logger.info(
                     f"[ingest_documents] Loaded {len(docs_docs)} docs nodes from cache: {cache_file}"
@@ -155,13 +148,17 @@ def ingest_documents(embed_model, llm=None):
             )
             markdown_nodes = markdown_parser.parse_directory(markdown_dir)
             logger.info(f"Parsed {len(markdown_nodes)} Markdown nodes")
-            docs_docs = markdown_nodes
+            docs_docs = cast(list[BaseNode], markdown_nodes)
 
             # Save to cache
             try:
                 logger.info(f"Saving docs nodes to cache: {cache_file}...")
-                with open(cache_file, "wb") as f:
-                    pickle.dump(docs_docs, f)
+                with open(cache_file, "w", encoding="utf-8") as f:
+                    json.dump(
+                        [node.model_dump(mode="json") for node in docs_docs],
+                        f,
+                        ensure_ascii=False,
+                    )
                 logger.info(f"Saved {len(docs_docs)} nodes to cache")
                 logger.info(
                     f"[ingest_documents] Saved {len(docs_docs)} docs nodes to cache: {cache_file}"

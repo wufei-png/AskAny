@@ -3,20 +3,18 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from llama_index.core.schema import NodeWithScore, TextNode
 
 from askany.workflow.min_langchain_agent import (
+    _get_overlap_content,
+    _merge_nodes,
+    _search_results_to_nodes,
     extract_all_tool_calls,
     extract_and_format_response,
     extract_references_from_result,
     should_retry_model,
-    _search_results_to_nodes,
-    _get_overlap_content,
-    _merge_nodes,
 )
 
 

@@ -13,7 +13,7 @@ sys.path.insert(0, str(project_root))
 
 import logging
 
-from askany.config import settings  # noqa: E402
+from askany.config import settings
 
 logger = logging.getLogger(__name__)
 from cachetools import LRUCache, cachedmethod

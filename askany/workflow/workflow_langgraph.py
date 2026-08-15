@@ -10,9 +10,9 @@ import os
 import re
 import time
 from collections.abc import AsyncGenerator
-from datetime import datetime
+from datetime import UTC, datetime
 from logging import FileHandler, Formatter, getLogger
-from typing import Any, Literal, Optional, TypedDict
+from typing import Any, Literal, NotRequired, Optional, TypedDict, cast
 
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
@@ -67,20 +67,27 @@ from askany.workflow.WebSearchTool import WebSearchTool
 
 logger = getLogger(__name__)
 
-debug = True  # Whether to enable debug mode / 是否开启调试模式
+debug = True  # Enable debug logging by default / 默认开启调试日志
 output_file = "workflow_langgraph.log"
 
 # Setup debug logger / 设置调试日志记录器
-debug_logger = None
-if debug:
-    debug_logger = getLogger("workflow_debug")
+debug_logger = getLogger("workflow_debug")
+
+
+def enable_debug_logging(log_path: str = output_file) -> None:
+    """Enable workflow debug logging and attach a file handler on demand."""
+
+    global debug
+    debug = True
     debug_logger.setLevel(
         1
     )  # Set to lowest level to ensure all messages are logged / 设置为最低级别以确保所有消息都被记录
-    # Remove all existing handlers / 移除所有现有的处理器
-    debug_logger.handlers = []
+    # Remove and close all existing handlers / 移除并关闭所有现有处理器
+    for handler in debug_logger.handlers:
+        handler.close()
+    debug_logger.handlers.clear()
     # Create file handler with real-time flush / 创建文件处理器，实时刷新
-    file_handler = FileHandler(output_file, mode="a", encoding="utf-8")
+    file_handler = FileHandler(log_path, mode="a", encoding="utf-8")
     file_handler.setLevel(1)
     # Set format / 设置格式
     formatter = Formatter(
@@ -91,6 +98,15 @@ if debug:
     debug_logger.propagate = (
         False  # Prevent propagation to root logger / 防止传播到根日志记录器
     )
+
+
+enable_debug_logging()
+
+
+def _utc_timestamp() -> str:
+    """Return an ISO-8601 UTC timestamp for diagnostic log entries."""
+
+    return datetime.now(UTC).isoformat(timespec="milliseconds")
 
 
 async def process_parallel_group(
@@ -243,6 +259,7 @@ def _format_state_for_debug(state: "AgentState") -> str:
     """
     formatted = {}
     for key, value in state.items():
+        value = cast(Any, value)
         if key == "nodes":
             # Format node information / 格式化节点信息
             formatted[key] = {
@@ -256,15 +273,7 @@ def _format_state_for_debug(state: "AgentState") -> str:
                                 or node.node.metadata.get("source")
                                 or "unknown"
                             ),
-                            "text_preview": (
-                                node.node.get_content()[:100]
-                                if hasattr(node.node, "get_content")
-                                else (
-                                    node.node.text[:100]
-                                    if hasattr(node.node, "text")
-                                    else ""
-                                )
-                            ),
+                            "text_preview": node.node.get_content()[:100],
                         }
                         for node in value[
                             :3
@@ -330,7 +339,7 @@ def _log_node_input(node_name: str, state: "AgentState"):
             debug_logger.info(
                 f"\n{'=' * 80}\n"
                 f"节点: {node_name}\n"
-                f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}\n"
+                f"时间: {_utc_timestamp()}\n"
                 f"输入状态:\n{formatted_state}\n"
                 f"{'=' * 80}\n"
             )
@@ -339,7 +348,7 @@ def _log_node_input(node_name: str, state: "AgentState"):
                 if isinstance(handler, FileHandler):
                     handler.flush()
         except Exception as e:
-            debug_logger.warning(f"记录节点 {node_name} 输入时出错: {str(e)}")
+            debug_logger.warning(f"记录节点 {node_name} 输入时出错: {e!s}")
 
 
 # LangGraph State Definition
@@ -362,13 +371,14 @@ class AgentState(TypedDict):
     # RAG retrieval
     nodes: list[NodeWithScore]
     keywords: list[str]
+    keywords_other: NotRequired[list[str]]
 
     # Analysis
     analysis: RelevantResult | None
     iteration: int
 
     # Sub-problem handling
-    no_relevant_result: NoRelevantResult | None
+    no_relevant_result: NoRelevantResult | NoRelevantResultWithoutSubQueries | None
     current_sub_query: str | None
     inner_previous_qa_context: list[
         dict[str, str]
@@ -451,12 +461,13 @@ class AgentWorkflow:
         api_base = settings.openai_api_base
         api_key = settings.openai_api_key if settings.openai_api_key else ""
         _lf_handler = get_langfuse_callback_handler()
-        self.chat_llm = ChatOpenAI(
+        # LangChain's stubs reject the SecretStr-compatible runtime values.
+        self.chat_llm = cast(Any, ChatOpenAI)(
             model=settings.openai_model,
             api_key=api_key,
             base_url=api_base,
             temperature=settings.temperature,
-            max_tokens=settings.output_tokens,
+            max_completion_tokens=settings.output_tokens,
             callbacks=[_lf_handler] if _lf_handler else None,
         )
 
@@ -700,11 +711,7 @@ class AgentWorkflow:
                     }
 
                 # Generate answer from web search results
-                answer = (
-                    web_nodes[0].node.get_content()
-                    if hasattr(web_nodes[0].node, "get_content")
-                    else web_nodes[0].node.text
-                )
+                answer = web_nodes[0].node.get_content()
                 if not answer:
                     logger.error("网络搜索结果为空")
                     return {
@@ -1045,7 +1052,9 @@ class AgentWorkflow:
                     max_nodes,
                 )
                 # Keep the highest scored nodes
-                nodes = sorted(nodes, key=lambda n: n.score, reverse=True)[:max_nodes]
+                nodes = sorted(nodes, key=lambda n: n.score or 0.0, reverse=True)[
+                    :max_nodes
+                ]
                 logger.debug("节点截断后数量: %d", len(nodes))
 
             # Check max iterations
@@ -1084,6 +1093,7 @@ class AgentWorkflow:
             MiddleResultRecorder.record_analyze_relevance(
                 middle_results,
                 analysis.relevant_file_paths,
+                analysis.is_complete,
             )
 
             # Check if complete
@@ -1454,6 +1464,11 @@ class AgentWorkflow:
                 **state,
                 "result": "子问题结果缺失",
             }
+        if not isinstance(no_relevant_result, NoRelevantResult):
+            return {
+                **state,
+                "result": "子问题结果缺失",
+            }
 
         metrics = get_metrics()
         node_start = time.perf_counter()
@@ -1625,11 +1640,7 @@ class AgentWorkflow:
                     logger.debug("节点缺少文件路径，跳过扩展")
                     continue
 
-                content = (
-                    node.node.get_content()
-                    if hasattr(node.node, "get_content")
-                    else node.node.text
-                )
+                content = node.node.get_content()
                 if not content:
                     logger.debug("节点内容为空，跳过扩展 - 文件路径: %s", file_path)
                     continue
@@ -1691,7 +1702,7 @@ class AgentWorkflow:
                     logger.debug("替换节点 - 扩展节点数: %d", len(expanded_nodes))
                     nodes = expanded_nodes
             # TODO here truncate nodes by tokens
-            nodes, total_tokens, was_truncated = truncate_nodes_by_tokens(
+            nodes, _total_tokens, _was_truncated = truncate_nodes_by_tokens(
                 nodes, settings.llm_max_tokens
             )
 
@@ -1968,7 +1979,7 @@ class AgentWorkflow:
                 if no_relevant_result is None:
                     route = "error"
                 # Check if has sub_queries (only for NoRelevantResult, not NoRelevantResultWithoutSubQueries)
-                elif hasattr(no_relevant_result, "sub_queries"):
+                elif isinstance(no_relevant_result, NoRelevantResult):
                     if len(no_relevant_result.sub_queries) > 0:
                         route = "sub_query"
                     else:
@@ -1988,7 +1999,7 @@ class AgentWorkflow:
             is_relevant = len(analysis.relevant_file_paths) > 0 if analysis else False
             has_sub_queries = (
                 len(no_relevant_result.sub_queries) > 0
-                if no_relevant_result and hasattr(no_relevant_result, "sub_queries")
+                if isinstance(no_relevant_result, NoRelevantResult)
                 else False
             )
             has_keywords = (
@@ -2153,7 +2164,7 @@ class AgentWorkflow:
         return nodes
 
     def _search_results_to_nodes(
-        self, search_results: dict[str, list[dict[str, any]]]
+        self, search_results: dict[str, list[dict[str, Any]]]
     ) -> list[NodeWithScore]:
         """Convert search results to nodes."""
         nodes = []
@@ -2185,7 +2196,7 @@ class AgentWorkflow:
         self,
         existing_nodes: list[NodeWithScore],
         new_nodes: list[NodeWithScore],
-        third_nodes: list[NodeWithScore] = None,
+        third_nodes: list[NodeWithScore] | None = None,
     ) -> list[NodeWithScore]:
         """Merge nodes with strict overlap checking.
 
@@ -2258,6 +2269,11 @@ class AgentWorkflow:
                 ) or next_node.node.metadata.get("source")
                 next_start = next_node.node.metadata.get("start_line")
                 next_end = next_node.node.metadata.get("end_line")
+
+                if not isinstance(current_path, str) or not isinstance(next_path, str):
+                    merged.append(current)
+                    current = next_node
+                    continue
 
                 # 检查是否有有效的行号
                 if (
@@ -2405,11 +2421,7 @@ class AgentWorkflow:
                 return content
 
             # 如果从文件读取失败，尝试从节点内容中提取
-            node_content = (
-                node.node.get_content()
-                if hasattr(node.node, "get_content")
-                else node.node.text
-            )
+            node_content = node.node.get_content()
             if not node_content:
                 return None
 
@@ -2487,7 +2499,7 @@ class AgentWorkflow:
             debug_logger.info(
                 f"\n{'#' * 80}\n"
                 f"工作流开始执行\n"
-                f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}\n"
+                f"时间: {_utc_timestamp()}\n"
                 f"查询: {query}\n"
                 f"查询类型: {query_type}\n"
                 f"{'#' * 80}\n"
@@ -2569,7 +2581,7 @@ class AgentWorkflow:
             debug_logger.info(
                 f"\n{'#' * 80}\n"
                 f"工作流执行完成\n"
-                f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}\n"
+                f"时间: {_utc_timestamp()}\n"
                 f"结果预览: {result_preview}\n"
                 f"结果长度: {len(result_text)} 字符\n"
                 f"{'#' * 80}\n"
@@ -2600,7 +2612,7 @@ class AgentWorkflow:
             debug_logger.info(
                 f"\n{'#' * 80}\n"
                 f"工作流开始执行（流式模式）\n"
-                f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}\n"
+                f"时间: {_utc_timestamp()}\n"
                 f"查询: {query}\n"
                 f"查询类型: {query_type}\n"
                 f"{'#' * 80}\n"
@@ -2706,7 +2718,7 @@ class AgentWorkflow:
             debug_logger.info(
                 f"\n{'#' * 80}\n"
                 f"工作流执行完成（流式模式）\n"
-                f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}\n"
+                f"时间: {_utc_timestamp()}\n"
                 f"{'#' * 80}\n"
             )
             for handler in debug_logger.handlers:

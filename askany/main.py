@@ -3,8 +3,8 @@
 # Set stdout/stderr encoding to UTF-8 FIRST, before any imports
 # This must be done before importing any modules that might print to stdout/stderr
 # This ensures Chinese characters and other Unicode characters display correctly in log files
-import io
 import sys
+from typing import Any
 
 # Disable ANSI color codes when output is redirected to files
 # This prevents escape sequences from appearing in log files
@@ -14,31 +14,29 @@ import sys
 #     # Disable tqdm progress bars when not in terminal
 #     os.environ.setdefault("TQDM_DISABLE", "1")
 
-try:
-    # Set encoding for stdout/stderr to UTF-8
-    # This is critical for preventing encoding issues when output is redirected to files
-    if hasattr(sys.stdout, "buffer"):
-        sys.stdout = io.TextIOWrapper(
-            sys.stdout.buffer,
+
+def _configure_utf8_stream(stream: Any) -> Any:
+    """Configure a standard text stream without replacing its owning wrapper."""
+    try:
+        stream.reconfigure(
             encoding="utf-8",
             errors="replace",
             line_buffering=True,
         )
-    if hasattr(sys.stderr, "buffer"):
-        sys.stderr = io.TextIOWrapper(
-            sys.stderr.buffer,
-            encoding="utf-8",
-            errors="replace",
-            line_buffering=True,
-        )
-except (AttributeError, OSError):
-    # If stdout/stderr don't have buffer attribute or can't be wrapped, skip
-    # The PYTHONIOENCODING environment variable should handle it
-    pass
+    except (AttributeError, OSError):
+        # Pytest and other application-provided streams may not support
+        # reconfigure; leave those wrappers intact so their owner remains safe.
+        pass
+    return stream
+
+
+sys.stdout = _configure_utf8_stream(sys.stdout)
+sys.stderr = _configure_utf8_stream(sys.stderr)
 
 import logging
 import multiprocessing
 import os
+from typing import cast
 
 # Configure logging for OpenAI client to reduce verbose output
 # Set OpenAI client logging to WARNING level to reduce noise
@@ -47,6 +45,7 @@ import os
 # logging.getLogger("httpcore").setLevel(logging.WARNING)
 from llama_index.core import Settings
 from llama_index.core.embeddings import BaseEmbedding
+from llama_index.core.llms import LLM
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.llms.openai import OpenAI
 
@@ -58,9 +57,9 @@ try:
     TORCH_AVAILABLE = True
 except ImportError:
     SENTENCE_TRANSFORMERS_AVAILABLE = False
-    SentenceTransformer = None
+    SentenceTransformer: Any = None
     TORCH_AVAILABLE = False
-    torch = None
+    torch: Any = None
 
 from logging import getLogger
 
@@ -112,8 +111,6 @@ def limit_cpu_cores(num_cores: int | None = None) -> None:
 
     # 1. Set process CPU affinity (Linux/Unix only)
     try:
-        import os
-
         if hasattr(os, "sched_setaffinity"):
             # Get current process ID
             pid = os.getpid()
@@ -170,6 +167,10 @@ def get_device() -> str:
 
 class SentenceTransformerEmbedding(BaseEmbedding):
     """Custom embedding class using sentence-transformers for BGE models."""
+
+    _sentence_transformer_model: Any
+    _batch_size: int
+    _dimension: int
 
     def __init__(
         self, model_name: str, device: str = "cpu", batch_size: int = 512, **kwargs
@@ -516,10 +517,15 @@ def main():
             from askany.cache.qa_cache import QACacheManager
             from askany.rag import set_qa_cache_manager
 
-            qa_cache_manager = QACacheManager(embed_model=embed_model)
-            qa_cache_manager.init()
-            set_qa_cache_manager(qa_cache_manager)
-            logger.info("QA semantic cache initialized")
+            if isinstance(embed_model, SentenceTransformerEmbedding):
+                qa_cache_manager = QACacheManager(embed_model=embed_model)
+                qa_cache_manager.init()
+                set_qa_cache_manager(qa_cache_manager)
+                logger.info("QA semantic cache initialized")
+            else:
+                logger.warning(
+                    "QA semantic cache requires SentenceTransformer embeddings; skipping"
+                )
 
         # Initialize shared tools to reduce resource usage and enable caching
         from askany.ingest.custom_keyword_index import (
@@ -561,7 +567,7 @@ def main():
         # Create AgentWorkflow (LangGraph version) with shared tools
         # Use Settings.llm which is the underlying LLM instance (unwrapped if AutoRetryVLLM)
         # Settings.llm is set in initialize_llm() above
-        workflow_llm = getattr(Settings, "llm", llm)
+        workflow_llm = cast(LLM, getattr(Settings, "llm", llm))
         agent_workflow = AgentWorkflow(
             router=router,
             llm=workflow_llm,

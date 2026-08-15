@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""End-to-end comparison test: min_langchain_agent with and without LightRAG.
+"""Manual end-to-end comparison: min_langchain_agent with and without LightRAG.
 
 Runs a subset of lightrag_questions through the agent twice:
   1. With ``enable_lightrag=False`` (baseline — vector + keyword only)
@@ -15,8 +15,9 @@ Prerequisites
 Usage
 -----
     python test/test_lightrag_e2e_comparison.py
-    # or via pytest (marks as slow):
-    python -m pytest test/test_lightrag_e2e_comparison.py -v -s
+
+This is a manual comparison script, not a pytest test. It requires the full
+AskAny stack and an operator-supplied question file.
 """
 
 from __future__ import annotations
@@ -26,12 +27,15 @@ import logging
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 # Ensure project root is on sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent))
+
+from lightrag_question_loader import load_lightrag_questions
 
 from askany.config import settings
-from askany.workflow.question import lightrag_questions
 
 logging.basicConfig(
     level=logging.INFO,
@@ -53,6 +57,18 @@ RESULT_FILE = Path(__file__).parent / "e2e_comparison_results.json"
 # ---------------------------------------------------------------------------
 
 
+def _load_agent_functions() -> tuple[Any, Any, Any]:
+    """Load the agent functions lazily so the script remains manual-only."""
+
+    from askany.workflow.min_langchain_agent import (
+        create_agent_with_tools,
+        extract_and_format_response,
+        invoke_with_retry,
+    )
+
+    return create_agent_with_tools, extract_and_format_response, invoke_with_retry
+
+
 def _run_agent_on_questions(
     questions: list[str],
     *,
@@ -65,50 +81,46 @@ def _run_agent_on_questions(
     # Patch the setting at runtime
     original_value = settings.enable_lightrag
     settings.enable_lightrag = enable_lightrag
-
-    # Import here so the agent picks up current settings
-    from askany.workflow.min_langchain_agent import (
-        create_agent_with_tools,
-        extract_and_format_response,
-        invoke_with_retry,
-    )
-
-    agent = create_agent_with_tools()
-    results = []
-
-    for i, question in enumerate(questions, 1):
-        mode_label = "LightRAG ON" if enable_lightrag else "LightRAG OFF"
-        print(f"\n{'=' * 80}")
-        print(f"[{mode_label}] Question {i}/{len(questions)}: {question}")
-        print("=" * 80)
-
-        t0 = time.time()
-        try:
-            raw_result = invoke_with_retry(
-                agent,
-                {"messages": [{"role": "user", "content": question}]},
-            )
-            answer = extract_and_format_response(raw_result)
-        except Exception as exc:
-            answer = f"ERROR: {type(exc).__name__}: {exc}"
-            logger.error("Agent failed on question %d: %s", i, exc, exc_info=True)
-        duration = time.time() - t0
-
-        print(f"  Duration: {duration:.1f}s")
-        print(f"  Answer preview: {answer[:300]}...")
-
-        results.append(
-            {
-                "question": question,
-                "answer": answer,
-                "duration_s": round(duration, 2),
-                "enable_lightrag": enable_lightrag,
-            }
+    try:
+        create_agent_with_tools, extract_and_format_response, invoke_with_retry = (
+            _load_agent_functions()
         )
+        agent = create_agent_with_tools()
+        results = []
 
-    # Restore original setting
-    settings.enable_lightrag = original_value
-    return results
+        for i, question in enumerate(questions, 1):
+            mode_label = "LightRAG ON" if enable_lightrag else "LightRAG OFF"
+            print(f"\n{'=' * 80}")
+            print(f"[{mode_label}] Question {i}/{len(questions)}: {question}")
+            print("=" * 80)
+
+            t0 = time.time()
+            try:
+                raw_result = invoke_with_retry(
+                    agent,
+                    {"messages": [{"role": "user", "content": question}]},
+                )
+                answer = extract_and_format_response(raw_result)
+            except Exception as exc:
+                answer = f"ERROR: {type(exc).__name__}: {exc}"
+                logger.error("Agent failed on question %d: %s", i, exc, exc_info=True)
+            duration = time.time() - t0
+
+            print(f"  Duration: {duration:.1f}s")
+            print(f"  Answer preview: {answer[:300]}...")
+
+            results.append(
+                {
+                    "question": question,
+                    "answer": answer,
+                    "duration_s": round(duration, 2),
+                    "enable_lightrag": enable_lightrag,
+                }
+            )
+
+        return results
+    finally:
+        settings.enable_lightrag = original_value
 
 
 def _write_comparison(
@@ -184,27 +196,51 @@ def _print_summary(baseline: list[dict], augmented: list[dict]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def main():
-    questions = lightrag_questions[:MAX_QUESTIONS]
+def main() -> int:
+    try:
+        configured_questions = load_lightrag_questions()
+    except FileNotFoundError as exc:
+        print(
+            "SKIPPED: LightRAG comparison needs a question file; "
+            f"{exc.filename} was not found. Set ASKANY_LIGHTRAG_QUESTIONS_FILE "
+            "or create the gitignored local fixture."
+        )
+        return 0
+
+    if not configured_questions:
+        print(
+            "SKIPPED: LightRAG comparison needs at least one configured question; "
+            "the question file is empty."
+        )
+        return 0
+
+    questions = configured_questions[:MAX_QUESTIONS]
 
     print("=" * 80)
     print("LightRAG End-to-End Comparison Test")
-    print(f"Questions: {len(questions)} (from lightrag_questions)")
+    print(f"Questions: {len(questions)} (from configured question file)")
     print(f"LLM model: {settings.openai_model}")
     print(f"Embedding: {settings.embedding_model}")
     print("=" * 80)
 
-    # Phase 1: Baseline (LightRAG OFF)
-    print(f"\n{'#' * 80}")
-    print("PHASE 1: Running with LightRAG DISABLED (baseline)")
-    print(f"{'#' * 80}")
-    baseline = _run_agent_on_questions(questions, enable_lightrag=False)
+    try:
+        # Phase 1: Baseline (LightRAG OFF)
+        print(f"\n{'#' * 80}")
+        print("PHASE 1: Running with LightRAG DISABLED (baseline)")
+        print(f"{'#' * 80}")
+        baseline = _run_agent_on_questions(questions, enable_lightrag=False)
 
-    # Phase 2: Augmented (LightRAG ON)
-    print(f"\n{'#' * 80}")
-    print("PHASE 2: Running with LightRAG ENABLED")
-    print(f"{'#' * 80}")
-    augmented = _run_agent_on_questions(questions, enable_lightrag=True)
+        # Phase 2: Augmented (LightRAG ON)
+        print(f"\n{'#' * 80}")
+        print("PHASE 2: Running with LightRAG ENABLED")
+        print(f"{'#' * 80}")
+        augmented = _run_agent_on_questions(questions, enable_lightrag=True)
+    except Exception as exc:
+        logger.exception("LightRAG comparison execution failed")
+        print(
+            f"\nFAILED: LightRAG comparison execution error: {type(exc).__name__}: {exc}"
+        )
+        return 1
 
     # Write results
     _write_comparison(baseline, augmented, RESULT_FILE)
@@ -212,8 +248,18 @@ def main():
     # Print summary
     _print_summary(baseline, augmented)
 
-    print("\n✓ Comparison complete!")
+    error_count = sum(
+        result["answer"].startswith("ERROR:") for result in [*baseline, *augmented]
+    )
+    if error_count:
+        print(
+            f"\nFAILED: LightRAG comparison produced {error_count} execution error(s)."
+        )
+        return 1
+
+    print("\nPASSED: LightRAG comparison complete.")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

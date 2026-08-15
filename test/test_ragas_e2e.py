@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 TEST_QUERIES = [
     "cassandra组件的concurrent_reads有什么用？",
-    "如何解决Cassandra OOM问题？"
+    "如何解决Cassandra OOM问题？",
 ]
 
 skip_reason: str | None = None

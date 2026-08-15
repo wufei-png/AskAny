@@ -5,6 +5,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +111,7 @@ class LocalFileSearchTool:
         expand_mode: str = settings.expand_context_mode,
         expand_ratio: float = settings.expand_context_ratio,
         expand_lines: int | None = None,
-    ) -> dict[str, any] | None:
+    ) -> dict[str, Any] | None:
         """
         直接使用已知的行号来扩展上下文，而不需要重新查找文本。
 
@@ -224,8 +225,8 @@ class LocalFileSearchTool:
             return None
 
     def _filter_results_by_tokens(
-        self, results: list[dict[str, any]], max_tokens: int
-    ) -> list[dict[str, any]]:
+        self, results: list[dict[str, Any]], max_tokens: int
+    ) -> list[dict[str, Any]]:
         """根据 token 限制过滤结果列表。
 
         Args:
@@ -264,8 +265,8 @@ class LocalFileSearchTool:
         return filtered_results
 
     def _filter_all_results_by_tokens(
-        self, all_results: dict[str, list[dict[str, any]]], max_tokens: int
-    ) -> dict[str, list[dict[str, any]]]:
+        self, all_results: dict[str, list[dict[str, Any]]], max_tokens: int
+    ) -> dict[str, list[dict[str, Any]]]:
         """根据 token 限制过滤所有关键字的结果（整体估算）。
 
         Args:
@@ -323,8 +324,8 @@ class LocalFileSearchTool:
         return filtered_results
 
     def _filter_keywords_by_limits(
-        self, all_results: dict[str, list[dict[str, any]]]
-    ) -> dict[str, list[dict[str, any]]]:
+        self, all_results: dict[str, list[dict[str, Any]]]
+    ) -> dict[str, list[dict[str, Any]]]:
         """根据文件数量和匹配数量限制过滤关键词结果。
 
         如果某个关键词命中了超过 one_keyword_max_file_num 的文件，
@@ -380,7 +381,7 @@ class LocalFileSearchTool:
         expand_mode: str = settings.expand_context_mode,
         expand_ratio: float = settings.expand_context_ratio,
         expand_lines: int | None = None,
-    ) -> dict[str, any] | None:
+    ) -> dict[str, Any] | None:
         """
         函数3: 找到 chunk 所在位置 → 扩展上下文。
 
@@ -450,7 +451,7 @@ class LocalFileSearchTool:
         expand_mode: str = settings.expand_context_mode,
         expand_ratio: float = settings.expand_context_ratio,
         expand_lines: int | None = None,
-    ) -> dict[str, list[dict[str, any]]]:
+    ) -> dict[str, list[dict[str, Any]]]:
         """
         函数4: 根据关键字本地搜索。
 
@@ -491,7 +492,7 @@ class LocalFileSearchTool:
 
         # 只遍历所有文件一次
         # 用于统计每个keyword在所有文件中的总出现次数
-        keyword_total_frequency: dict[str, int] = {keyword: 0 for keyword in keywords}
+        keyword_total_frequency: dict[str, int] = dict.fromkeys(keywords, 0)
 
         for file_path in self.markdown_files:
             try:
@@ -587,7 +588,7 @@ class LocalFileSearchTool:
 
     def _search_by_sliding_windows(
         self, tokens: list[str]
-    ) -> dict[str, list[dict[str, any]]] | None:
+    ) -> dict[str, list[dict[str, Any]]] | None:
         """
         核心函数：使用滑动窗口搜索关键字。
 
@@ -718,7 +719,7 @@ class LocalFileSearchTool:
 
     def search_keyword_using_binary_algorithm(
         self, keywords: list[str]
-    ) -> dict[str, list[dict[str, any]]]:
+    ) -> dict[str, list[dict[str, Any]]]:
         """
         函数5: 使用滑动窗口算法搜索关键字。
 
@@ -737,7 +738,7 @@ class LocalFileSearchTool:
         window_results = self._search_by_sliding_windows(keywords)
         if window_results is not None:
             # 辅助函数：检查搜索结果是否为空
-            def _has_results(search_results: dict[str, list[dict[str, any]]]) -> bool:
+            def _has_results(search_results: dict[str, list[dict[str, Any]]]) -> bool:
                 """检查搜索结果是否非空"""
                 return any(results for results in search_results.values())
 
@@ -754,8 +755,8 @@ class LocalFileSearchTool:
         return {}
 
     def _merge_overlapping_results(
-        self, results: list[dict[str, any]]
-    ) -> list[dict[str, any]]:
+        self, results: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """合并同一文件中重叠的结果。
 
         Args:
@@ -768,9 +769,11 @@ class LocalFileSearchTool:
             return results
 
         # 按文件路径分组
-        file_groups: dict[str, list[dict[str, any]]] = {}
+        file_groups: dict[str, list[dict[str, Any]]] = {}
         for result in results:
             file_path = result.get("file_path")
+            if not isinstance(file_path, str) or not file_path:
+                continue
             if file_path not in file_groups:
                 file_groups[file_path] = []
             file_groups[file_path].append(result)
@@ -833,8 +836,8 @@ class LocalFileSearchTool:
         return deduplicated_results
 
     def _deduplicate_by_filename_and_content(
-        self, results: list[dict[str, any]]
-    ) -> list[dict[str, any]]:
+        self, results: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """去除相同文件名和相同内容的结果，只保留第一个。
 
         Args:
@@ -927,7 +930,7 @@ class LocalFileSearchTool:
 
     def _expand_markdown_block(
         self, file_path: str, start_line: int, end_line: int
-    ) -> dict[str, any] | None:
+    ) -> dict[str, Any] | None:
         """扩展markdown块：找到包含指定行的完整markdown块。
 
         Args:

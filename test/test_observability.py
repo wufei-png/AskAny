@@ -19,25 +19,25 @@ import pytest
 
 def _make_settings(**overrides) -> SimpleNamespace:
     """Build a fake Settings namespace with observability defaults."""
-    defaults = dict(
-        enable_langfuse=True,
-        langfuse_public_key="pk-test-123",
-        langfuse_secret_key="sk-test-456",
-        langfuse_host="http://localhost:3000",
-        langfuse_release="test-v1",
-        langfuse_debug=False,
+    defaults = {
+        "enable_langfuse": True,
+        "langfuse_public_key": "pk-test-123",
+        "langfuse_secret_key": "sk-test-456",
+        "langfuse_host": "http://localhost:3000",
+        "langfuse_release": "test-v1",
+        "langfuse_debug": False,
         # RAGAS
-        enable_ragas=True,
-        ragas_sample_rate=1.0,
-        ragas_metrics=["faithfulness", "response_relevancy", "context_precision"],
-        ragas_eval_llm_model="test-model",
-        ragas_eval_llm_api_base="http://localhost:8080",
-        ragas_eval_llm_api_key="test-key",
+        "enable_ragas": True,
+        "ragas_sample_rate": 1.0,
+        "ragas_metrics": ["faithfulness", "response_relevancy", "context_precision"],
+        "ragas_eval_llm_model": "test-model",
+        "ragas_eval_llm_api_base": "http://localhost:8080",
+        "ragas_eval_llm_api_key": "test-key",
         # Fallbacks used by RAGAS when specific keys are None
-        openai_model="fallback-model",
-        openai_api_base="http://fallback",
-        openai_api_key="fallback-key",
-    )
+        "openai_model": "fallback-model",
+        "openai_api_base": "http://fallback",
+        "openai_api_key": "fallback-key",
+    }
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
 

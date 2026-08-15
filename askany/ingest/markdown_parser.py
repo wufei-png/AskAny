@@ -3,7 +3,6 @@
 # Set stdout/stderr encoding to UTF-8 FIRST, before any imports
 # This ensures Chinese characters display correctly when SemanticSplitterNodeParser prints "> Adding chunk:" messages
 import hashlib
-import io
 import logging
 import os
 import sys
@@ -34,24 +33,14 @@ def _ensure_utf8_encoding():
     to ensure that "> Adding chunk:" messages are printed with correct encoding.
     """
     try:
-        if hasattr(sys.stdout, "buffer") and (
-            not hasattr(sys.stdout, "encoding") or sys.stdout.encoding != "utf-8"
-        ):
-            sys.stdout = io.TextIOWrapper(
-                sys.stdout.buffer,
-                encoding="utf-8",
-                errors="replace",
-                line_buffering=True,
-            )
-        if hasattr(sys.stderr, "buffer") and (
-            not hasattr(sys.stderr, "encoding") or sys.stderr.encoding != "utf-8"
-        ):
-            sys.stderr = io.TextIOWrapper(
-                sys.stderr.buffer,
-                encoding="utf-8",
-                errors="replace",
-                line_buffering=True,
-            )
+        for stream in (sys.stdout, sys.stderr):
+            reconfigure = getattr(stream, "reconfigure", None)
+            if callable(reconfigure):
+                reconfigure(
+                    encoding="utf-8",
+                    errors="replace",
+                    line_buffering=True,
+                )
     except (AttributeError, OSError):
         # If stdout/stderr don't have buffer attribute or can't be wrapped, skip
         pass
@@ -111,6 +100,20 @@ class MarkdownParser:
                 f"Invalid split_mode: {split_mode}. Must be 'markdown', 'semantic', or 'hybrid'"
             )
 
+    def _markdown_nodes(self, documents: list[Document]) -> list[BaseNode]:
+        """Parse documents with the configured Markdown parser."""
+        parser = self.markdown_parser
+        if parser is None:
+            raise RuntimeError("Markdown parser is not configured for this split mode")
+        return parser.get_nodes_from_documents(documents)
+
+    def _semantic_nodes(self, documents: list[Document]) -> list[BaseNode]:
+        """Parse documents with the configured semantic parser."""
+        parser = self.semantic_parser
+        if parser is None:
+            raise RuntimeError("Semantic parser is not configured for this split mode")
+        return parser.get_nodes_from_documents(documents)
+
     def parse_file_return_documents(self, file_path: Path) -> list[Document]:
         """Parse a Markdown file into Documents.
 
@@ -137,8 +140,10 @@ class MarkdownParser:
         try:
             mtime = os.path.getmtime(file_path)
             last_updated = str(mtime)
-        except OSError:
-            pass
+        except OSError as mtime_error:
+            logger.debug(
+                "Could not read modification time for %s: %s", file_path, mtime_error
+            )
 
         metadata = {
             "source": str(file_path),
@@ -153,13 +158,14 @@ class MarkdownParser:
         )
 
         # Parse into documents based on split mode
+        documents: list[Document] = []
         if self.split_mode == "markdown":
             # Use only MarkdownNodeParser
-            nodes = self.markdown_parser.get_nodes_from_documents([doc])
+            nodes = self._markdown_nodes([doc])
             # Convert nodes to documents
             documents = [
                 Document(
-                    text=node.text,
+                    text=node.get_content(),
                     metadata=node.metadata,
                 )
                 for node in nodes
@@ -169,11 +175,11 @@ class MarkdownParser:
             # Ensure stdout encoding is UTF-8 before calling get_nodes_from_documents
             # This prevents encoding issues with "> Adding chunk:" messages
             _ensure_utf8_encoding()
-            nodes = self.semantic_parser.get_nodes_from_documents([doc])
+            nodes = self._semantic_nodes([doc])
             # Convert nodes to documents
             documents = [
                 Document(
-                    text=node.text,
+                    text=node.get_content(),
                     metadata=node.metadata,
                 )
                 for node in nodes
@@ -181,16 +187,16 @@ class MarkdownParser:
         elif self.split_mode == "hybrid":
             logger.debug(f"Parsing markdown file: {file_path} with hybrid mode")
             # First use MarkdownNodeParser to split by structure
-            markdown_nodes = self.markdown_parser.get_nodes_from_documents([doc])
+            markdown_nodes = self._markdown_nodes([doc])
             # Then apply SemanticSplitterNodeParser to markdown nodes in batch
             # Batch processing is more efficient than processing one by one
             documents = []
             if markdown_nodes:
                 # Convert all markdown nodes to documents at once
-                logger.debug(f"Markdown node text: {markdown_nodes[0].text}")
+                logger.debug(f"Markdown node text: {markdown_nodes[0].get_content()}")
                 temp_docs = [
                     Document(
-                        text=md_node.text,
+                        text=md_node.get_content(),
                         metadata={**metadata, **md_node.metadata},
                     )
                     for md_node in markdown_nodes
@@ -200,13 +206,11 @@ class MarkdownParser:
                 # Ensure stdout encoding is UTF-8 before calling get_nodes_from_documents
                 # This prevents encoding issues with "> Adding chunk:" messages
                 # _ensure_utf8_encoding()
-                semantic_nodes = self.semantic_parser.get_nodes_from_documents(
-                    temp_docs
-                )
+                semantic_nodes = self._semantic_nodes(temp_docs)
                 # Convert nodes back to documents
                 documents = [
                     Document(
-                        text=node.text,
+                        text=node.get_content(),
                         metadata=node.metadata,
                     )
                     for node in semantic_nodes
@@ -242,13 +246,17 @@ class MarkdownParser:
         try:
             mtime = os.path.getmtime(file_path)
             last_updated = str(mtime)
-        except OSError:
-            pass
+        except OSError as mtime_error:
+            logger.debug(
+                "Could not read modification time for %s: %s", file_path, mtime_error
+            )
 
         # Generate base ID from file path (consistent across runs)
         # Use MD5 hash of normalized file path for stable ID
         normalized_path = str(file_path.resolve())
-        base_id = hashlib.md5(normalized_path.encode()).hexdigest()[:16]
+        base_id = hashlib.md5(
+            normalized_path.encode(), usedforsecurity=False
+        ).hexdigest()[:16]
 
         metadata = {
             "source": str(file_path),
@@ -263,21 +271,22 @@ class MarkdownParser:
         )
 
         # Parse into nodes based on split mode
+        nodes: list[BaseNode] = []
         if self.split_mode == "markdown":
             # Use only MarkdownNodeParser
-            nodes = self.markdown_parser.get_nodes_from_documents([doc])
+            nodes = self._markdown_nodes([doc])
             logger.info(f"Parsed {len(nodes)} Markdown nodes")
         elif self.split_mode == "semantic":
             # Use only SemanticSplitterNodeParser
             # Ensure stdout encoding is UTF-8 before calling get_nodes_from_documents
             # This prevents encoding issues with "> Adding chunk:" messages
             _ensure_utf8_encoding()
-            nodes = self.semantic_parser.get_nodes_from_documents([doc])
+            nodes = self._semantic_nodes([doc])
         elif self.split_mode == "hybrid":
             # raise Exception("Hybrid mode is not supported")
             logger.debug(f"Parsing markdown file: {file_path} with hybrid mode")
             # First use MarkdownNodeParser to split by structure
-            markdown_nodes = self.markdown_parser.get_nodes_from_documents([doc])
+            markdown_nodes = self._markdown_nodes([doc])
             # Then apply SemanticSplitterNodeParser to markdown nodes in batch
             # Batch processing is more efficient than processing one by one
             nodes = []
@@ -287,7 +296,7 @@ class MarkdownParser:
                 # Convert all markdown nodes to documents at once
                 temp_docs = [
                     Document(
-                        text=md_node.text,
+                        text=md_node.get_content(),
                         metadata={**metadata, **md_node.metadata},
                     )
                     for md_node in markdown_nodes
@@ -296,9 +305,7 @@ class MarkdownParser:
                 # Ensure stdout encoding is UTF-8 before calling get_nodes_from_documents
                 # This prevents encoding issues with "> Adding chunk:" messages
                 _ensure_utf8_encoding()
-                semantic_nodes = self.semantic_parser.get_nodes_from_documents(
-                    temp_docs
-                )
+                semantic_nodes = self._semantic_nodes(temp_docs)
                 # for node in semantic_nodes:
                 #     print("semantic node text: ", node.text)
                 # raise Exception("Stop here")
@@ -319,7 +326,7 @@ class MarkdownParser:
                 origin_id=node_id,
                 source_unit_id=node_id,
                 file_path=str(file_path),
-                text=node.text,
+                text=node.get_content(),
                 hint_start_line=next_hint_line,
             )
             if provenance.end_line is not None:

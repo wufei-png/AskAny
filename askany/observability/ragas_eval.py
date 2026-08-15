@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 import random
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from askany.config import Settings
@@ -73,10 +73,10 @@ def initialize_ragas(settings: Settings) -> bool:
     try:
         base_llm = ChatOpenAI(
             model=eval_model,
-            api_key=eval_api_key,
+            api_key=cast(Any, eval_api_key),
             base_url=eval_api_base,
             temperature=0.0,  # Deterministic for evaluation
-            max_tokens=4096,
+            max_completion_tokens=4096,
         )
         _evaluator_llm = LangchainLLMWrapper(base_llm)
         logger.info("RAGAS evaluator LLM: model=%s base=%s", eval_model, eval_api_base)
@@ -140,7 +140,7 @@ async def evaluate_rag_response(
         return {}
 
     # ── Sampling ─────────────────────────────────────────────────────────
-    if _sample_rate < 1.0 and random.random() > _sample_rate:
+    if _sample_rate < 1.0 and random.random() > _sample_rate:  # noqa: S311 - sampling is non-security randomness
         logger.debug("RAGAS: skipped by sampling (rate=%.2f)", _sample_rate)
         return {}
 
@@ -158,7 +158,7 @@ async def evaluate_rag_response(
         # Score each metric independently (one failure doesn't block others)
         for name, metric in _metrics.items():
             try:
-                score = await metric.single_turn_ascore(sample)
+                score = await cast(Any, metric).single_turn_ascore(sample)
                 scores[name] = float(score)
                 logger.debug("RAGAS %s = %.4f", name, scores[name])
             except Exception:
@@ -179,7 +179,7 @@ async def evaluate_rag_response(
             client = get_langfuse_client()
             if client is not None:
                 for metric_name, value in scores.items():
-                    client.score(
+                    cast(Any, client).score(
                         trace_id=trace_id,
                         name=f"ragas_{metric_name}",
                         value=value,
@@ -230,8 +230,8 @@ def _get_metric_classes() -> dict[str, type]:
         classes["response_relevancy"] = AnswerRelevancy
         classes["context_precision"] = ContextPrecisionWithoutReference
         return classes
-    except ImportError:
-        pass
+    except ImportError as collections_error:
+        logger.debug("RAGAS collections metrics unavailable: %s", collections_error)
 
     # Fallback: ragas.metrics (pre-collections, still available but deprecated)
     try:
@@ -245,8 +245,8 @@ def _get_metric_classes() -> dict[str, type]:
         classes["response_relevancy"] = ResponseRelevancy
         classes["context_precision"] = LLMContextPrecisionWithoutReference
         return classes
-    except ImportError:
-        pass
+    except ImportError as legacy_error:
+        logger.debug("RAGAS legacy metrics unavailable: %s", legacy_error)
 
     # Fallback: legacy API
     try:

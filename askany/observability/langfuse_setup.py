@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from askany.config import Settings
@@ -21,9 +21,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # ── Module-level singletons ──────────────────────────────────────────────────
-_langfuse_client: object | None = None
-_langfuse_callback_handler: object | None = None
-_llamaindex_instrumentor: object | None = None
+_langfuse_client: Any = None
+_langfuse_callback_handler: Any = None
+_llamaindex_instrumentor: Any = None
 _initialized: bool = False
 
 
@@ -83,7 +83,8 @@ def initialize_langfuse(settings: Settings) -> bool:
     try:
         from langfuse import Langfuse
 
-        _langfuse_client = Langfuse(
+        # Langfuse's installed stubs lag the runtime constructor options.
+        _langfuse_client = cast(Any, Langfuse)(
             public_key=settings.langfuse_public_key,
             secret_key=settings.langfuse_secret_key,
             host=settings.langfuse_host,
@@ -102,7 +103,7 @@ def initialize_langfuse(settings: Settings) -> bool:
     try:
         from langfuse.langchain import CallbackHandler
 
-        _langfuse_callback_handler = CallbackHandler(
+        _langfuse_callback_handler = cast(Any, CallbackHandler)(
             public_key=settings.langfuse_public_key,
             secret_key=settings.langfuse_secret_key,
             host=settings.langfuse_host,

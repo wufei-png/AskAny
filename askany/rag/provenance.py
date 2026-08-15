@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import psycopg2
+from psycopg2 import sql
 from psycopg2.extras import execute_batch
 
 from askany.config import settings
@@ -35,7 +36,9 @@ def normalize_text(text: str) -> str:
 
 
 def hash_text(text: str) -> str:
-    return hashlib.md5(normalize_text(text).encode("utf-8")).hexdigest()
+    return hashlib.md5(
+        normalize_text(text).encode("utf-8"), usedforsecurity=False
+    ).hexdigest()
 
 
 def canonicalize_path(file_path: str) -> str:
@@ -56,7 +59,9 @@ def canonicalize_path(file_path: str) -> str:
 
 def compute_source_doc_id(file_path: str) -> str:
     canonical_path = canonicalize_path(file_path)
-    return hashlib.md5(canonical_path.encode("utf-8")).hexdigest()
+    return hashlib.md5(
+        canonical_path.encode("utf-8"), usedforsecurity=False
+    ).hexdigest()
 
 
 def compute_source_unit_id(
@@ -78,7 +83,7 @@ def compute_source_unit_id(
             text_hash,
         ]
     )
-    return hashlib.md5(payload.encode("utf-8")).hexdigest()
+    return hashlib.md5(payload.encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
 @dataclass(slots=True)
@@ -137,8 +142,8 @@ class ProvenanceRepository:
             with conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        f"""
-                        CREATE TABLE IF NOT EXISTS {PROVENANCE_TABLE} (
+                        sql.SQL("""
+                        CREATE TABLE IF NOT EXISTS {table_name} (
                             retrieval_origin TEXT NOT NULL,
                             source_kind TEXT NOT NULL,
                             origin_id TEXT NOT NULL,
@@ -153,31 +158,51 @@ class ProvenanceRepository:
                             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                             PRIMARY KEY (retrieval_origin, source_kind, origin_id)
                         );
-                        """
+                        """).format(table_name=sql.Identifier(PROVENANCE_TABLE))
                     )
                     cur.execute(
-                        f"""
-                        CREATE INDEX IF NOT EXISTS idx_{PROVENANCE_TABLE}_source_doc
-                        ON {PROVENANCE_TABLE} (source_doc_id);
-                        """
+                        sql.SQL("""
+                        CREATE INDEX IF NOT EXISTS {index_name}
+                        ON {table_name} (source_doc_id);
+                        """).format(
+                            index_name=sql.Identifier(
+                                f"idx_{PROVENANCE_TABLE}_source_doc"
+                            ),
+                            table_name=sql.Identifier(PROVENANCE_TABLE),
+                        )
                     )
                     cur.execute(
-                        f"""
-                        CREATE INDEX IF NOT EXISTS idx_{PROVENANCE_TABLE}_canonical_path
-                        ON {PROVENANCE_TABLE} (canonical_path);
-                        """
+                        sql.SQL("""
+                        CREATE INDEX IF NOT EXISTS {index_name}
+                        ON {table_name} (canonical_path);
+                        """).format(
+                            index_name=sql.Identifier(
+                                f"idx_{PROVENANCE_TABLE}_canonical_path"
+                            ),
+                            table_name=sql.Identifier(PROVENANCE_TABLE),
+                        )
                     )
                     cur.execute(
-                        f"""
-                        CREATE INDEX IF NOT EXISTS idx_{PROVENANCE_TABLE}_text_hash
-                        ON {PROVENANCE_TABLE} (text_hash);
-                        """
+                        sql.SQL("""
+                        CREATE INDEX IF NOT EXISTS {index_name}
+                        ON {table_name} (text_hash);
+                        """).format(
+                            index_name=sql.Identifier(
+                                f"idx_{PROVENANCE_TABLE}_text_hash"
+                            ),
+                            table_name=sql.Identifier(PROVENANCE_TABLE),
+                        )
                     )
                     cur.execute(
-                        f"""
-                        CREATE INDEX IF NOT EXISTS idx_{PROVENANCE_TABLE}_line_range
-                        ON {PROVENANCE_TABLE} USING GIST (line_range);
-                        """
+                        sql.SQL("""
+                        CREATE INDEX IF NOT EXISTS {index_name}
+                        ON {table_name} USING GIST (line_range);
+                        """).format(
+                            index_name=sql.Identifier(
+                                f"idx_{PROVENANCE_TABLE}_line_range"
+                            ),
+                            table_name=sql.Identifier(PROVENANCE_TABLE),
+                        )
                     )
         finally:
             conn.close()
@@ -196,8 +221,8 @@ class ProvenanceRepository:
                 with conn.cursor() as cur:
                     execute_batch(
                         cur,
-                        f"""
-                        INSERT INTO {PROVENANCE_TABLE} (
+                        sql.SQL("""
+                        INSERT INTO {table_name} (
                             retrieval_origin,
                             source_kind,
                             origin_id,
@@ -237,7 +262,7 @@ class ProvenanceRepository:
                             line_range = EXCLUDED.line_range,
                             text_hash = EXCLUDED.text_hash,
                             content_length = EXCLUDED.content_length;
-                        """,
+                        """).format(table_name=sql.Identifier(PROVENANCE_TABLE)),
                         [
                             {
                                 "retrieval_origin": row.retrieval_origin,
@@ -268,15 +293,15 @@ class ProvenanceRepository:
         try:
             with conn.cursor() as cur:
                 cur.execute(
-                    f"""
+                    sql.SQL("""
                     SELECT retrieval_origin, source_kind, origin_id, canonical_path,
                            source_doc_id, source_unit_id, start_line, end_line,
                            text_hash, content_length
-                    FROM {PROVENANCE_TABLE}
+                    FROM {table_name}
                     WHERE retrieval_origin = %s
                       AND source_kind = %s
                       AND origin_id = %s
-                    """,
+                    """).format(table_name=sql.Identifier(PROVENANCE_TABLE)),
                     (retrieval_origin, source_kind, origin_id),
                 )
                 row = cur.fetchone()

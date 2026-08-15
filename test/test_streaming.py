@@ -7,7 +7,9 @@ Tests cover:
 3. Streaming endpoint integration via FastAPI TestClient
 """
 
+import asyncio
 import json
+import logging
 import sys
 from collections.abc import AsyncGenerator
 from pathlib import Path
@@ -18,7 +20,11 @@ import pytest
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from askany.api.server import _make_sse_chunk, _sse_generator
+from askany.api.server import (
+    _log_background_task_result,
+    _make_sse_chunk,
+    _sse_generator,
+)
 
 # ─── Unit tests for SSE helpers ───
 
@@ -165,7 +171,7 @@ class TestSseGenerator:
 
         async def empty_gen() -> AsyncGenerator[str, None]:
             return
-            yield  # noqa: F811 - makes this an async generator
+            yield
 
         chunks = []
         async for chunk in _sse_generator("m", empty_gen()):
@@ -174,6 +180,89 @@ class TestSseGenerator:
         # stop + [DONE] = 2 (no role chunk since first is never True-set)
         assert len(chunks) == 2
         assert chunks[-1] == "data: [DONE]\n\n"
+
+
+class TestBackgroundTaskCallback:
+    """Test safe observation of fire-and-forget Mem0 save tasks."""
+
+    @pytest.mark.asyncio
+    async def test_successful_task_is_consumed_without_error(self, caplog):
+        async def successful_task() -> None:
+            return None
+
+        task = asyncio.create_task(successful_task())
+        await task
+        _log_background_task_result(task)
+
+        assert "Background Mem0 save task failed" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_failed_task_is_logged(self, caplog):
+        async def failing_task() -> None:
+            raise RuntimeError("save failed")
+
+        task = asyncio.create_task(failing_task())
+        with pytest.raises(RuntimeError, match="save failed"):
+            await task
+        _log_background_task_result(task)
+
+        assert "Background Mem0 save task failed" in caplog.text
+        assert "save failed" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_cancelled_task_is_logged_without_callback_error(self, caplog):
+        caplog.set_level(logging.DEBUG, logger="askany.api.server")
+
+        async def cancellable_task() -> None:
+            await asyncio.sleep(10)
+
+        task = asyncio.create_task(cancellable_task())
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        _log_background_task_result(task)
+
+        assert "Background Mem0 save task was cancelled" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_mem0_save_task_is_retained_until_completion(self):
+        import askany.api.server as server
+
+        started = asyncio.Event()
+        release = asyncio.Event()
+
+        class PendingMem0Adapter:
+            async def save_turn_async(
+                self, user_query: str, response_text: str, user_id: str
+            ) -> None:
+                started.set()
+                await release.wait()
+
+        server._background_tasks.clear()
+
+        async def content_gen() -> AsyncGenerator[str, None]:
+            yield "answer"
+
+        chunks = [
+            chunk
+            async for chunk in _sse_generator(
+                "m",
+                content_gen(),
+                mem0_adapter=PendingMem0Adapter(),
+                user_id="user",
+                user_query="question",
+            )
+        ]
+        assert chunks[-1] == "data: [DONE]\n\n"
+        await started.wait()
+        assert len(server._background_tasks) == 1
+        task = next(iter(server._background_tasks))
+        assert task.done() is False
+
+        release.set()
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert not server._background_tasks
 
 
 # ─── Integration tests for streaming endpoint ───
@@ -207,7 +296,7 @@ class TestStreamingEndpoint:
     @pytest.mark.asyncio
     async def test_stream_simple_agent(self):
         """Streaming with simple agent should return SSE events."""
-        app, mock_workflow, mock_agent = self._create_test_app()
+        app, _mock_workflow, _mock_agent = self._create_test_app()
 
         async def mock_astream(*args, **kwargs):
             yield "Hello"
@@ -253,7 +342,7 @@ class TestStreamingEndpoint:
     @pytest.mark.asyncio
     async def test_stream_deepsearch(self):
         """Streaming with deepsearch model should use AgentWorkflow.astream_final_answer."""
-        app, mock_workflow, mock_agent = self._create_test_app()
+        app, mock_workflow, _mock_agent = self._create_test_app()
 
         async def mock_astream_final(*args, **kwargs):
             yield "Deep"
@@ -289,7 +378,7 @@ class TestStreamingEndpoint:
                         continue
                     payload = json.loads(line[len("data: ") :])
                     delta = payload["choices"][0]["delta"]
-                    if "content" in delta and delta["content"]:
+                    if delta.get("content"):
                         content_parts.append(delta["content"])
 
                 assert "Deep" in content_parts
@@ -298,7 +387,7 @@ class TestStreamingEndpoint:
     @pytest.mark.asyncio
     async def test_non_stream_still_works(self):
         """Non-streaming request should still return normal JSON response."""
-        app, mock_workflow, mock_agent = self._create_test_app()
+        app, _mock_workflow, _mock_agent = self._create_test_app()
 
         with (
             patch("askany.api.server.get_mem0_adapter", return_value=None),

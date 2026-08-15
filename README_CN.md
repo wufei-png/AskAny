@@ -255,7 +255,8 @@ askany/
 - 其他用于数据迁移、关键词导出和 HNSW 索引检查的工具脚本
 
 **测试文件 (`test/`):**
-- `test_workflow_client_call.py` - 工作流客户端与 SSE 流式测试
+- `test/test_min_langchain_agent.py` - 无需外部服务的 LangChain agent 工具测试
+- `test/test_streaming.py` - 无需外部服务的 SSE 流式测试
 - 各种组件和集成的测试脚本
 
 **常用命令：**
@@ -379,6 +380,22 @@ All settings can be configured in `askany/config.py` or via environment variable
 | **Prometheus** | `enable_prometheus=True`、`prometheus_port` | 在 `/metrics` 端点暴露指标；安装：`uv sync --extra observability` |
 | **QA 缓存** | `enable_qa_cache=True`、`qa_cache_similarity_threshold` | GPTCache + PGVector；FAQ 热更新时自动清除 |
 
+#### LightRAG 问题文件与验证边界
+
+LightRAG 检索集成读取的 JSON 文件格式必须严格为 `list[str]`。默认本地
+文件是 `test/fixtures/lightrag_questions.local.json`（已加入 gitignore）；
+本地使用时可复制并修改 `test/fixtures/lightrag_questions.example.json`。
+CI 或其他开发者可以通过 `ASKANY_LIGHTRAG_QUESTIONS_FILE` 注入不同文件。
+JSON 损坏、列表项不是字符串或问题为空都会报错。文件缺失或为空时会明确
+标记为 skip，不会被当作验证通过。
+
+`test/test_lightrag_retrieval.py` 是 opt-in 集成测试。只有设置
+`ASKANY_RUN_LIGHTRAG_INTEGRATION=1`，并具备 LightRAG 依赖、PostgreSQL 数据库/
+数据表、嵌入模型、LLM 端点和已入库数据时才运行；缺少前置条件会给出明确
+的 skip 原因。对比脚本 `test/test_lightrag_e2e_comparison.py` 仅供手动运行。
+没有问题文件时会打印 `SKIPPED` 并以成功状态退出，但不会把零问题结果宣称
+为对比验证。
+
 ### 为知识库定制提示词
 
 `askany/prompts/prompts_cn.py`（中文）和 `askany/prompts/prompts_en.py`（英文）中的提示词包含 `TODO` 占位符，部署时需按知识库定制。
@@ -400,8 +417,8 @@ All settings can be configured in `askany/config.py` or via environment variable
 
 ```bash
 # 检查受支持运行路径和测试的代码与格式
-uv run --locked ruff check askany test
-uv run --locked ruff format --check askany test
+uv run --locked ruff check askany test tool/keyword_utils.py tool/langdetect.py
+uv run --locked ruff format --check askany test tool/keyword_utils.py tool/langdetect.py
 
 # 类型检查受支持运行路径（包含可选集成）
 uv run --locked --all-extras pyright

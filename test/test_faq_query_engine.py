@@ -3,13 +3,9 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
-import pytest
-
-from llama_index.core import KeywordTableIndex, QueryBundle, VectorStoreIndex
-from llama_index.core.response_synthesizers import ResponseMode
-from llama_index.core.retrievers.fusion_retriever import FUSION_MODES
+from llama_index.core import KeywordTableIndex, VectorStoreIndex
 from llama_index.core.schema import NodeWithScore, TextNode
 
 

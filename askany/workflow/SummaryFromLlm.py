@@ -9,6 +9,7 @@ import logging
 import sys
 from enum import StrEnum
 from pathlib import Path
+from typing import Any, cast
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -69,11 +70,11 @@ class SummaryFromLlm:
             _lf_handler = get_langfuse_callback_handler()
             self.llm = ChatOpenAI(
                 model=model,
-                api_key=client_api_key,
+                api_key=cast(Any, client_api_key),
                 base_url=api_base,
                 temperature=settings.temperature,
-                max_tokens=settings.output_tokens,
-                callbacks=[_lf_handler] if _lf_handler else None,
+                max_completion_tokens=settings.output_tokens,
+                callbacks=cast(Any, [_lf_handler] if _lf_handler else None),
             )
         else:
             self.llm = llm
@@ -227,14 +228,24 @@ class SummaryFromLlm:
                 raise
 
         # 直接从 response.content 获取响应内容
-        summary_text = (
-            response.content if hasattr(response, "content") else str(response)
-        )
+        raw_content = getattr(response, "content", str(response))
+        if isinstance(raw_content, str):
+            summary_text = raw_content
+        elif isinstance(raw_content, list):
+            summary_text = "".join(
+                part if isinstance(part, str) else str(part) for part in raw_content
+            )
+        else:
+            summary_text = str(raw_content)
 
         # 获取 token usage（如果可用）
-        token_usage = {}
+        token_usage: dict[str, Any] = {}
         if hasattr(response, "response_metadata"):
-            token_usage = response.response_metadata.get("token_usage", {})
+            raw_metadata = getattr(response, "response_metadata", {})
+            if isinstance(raw_metadata, dict):
+                raw_token_usage = raw_metadata.get("token_usage", {})
+                if isinstance(raw_token_usage, dict):
+                    token_usage = raw_token_usage
             if token_usage:
                 logger.debug(f"Token Usage: {token_usage}")
         else:

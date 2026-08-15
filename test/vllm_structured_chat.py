@@ -8,11 +8,11 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from openai import OpenAI  # noqa: E402
-from pydantic import BaseModel  # noqa: E402
+from openai import OpenAI
+from pydantic import BaseModel
 
-from askany.config import settings  # noqa: E402
-from askany.main import initialize_llm  # noqa: E402
+from askany.config import settings
+from askany.main import initialize_llm
 
 
 class Info(BaseModel):
@@ -23,7 +23,7 @@ class Info(BaseModel):
 def test_vllm_chat_with_structured_output():
     """Test vLLM chat completion with JSON schema structured output."""
     # Initialize LLM using initialize_llm() from askany/main.py:266
-    llm, embed_model = initialize_llm()
+    llm, _embed_model = initialize_llm()
 
     # Get configuration from settings (same as initialize_llm uses)
     api_base = settings.openai_api_base

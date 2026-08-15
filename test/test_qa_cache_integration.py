@@ -10,6 +10,7 @@ Run with: pytest test/test_qa_cache_integration.py -v -s
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -17,8 +18,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
 
-from askany.config import settings
 from askany.cache.qa_cache import QACacheManager
+from askany.config import settings
 from askany.main import SentenceTransformerEmbedding
 
 logging.basicConfig(level=logging.INFO)
@@ -50,7 +51,6 @@ def embed_model():
 @pytest.fixture(scope="module")
 def cache_manager(embed_model):
     """Create QACacheManager with REAL embeddings and a separate test table."""
-    from gptcache import cache as gptcache
 
     # Use a separate test table to avoid interfering with existing cache
     original_table = settings.qa_cache_postgres_table
@@ -72,12 +72,16 @@ def cache_manager(embed_model):
     # Cleanup: clear test table
     try:
         manager.clear()
-    except Exception:
-        pass
+    except Exception as cleanup_error:
+        logger.warning("Failed to clear integration cache: %s", cleanup_error)
     finally:
         settings.qa_cache_postgres_table = original_table
 
 
+@pytest.mark.skipif(
+    os.environ.get("ASKANY_RUN_QA_CACHE_INTEGRATION") != "1",
+    reason="QA cache integration tests require explicit ASKANY_RUN_QA_CACHE_INTEGRATION=1",
+)
 class TestQACacheSemanticIntegration:
     """Integration tests with real BGE-m3 embeddings and GPTCache."""
 
@@ -123,7 +127,7 @@ class TestQACacheSemanticIntegration:
             ("如何部署服务", 0.60, "unrelated"),
         ]
 
-        for query, min_expected_sim, description in test_cases:
+        for query, _min_expected_sim, _description in test_cases:
             emb1 = cache_manager._embed_model._get_query_embedding(base_query)
             emb2 = cache_manager._embed_model._get_query_embedding(query)
             sim = np.dot(emb1, emb2) / (np.linalg.norm(emb1) * np.linalg.norm(emb2))

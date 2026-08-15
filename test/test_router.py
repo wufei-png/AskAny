@@ -3,9 +3,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch, PropertyMock
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from askany.rag.router import QueryRouter, QueryType
 

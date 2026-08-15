@@ -35,16 +35,17 @@ python -m askany.main --query --query-text "question" --query-type AUTO
 
 ### Code Quality
 ```bash
-ruff format .        # Format
-ruff check .         # Lint
-ruff check --fix .   # Auto-fix
+uv run --locked ruff format askany test tool/keyword_utils.py tool/langdetect.py        # Format supported code
+uv run --locked ruff check askany test tool/keyword_utils.py tool/langdetect.py         # Lint supported code
+uv run --locked ruff check --fix askany test tool/keyword_utils.py tool/langdetect.py   # Auto-fix supported code
+uv run --locked --all-extras pyright                                                     # Type check supported code
 ```
 
 ### Testing
 ```bash
-python -m pytest test/test_workflow_client_call.py -v                    # Run test file
-python -m pytest test/test_workflow_client_call.py::test_basic_query -v  # Run single test
-python -m pytest test/ --cov=askany --cov-report=html                    # With coverage
+uv run --locked pytest -q test/test_min_langchain_agent.py                # Offline agent utility tests
+uv run --locked pytest -q test/test_streaming.py                          # Offline SSE tests
+uv run --locked pytest -q test --cov=askany --cov-report=html             # With coverage
 ```
 
 ## Architecture

@@ -37,7 +37,7 @@ class Mem0Adapter:
 
     def __init__(self) -> None:
         try:
-            from mem0 import Memory  # noqa: F811
+            from mem0 import Memory
         except ImportError as exc:
             raise ImportError(
                 "mem0ai is required for user memory. "

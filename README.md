@@ -255,7 +255,8 @@ The project includes utility scripts in `tool/` and test files in `test/`:
 - Other utility scripts for data migration, keyword export, and HNSW index inspection
 
 **Test Files (`test/`):**
-- `test_workflow_client_call.py` - Workflow client and SSE streaming tests
+- `test/test_min_langchain_agent.py` - Offline LangChain-agent utility tests
+- `test/test_streaming.py` - Offline SSE streaming tests
 - Various test scripts for components and integrations
 
 **Common Commands:**
@@ -379,6 +380,24 @@ All settings can be configured in `askany/config.py` or via environment variable
 | **Prometheus** | `enable_prometheus=True`, `prometheus_port` | Exposes metrics at `/metrics` endpoint; install: `uv sync --extra observability` |
 | **QA Cache** | `enable_qa_cache=True`, `qa_cache_similarity_threshold` | GPTCache + PGVector; auto-clears on FAQ hot-update |
 
+#### LightRAG question files and validation boundaries
+
+The LightRAG retrieval integration reads a JSON file containing exactly a
+`list[str]`. The default local file is
+`test/fixtures/lightrag_questions.local.json` (gitignored); copy and adapt
+`test/fixtures/lightrag_questions.example.json` for local use. CI or another
+developer fixture can be injected with `ASKANY_LIGHTRAG_QUESTIONS_FILE`.
+Malformed JSON, non-string items, and blank questions are errors. A missing or
+empty file is an explicit skip condition, not a validation pass.
+
+`test/test_lightrag_retrieval.py` is an opt-in integration test. Run it only
+with `ASKANY_RUN_LIGHTRAG_INTEGRATION=1` and the required LightRAG dependency,
+PostgreSQL database/tables, embedding model, LLM endpoint, and ingested data;
+missing prerequisites are reported as precise skips. The comparison script
+`test/test_lightrag_e2e_comparison.py` is manual-only. Without a question file
+it prints a `SKIPPED` message and exits successfully without claiming a
+zero-question comparison.
+
 ### Customizing Prompts for Your Knowledge Base
 
 The prompts in `askany/prompts/prompts_cn.py` (Chinese) and `askany/prompts/prompts_en.py` (English) contain `TODO` placeholders that should be customized for each knowledge base deployment.
@@ -400,8 +419,8 @@ The prompts in `askany/prompts/prompts_cn.py` (Chinese) and `askany/prompts/prom
 
 ```bash
 # Lint and verify formatting for the supported runtime and tests
-uv run --locked ruff check askany test
-uv run --locked ruff format --check askany test
+uv run --locked ruff check askany test tool/keyword_utils.py tool/langdetect.py
+uv run --locked ruff format --check askany test tool/keyword_utils.py tool/langdetect.py
 
 # Type-check the supported runtime, including optional integrations
 uv run --locked --all-extras pyright

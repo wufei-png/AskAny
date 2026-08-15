@@ -1,10 +1,10 @@
 """Configuration management for AskAny."""
 
 import os
-from typing import Literal
+from typing import ClassVar, Literal
 
-from pydantic import ConfigDict, Field, SecretStr, field_validator
-from pydantic_settings import BaseSettings
+from pydantic import Field, SecretStr, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -206,9 +206,9 @@ class Settings(BaseSettings):
     #     "hybrid_docs_keyword_index"  # Directory for persisting Docs KeywordTableIndex
     # )
     # API
-    api_host: str = "0.0.0.0"
+    api_host: str = "0.0.0.0"  # noqa: S104 - configurable server bind address
     api_port: int = 8000
-    inner_server_host: str = "0.0.0.0"
+    inner_server_host: str = "0.0.0.0"  # noqa: S104 - configurable server bind address
     inner_server_port: int = 8001
     # Auto mode settings
     faq_score_threshold: float = (
@@ -304,7 +304,7 @@ class Settings(BaseSettings):
     one_keyword_max_file_num: int = 40  # Maximum number of files for one keyword
     one_keyword_max_matches_num: int = 500  # Maximum number of matches for one keyword
     query_rewrite_bool: bool = True  # Whether to rewrite query
-    model_config = ConfigDict(
+    model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,

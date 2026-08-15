@@ -16,5 +16,8 @@ as automated tests even though they require unsupported external packages or
 manual interpretation.
 
 Current standalone tools such as the LightRAG ingestion CLI, the LangGraph
-visualizer, `askany_mcp`, and `tool/` remain in their original locations. They
-are outside the two-mode static-quality scope but are not classified as legacy.
+visualizer, `askany_mcp`, and the independent scripts under `tool/` remain in
+their original locations. Those standalone tools are outside the two-mode
+static-quality scope but are not classified as legacy. The shared helpers
+`tool/keyword_utils.py` and `tool/langdetect.py` are imported by the two
+supported query paths, so they are included in the Ruff, Pyright, and CI gates.

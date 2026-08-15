@@ -10,11 +10,11 @@ from askany.metrics.registry import (
 from askany.metrics.timing import Timer, get_timer, timed_operation, timer_context
 
 __all__ = [
-    "get_metrics",
-    "Timer",
-    "timer_context",
-    "get_timer",
-    "timed_operation",
     "DEFAULT_LATENCY_BUCKETS",
     "LLM_LATENCY_BUCKETS",
+    "Timer",
+    "get_metrics",
+    "get_timer",
+    "timed_operation",
+    "timer_context",
 ]

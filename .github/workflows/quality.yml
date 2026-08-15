@@ -27,8 +27,8 @@ jobs:
       - name: Install locked project environment
         run: uv sync --locked --all-extras
       - name: Ruff lint
-        run: uv run --locked ruff check askany test
+        run: uv run --locked ruff check askany test tool/keyword_utils.py tool/langdetect.py
       - name: Ruff format
-        run: uv run --locked ruff format --check askany test
+        run: uv run --locked ruff format --check askany test tool/keyword_utils.py tool/langdetect.py
       - name: Pyright
         run: uv run --locked --all-extras pyright

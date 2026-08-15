@@ -8,6 +8,7 @@ except ImportError:
 import sys
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from typing import Any, cast
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -25,6 +26,22 @@ from askany.workflow.token_control import (
     check_and_truncate_messages,
     truncate_nodes_by_tokens,
 )
+
+
+def _content_to_text(content: Any) -> str:
+    """Normalize LangChain text or block content to a string."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            item
+            if isinstance(item, str)
+            else str(item.get("text", ""))
+            if isinstance(item, dict)
+            else str(item)
+            for item in content
+        )
+    return str(content)
 
 
 class FinalSummaryResponse(BaseModel):
@@ -60,12 +77,13 @@ class FinalAnswerGenerator:
             # Create ChatOpenAI client from configuration
             client_api_key = api_key if api_key else ""
             _lf_handler = get_langfuse_callback_handler()
-            self.llm = ChatOpenAI(
+            # LangChain's stubs reject the SecretStr-compatible runtime values.
+            self.llm = cast(Any, ChatOpenAI)(
                 model=model,
                 api_key=client_api_key,
                 base_url=api_base,
                 temperature=settings.temperature,
-                max_tokens=settings.output_tokens,
+                max_completion_tokens=settings.output_tokens,
                 callbacks=[_lf_handler] if _lf_handler else None,
             )
 
@@ -128,7 +146,7 @@ class FinalAnswerGenerator:
 
         # Truncate nodes to fit within token limit
         # Reserve tokens for prompt template (query, system message, etc.)
-        truncated_nodes, node_tokens, nodes_truncated = truncate_nodes_by_tokens(
+        truncated_nodes, _node_tokens, nodes_truncated = truncate_nodes_by_tokens(
             nodes,
             max_tokens=settings.llm_max_tokens,
             reserve_for_prompt=1500,  # Reserve for query, system message
@@ -210,8 +228,8 @@ class FinalAnswerGenerator:
                 raise
 
         # 直接从 response.content 获取响应内容
-        summary_answer = (
-            response.content if hasattr(response, "content") else str(response)
+        summary_answer = _content_to_text(
+            response.content if hasattr(response, "content") else response
         )
 
         # 尝试获取 reasoning 字段（如果存在）
@@ -252,7 +270,7 @@ class FinalAnswerGenerator:
         logger = logging.getLogger(__name__)
 
         # Truncate nodes to fit within token limit
-        truncated_nodes, node_tokens, nodes_truncated = truncate_nodes_by_tokens(
+        truncated_nodes, _node_tokens, nodes_truncated = truncate_nodes_by_tokens(
             nodes,
             max_tokens=settings.llm_max_tokens,
             reserve_for_prompt=1500,
@@ -301,7 +319,7 @@ class FinalAnswerGenerator:
         try:
             async for chunk in self.llm.astream(messages):
                 if chunk.content:
-                    yield chunk.content
+                    yield _content_to_text(chunk.content)
         except Exception as e:
             error_msg = str(e)
             if "length limit" in error_msg.lower() or "LengthFinishReasonError" in str(
@@ -372,7 +390,7 @@ class FinalAnswerGenerator:
 
         # Truncate nodes to fit within token limit
         # Reserve tokens for prompt template (query, system message, etc.)
-        truncated_nodes, node_tokens, nodes_truncated = truncate_nodes_by_tokens(
+        truncated_nodes, _node_tokens, nodes_truncated = truncate_nodes_by_tokens(
             nodes,
             max_tokens=settings.llm_max_tokens,
             reserve_for_prompt=1500,  # Reserve for query, system message
@@ -454,8 +472,8 @@ class FinalAnswerGenerator:
                 raise
 
         # 直接从 response.content 获取响应内容
-        summary_answer = (
-            response.content if hasattr(response, "content") else str(response)
+        summary_answer = _content_to_text(
+            response.content if hasattr(response, "content") else response
         )
 
         # 尝试获取 reasoning 字段（如果存在）
@@ -496,7 +514,7 @@ class FinalAnswerGenerator:
         logger = logging.getLogger(__name__)
 
         # Truncate nodes to fit within token limit
-        truncated_nodes, node_tokens, nodes_truncated = truncate_nodes_by_tokens(
+        truncated_nodes, _node_tokens, nodes_truncated = truncate_nodes_by_tokens(
             nodes,
             max_tokens=settings.llm_max_tokens,
             reserve_for_prompt=1500,
@@ -545,7 +563,7 @@ class FinalAnswerGenerator:
         try:
             async for chunk in self.llm.astream(messages):
                 if chunk.content:
-                    yield chunk.content
+                    yield _content_to_text(chunk.content)
         except Exception as e:
             error_msg = str(e)
             if "length limit" in error_msg.lower() or "LengthFinishReasonError" in str(
@@ -605,7 +623,7 @@ def extract_docs_references(nodes: list[NodeWithScore]) -> dict[str, list]:
                 seen_faq_ids.add(faq_id)
 
                 # Extract answer from node text
-                node_text = node.node.text if hasattr(node.node, "text") else ""
+                node_text = node.node.get_content()
                 answer = ""
                 if "答案:" in node_text:
                     answer = node_text.split("答案:")[-1].strip()
@@ -708,7 +726,7 @@ if __name__ == "__main__":
     # Create test nodes
     query = "解析结果没有收到，怎么办？"
     nodes = []
-    node1 = Node(
+    node1 = cast(Any, Node)(
         metadata={
             "file_path": "data/markdown/xxx-FAQ-1-break-changes.md",
             "source": "data/markdown/xxx-FAQ-1-break-changes.md",
@@ -735,7 +753,7 @@ https://ones.ainewera.com/wiki/#/team/JNwe8qUX/space/9CLVdLmf/page/Bu1LuN3E
 
 """
     )
-    node2 = Node(
+    node2 = cast(Any, Node)(
         metadata={
             "file_path": "data/markdown/xxx-FAQ-2-no-object-info.md",
             "source": "data/markdown/xxx-FAQ-2-no-object-info.md",
