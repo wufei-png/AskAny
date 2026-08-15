@@ -131,14 +131,14 @@ Response with References
 # Install Python 3.11 and dependencies
 uv python install 3.11
 uv python pin 3.11
-uv tool install ruff
 uv sync
 
 # Configure environment
 cp .env.example .env
 # Edit .env with database credentials and API endpoints
 
-# Optional: `uv sync` is core deps only. Install everything (LightRAG + Langfuse/RAGAS):
+# Optional: `uv sync` is core deps only. Install everything (LightRAG + Langfuse/RAGAS),
+# which is required for the supported-runtime Pyright command:
 #   uv sync --all-extras
 # Or observability only: uv sync --extra observability
 ```
@@ -399,14 +399,15 @@ The prompts in `askany/prompts/prompts_cn.py` (Chinese) and `askany/prompts/prom
 ### Code Quality
 
 ```bash
-# Format code with ruff
-ruff format .
+# Lint and verify formatting for the supported runtime and tests
+uv run --locked ruff check askany test
+uv run --locked ruff format --check askany test
 
-# Lint code
-ruff check .
+# Type-check the supported runtime, including optional integrations
+uv run --locked --all-extras pyright
 
-# Fix auto-fixable issues
-ruff check --fix .
+# Run the same local hooks used before commits
+uv run --locked pre-commit run --all-files
 ```
 
 ### Common Commands

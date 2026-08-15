@@ -131,14 +131,14 @@ VectorStoreManager (PostgreSQL + pgvector)
 # 安装 Python 3.11 和依赖
 uv python install 3.11
 uv python pin 3.11
-uv tool install ruff
 uv sync
 
 # 配置环境
 cp .env.example .env
 # 编辑 .env 配置数据库凭据和 API 端点
 
-# 可选：`uv sync` 仅安装主依赖。安装全部可选依赖（LightRAG + Langfuse/RAGAS 等）：
+# 可选：`uv sync` 仅安装主依赖。安装全部可选依赖（LightRAG + Langfuse/RAGAS 等），
+# 受支持运行路径的 Pyright 检查需要完整可选依赖：
 #   uv sync --all-extras
 # 或仅可观测性：uv sync --extra observability
 ```
@@ -399,14 +399,15 @@ All settings can be configured in `askany/config.py` or via environment variable
 ### 代码质量
 
 ```bash
-# 使用 ruff 格式化代码
-ruff format .
+# 检查受支持运行路径和测试的代码与格式
+uv run --locked ruff check askany test
+uv run --locked ruff format --check askany test
 
-# 代码检查
-ruff check .
+# 类型检查受支持运行路径（包含可选集成）
+uv run --locked --all-extras pyright
 
-# 自动修复问题
-ruff check --fix .
+# 运行与提交前一致的本地 hooks
+uv run --locked pre-commit run --all-files
 ```
 
 ### 常用命令

@@ -1,0 +1,34 @@
+name: Static quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: static-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Ruff and Pyright
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.12.4"
+          python-version: "3.11"
+          enable-cache: true
+      - name: Install locked project environment
+        run: uv sync --locked --all-extras
+      - name: Ruff lint
+        run: uv run --locked ruff check askany test
+      - name: Ruff format
+        run: uv run --locked ruff format --check askany test
+      - name: Pyright
+        run: uv run --locked --all-extras pyright

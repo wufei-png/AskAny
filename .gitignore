@@ -5,3 +5,5 @@ models/
 HanLP
 /HanLP/log.log
 .worktrees/
+workflow_langgraph.log
+test/fixtures/lightrag_questions.local.json
