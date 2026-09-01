@@ -2,15 +2,22 @@
 
 LightRAG adds **knowledge-graph (KG) augmented retrieval** to AskAny. It extracts entities and relationships from documents during ingestion, then uses graph traversal + vector search at query time to surface connections that pure vector similarity misses.
 
-The integration is **supplementary** — LightRAG results are merged with the existing LlamaIndex FAQ/DOCS pipeline. Toggle it with a single config flag.
+The integration is **supplementary** — LightRAG results are merged with the
+existing LlamaIndex FAQ/DOCS pipeline. It is enabled by default in
+`askany/config.py`, but the optional package and LightRAG data are still
+required for it to contribute results. Set `ENABLE_LIGHTRAG=false` to disable
+the augmentation.
 
 ## Architecture
 
 ```
 User Query
     ↓
-min_langchain_agent.py → rag_search tool
-    ├── LlamaIndex (vector + keyword hybrid)  ← always on
+workflow_langgraph.py or min_langchain_agent.py
+    ↓
+rag_search tool
+    ├── LlamaIndex vector retrieval            ← always on
+    │       FAQ hybrid; docs keyword index is configurable
     └── LightRAG  (KG + vector hybrid)        ← enable_lightrag=True
             ↓
         LightRAGAdapter.retrieve_async()
@@ -28,7 +35,8 @@ Key files:
 |------|---------|
 | `askany/rag/lightrag_adapter.py` | Adapter: wraps LightRAG, converts results to LlamaIndex `NodeWithScore` |
 | `askany/rag/lightrag_ingest.py` | CLI tool for ingesting docs into LightRAG's KG |
-| `askany/workflow/min_langchain_agent.py` | Agent integration: calls adapter in `rag_search` tool |
+| `askany/workflow/workflow_langgraph.py` | Deepsearch integration and RAG tool path |
+| `askany/workflow/min_langchain_agent.py` | Automatic-agent integration and `rag_search` tool |
 | `test/lightrag_question_loader.py` | Shared validated loader for the gitignored local question file |
 | `test/fixtures/lightrag_questions.example.json` | Example `list[str]` question file (copy locally; do not commit the `.local.json` file) |
 | `test/test_lightrag_retrieval.py` | Opt-in retrieval integration test |
@@ -37,9 +45,9 @@ Key files:
 ## Prerequisites
 
 1. **PostgreSQL** running with pgvector extension (same DB as AskAny)
-2. **lightrag-hku** package installed:
+2. **lightrag-hku** package installed through the project extra:
    ```bash
-   uv add lightrag-hku
+   uv sync --extra lightrag
    ```
 3. **Embedding model** (BAAI/bge-m3) — uses the same local SentenceTransformer as AskAny, loaded automatically
 4. **LLM endpoint** reachable (configured in `.env` / `config.py`)
@@ -52,22 +60,22 @@ Ingest documents into LightRAG's knowledge graph using the CLI:
 
 ```bash
 # Ingest all markdown docs (from settings.markdown_dir)
-python -m askany.rag.lightrag_ingest --ingest-markdown
+uv run --locked python -m askany.rag.lightrag_ingest --ingest-markdown
 
 # Ingest a specific directory
-python -m askany.rag.lightrag_ingest --ingest-markdown --markdown-dir data/markdown
+uv run --locked python -m askany.rag.lightrag_ingest --ingest-markdown --markdown-dir data/markdown
 
 # Ingest all JSON FAQs
-python -m askany.rag.lightrag_ingest --ingest-json
+uv run --locked python -m askany.rag.lightrag_ingest --ingest-json
 
 # Ingest a single file
-python -m askany.rag.lightrag_ingest --file path/to/doc.md
+uv run --locked python -m askany.rag.lightrag_ingest --file path/to/doc.md
 
 # Ingest both markdown and JSON
-python -m askany.rag.lightrag_ingest --ingest-markdown --ingest-json
+uv run --locked python -m askany.rag.lightrag_ingest --ingest-markdown --ingest-json
 
 # Custom batch size (default: 10)
-python -m askany.rag.lightrag_ingest --batch-size 5 --ingest-markdown
+uv run --locked python -m askany.rag.lightrag_ingest --batch-size 5 --ingest-markdown
 ```
 
 ### What ingestion does
@@ -75,13 +83,15 @@ python -m askany.rag.lightrag_ingest --batch-size 5 --ingest-markdown
 1. Reads markdown/JSON files
 2. Splits by `## ` headings (markdown) or Q&A pairs (JSON)
 3. LightRAG extracts **entities** and **relationships** via LLM calls
-4. Stores everything in PostgreSQL tables (11 tables, prefixed `LIGHTRAG_`)
-5. Builds HNSW vector indexes on `vdb_chunks`, `vdb_entity`, `vdb_relation`
+4. Stores KV, vector, and document-status data in the configured PostgreSQL
+   backend and graph data in the configured graph backend.
+5. Uses LightRAG's vector indexes for chunk, entity, and relation retrieval;
+   exact table names depend on the LightRAG version and backend configuration.
 
 ### Verify ingestion
 
 ```bash
-PGPASSWORD=123456 psql -h localhost -U wufei -d askany -c "
+psql -h localhost -U wufei -d askany -c "
   SELECT 'doc_status' as tbl, count(*) FROM lightrag_doc_status
   UNION ALL SELECT 'doc_chunks', count(*) FROM lightrag_doc_chunks
   UNION ALL SELECT 'vdb_chunks', count(*) FROM lightrag_vdb_chunks
@@ -98,7 +108,7 @@ Tests that `LightRAGAdapter` can initialize, query the KG, and return well-forme
 
 ```bash
 # Via pytest (opt in; requires all external prerequisites)
-ASKANY_RUN_LIGHTRAG_INTEGRATION=1 python -m pytest test/test_lightrag_retrieval.py -v -s
+ASKANY_RUN_LIGHTRAG_INTEGRATION=1 uv run --locked pytest test/test_lightrag_retrieval.py -v -s
 ```
 
 The test reads `test/fixtures/lightrag_questions.local.json` by default. Set
@@ -112,7 +122,7 @@ questions fail. Local skips are not LightRAG validation.
 Runs the full `min_langchain_agent` on 5 questions twice — with LightRAG disabled (baseline) and enabled (augmented) — then writes a side-by-side comparison.
 
 ```bash
-python test/test_lightrag_e2e_comparison.py
+uv run --locked python test/test_lightrag_e2e_comparison.py
 ```
 
 The script uses the same question loader and `ASKANY_LIGHTRAG_QUESTIONS_FILE`
@@ -175,22 +185,23 @@ Graph storage uses `NetworkXStorage` (file-based `.graphml`). KV, vector, and do
 
 1. **Ingest your documents**:
    ```bash
-   python -m askany.rag.lightrag_ingest --ingest-markdown --ingest-json
+   uv run --locked python -m askany.rag.lightrag_ingest --ingest-markdown --ingest-json
    ```
 
 2. **Verify ingestion** (see command above)
 
 3. **Optional: override the flag** in `.env` if you need to disable LightRAG:
    ```
-   enable_lightrag=False
+   ENABLE_LIGHTRAG=false
    ```
 
 4. **Restart the server**:
    ```bash
-   python -m askany.main --serve
+   uv run --locked python -m askany.main --serve
    ```
 
-LightRAG results will now be merged into `rag_search` tool responses in the agent workflow.
+LightRAG results are merged into the retrieval context used by both supported
+agent paths when the adapter is available.
 
 ## Research: LightRAG input — extract itself vs use LlamaIndex chunks
 
@@ -205,7 +216,8 @@ LightRAG results will now be merged into `rag_search` tool responses in the agen
    - Optionally splits each item on `split_by_character`.
    - Runs its **internal token-based chunker** (`chunk_token_size=800`, `chunk_overlap_token_size=150` from config).
    - Runs entity/relationship extraction (LLM) on those chunks.
-   - Writes to `LIGHTRAG_*` tables and builds HNSW on `vdb_chunks`, `vdb_entity`, `vdb_relation`.
+   - Writes to the configured LightRAG KV/vector/document-status stores and
+     uses vector indexes for chunks, entities, and relations.
 
 So “extract itself” means: we do a coarse split (H2 or per-FAQ); LightRAG does **fine-grained chunking + LLM extraction**.
 
@@ -250,10 +262,12 @@ To clear the knowledge graph and start fresh:
 rm -rf lightrag_data/
 ```
 
-This removes the local graph file (`graph_chunk_entity_relation.graphml`) and cache. PostgreSQL tables (`LIGHTRAG_*`) remain — to drop them:
+This removes the local graph file (`graph_chunk_entity_relation.graphml`) and
+cache. PostgreSQL LightRAG tables remain — drop them only when the database is
+disposable or you have an approved backup:
 
 ```bash
-PGPASSWORD=123456 psql -h localhost -U wufei -d askany -c "
+psql -h localhost -U wufei -d askany -c "
   DROP TABLE IF EXISTS lightrag_doc_status, lightrag_doc_chunks,
     lightrag_vdb_chunks, lightrag_vdb_entity, lightrag_vdb_relation CASCADE;
 "
@@ -261,16 +275,16 @@ PGPASSWORD=123456 psql -h localhost -U wufei -d askany -c "
 
 After deletion, re-ingest:
 ```bash
-python -m askany.rag.lightrag_ingest --ingest-markdown --ingest-json
+uv run --locked python -m askany.rag.lightrag_ingest --ingest-markdown --ingest-json
 ```
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `lightrag-hku package not installed` warning | Missing dependency | `uv add lightrag-hku` |
+| `lightrag-hku package not installed` warning | Missing dependency | `uv sync --extra lightrag` |
 | `PipelineNotInitializedError` | Adapter not fully initialized | Ensure `await adapter.initialize()` is called |
 | Empty retrieval results | No data ingested | Run ingestion commands above |
-| `ModuleNotFoundError: pytest` | pytest not installed | `uv add --dev pytest pytest-asyncio` |
+| `ModuleNotFoundError: pytest` | Development dependencies are missing | `uv sync --all-extras` |
 | Embedding errors / `TypeError: NoneType` | Wrong embedding setup | Adapter uses local SentenceTransformer, not API. Check BAAI/bge-m3 is downloaded. |
-| `LIGHTRAG_*` tables missing | First run without ingestion | Tables are auto-created on first `adapter.initialize()` |
+| LightRAG tables missing | First run without initialization/ingestion | Initialize the adapter, then run the ingestion command above |

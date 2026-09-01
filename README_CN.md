@@ -1,563 +1,258 @@
 # AskAny
 
-<p align="center">
-  <img src="images/cover/cover1.png" alt="AskAny 封面" width="100%">
-</p>
+![AskAny 封面](images/cover/cover1.png)
 
 [English](README.md) | 中文版
 
-面向运维、开发、测试团队的中文优化 RAG（检索增强生成）问答助手。
+AskAny 是面向运维、开发和测试团队的中文优化 RAG（检索增强生成）助手，
+组合使用 LlamaIndex 检索、LangGraph/LangChain Agent、PostgreSQL + pgvector
+以及 OpenAI 兼容的 FastAPI 接口。
 
-> 📖 **博客文章**：[AskAny：为运维测试团队打造的智能问答助手](https://zhuanlan.zhihu.com/p/2004009140419310603) - 详细介绍项目背景、技术选型和架构设计
+> 代码是事实基准。当前运行边界请看
+> [docs/current-runtime.md](docs/current-runtime.md)。历史设计资料位于
+> [archive/docs/](archive/docs/)，不作为运行文档。
 
-## 架构概览
+## 当前架构
 
-### 人工设计工作流模式
-
-![人工设计工作流架构](images/workflow.png)
-
-**OpenWebUI 中的响应示例：**
-
-![人工设计工作流示例](images/quest2.png)
-
-### 自动 Agent 模式
-
-![自动 Agent 架构](images/general_agent.png)
-
-**OpenWebUI 中的响应示例：**
-
-![自动 Agent 示例](images/quest1.png)
-
-### 输出结构说明
-
-AskAny 在 OpenWebUI 中的响应包含以下三个核心部分：
-
-1. **工具调用流程**
-   - 展示 Agent 执行过程中的工具调用序列
-   - 显示每个工具（RAG 检索、网络搜索、本地文件搜索等）的调用情况
-   - 帮助用户理解系统如何逐步获取信息来回答问题
-
-2. **总结回答**
-   - 基于检索到的信息生成的最终答案
-   - 整合多轮检索和工具调用的结果
-   - 提供清晰、准确的回答内容
-
-3. **参考文档**
-   - 列出用于生成回答的参考文档来源
-   - 包含文档标题、来源路径等元数据
-   - 支持用户追溯答案来源，验证信息可靠性
-
-这种结构化的输出方式确保了答案的可追溯性和透明度，用户可以清楚地了解系统如何获取信息并生成答案。
-
-## 功能特性
-
-- **工作流 Agent**：基于 LangGraph 的多阶段 Agent 工作流，降低幻觉
-- **混合检索**：结合关键词搜索和向量搜索，配合重排序
-- **多模态支持**：通过 OpenWebUI 集成支持文本 + 图像
-- **中文优化**：HanLP TF-IDF、PostgreSQL zhparser
-- **双工作流模式**：人工设计的工作流（更稳定详细，约60秒）和自动 Agent（更快速，约30秒）
-- **FAQ 标签过滤**：支持 @tag 元数据过滤
-- **vLLM 集成**：OpenAI 兼容 API 的快速推理
-- **SSE 流式输出**：`/v1/chat/completions` 支持按 token 流式返回（AgentWorkflow 与简单 Agent），带预校验
-- **LightRAG**（可选）：知识图谱增强文档/FAQ，可配置查询模式（local/global/hybrid/mix）
-- **Mem0**（可选）：跨会话持久化用户记忆；配合 OpenWebUI 时从 `X-OpenWebUI-User-Id` 读取用户身份
-- **可观测性**（可选）：Langfuse 链路追踪与 RAGAS RAG 指标（忠实度、回答相关性、上下文精确度）
-- **QA 语义缓存**（可选）：基于 GPTCache + PGVector 的问答缓存，支持可配置相似度阈值（0.9）；FAQ 热更新时自动清除
-- **Prometheus 指标**（可选）：全面的 API、LLM、数据库、RAG 检索、workflow、websearch、mem0 及系统资源监控
-- **溯源追踪**（可选）：Chunk 级别的来源追踪，支持行号范围恢复，增强引用透明度
-- **OpenCode MCP 集成**：通过 Model Context Protocol 与 OpenCode 集成，支持原生 grep 和本地文件搜索
-
-## 技术栈
-
-| 组件 | 技术 |
-|------|------|
-| 工作流引擎 | LangGraph（Agent 编排状态机） |
-| RAG 框架 | LlamaIndex（检索和查询引擎） |
-| API 层 | FastAPI + LangServe（OpenAI 兼容端点） |
-| 向量存储 | PostgreSQL + pgvector（HNSW 索引） |
-| 嵌入模型 | BAAI/bge-m3（多语言，1024维） |
-| 重排序模型 | BAAI/bge-reranker-v2-m3（多语言） |
-| LLM | vLLM 服务（默认：Qwen） |
-| 前端 | OpenWebUI（聊天界面） |
-
-## 架构
-
-```
-用户查询 (OpenWebUI)
-    ↓
-FastAPI 服务器 (askany/api/server.py)
-    ↓
-┌─────────────────────────────────────────────────────┐
-│  工作流模式选择                                      │
-│  ├── min_langchain_agent.py (LangChain Agent)      │
-│  └── workflow_langgraph.py (LangGraph 状态机)       │
-└─────────────────────────────────────────────────────┘
-    ↓
-WorkflowFilter (workflow_filter.py) - 预过滤简单查询
-    ↓
-QueryRouter (rag/router.py) - 路由到 FAQ/DOCS 引擎
-    ↓
-┌─────────────────────────────────────────────────────┐
-│  RAG 引擎                                           │
-│  ├── FAQQueryEngine (混合检索: 关键词 + 向量)       │
-│  └── RAGQueryEngine (文档检索)                      │
-└─────────────────────────────────────────────────────┘
-    ↓
-VectorStoreManager (PostgreSQL + pgvector)
-    ↓
-带引用的响应
+```text
+OpenWebUI 或其他 OpenAI 兼容客户端
+                 |
+                 v
+FastAPI: /v1/chat/completions
+                 |
+       请求模型名是否以 -deepsearch 结尾？
+             /                         \
+            是                          否
+             |                           |
+workflow_langgraph.py          min_langchain_agent.py
+  手工编排的 LangGraph             自动选择工具的 LangChain Agent
+             \                         /
+              +-- RAG / Web / 本地文件工具 --+
+                            |
+                 LlamaIndex FAQ/文档检索
+                 + 可选 LightRAG 图谱增强
+                            |
+                       答案与来源引用
 ```
 
-### 工作流模式
+模型名以 `-deepsearch` 结尾时使用手工 LangGraph 路径，其他模型名使用自动
+Agent。`WorkflowFilter` 只参与 deepsearch 的单条用户消息路径；自动 Agent
+自行选择工具。
 
-**1. 人工设计工作流 (`workflow_langgraph.py`)**
-- 人工设计的 LangGraph 状态机，显式编排检索流程
-- 迭代式上下文扩展，可控的检索轮次
-- 子问题分解处理复杂查询
-- 更稳定详细的响应（平均约60秒）
-- 适用场景：需要深入分析和多轮检索的复杂查询
+## 功能
 
-**2. 自动 Agent (`min_langchain_agent.py`)**
-- LangChain Agent 自动选择工具（RAG、网络搜索、本地文件搜索）
-- 灵活自适应的工具使用策略
-- 更快的响应时间（平均约30秒）
-- 适用场景：需要多种信息源和快速响应的查询
+- 基于 PostgreSQL + pgvector 的 FAQ 和文档检索；
+- 按配置启用关键词/向量检索和重排序；
+- LangGraph 深度检索编排与 LangChain 自动工具调用；
+- 本地文件搜索、可选 Web 搜索、来源和 provenance 元数据；
+- LightRAG 知识图谱增强：默认打开，但需要可选依赖和单独入库的数据；
+- 可选 Mem0 跨会话用户记忆；
+- 可选 Langfuse 追踪和异步 RAGAS 评估；
+- QA 语义缓存以及始终可用的 Prometheus `/metrics` 接口；
+- OpenAI 兼容的普通响应和 SSE 流式响应；
+- `askany_mcp/` 下的独立 MCP 服务。
 
-## 快速开始
+## 环境与安装
 
-### 安装
+- Python `>=3.11,<3.12`；
+- 带 `vector` 扩展的 PostgreSQL；
+- OpenAI 兼容的 LLM 端点；
+- SentenceTransformers embedding 和 reranker，除非配置了其他 API/本地模型。
+
+安装锁定的核心环境：
 
 ```bash
-# 安装 Python 3.11 和依赖
 uv python install 3.11
 uv python pin 3.11
 uv sync
-
-# 配置环境
 cp .env.example .env
-# 编辑 .env 配置数据库凭据和 API 端点
-
-# 可选：`uv sync` 仅安装主依赖。安装全部可选依赖（LightRAG + Langfuse/RAGAS 等），
-# 受支持运行路径的 Pyright 检查需要完整可选依赖：
-#   uv sync --all-extras
-# 或仅可观测性：uv sync --extra observability
 ```
 
-### 数据库设置
+按需安装可选集成：
 
 ```bash
-# 快速设置（推荐）
-sudo bash setup_postgresql.sh
+uv sync --extra lightrag
+uv sync --extra observability
+uv sync --all-extras
+```
 
-# 或手动设置
+`.env.example` 使用代码中真实的 `Settings` 字段名，例如
+`OPENAI_API_BASE`、`OPENAI_MODEL`、`POSTGRES_USER`、`EMBEDDING_MODEL` 和
+`RERANKER_MODEL`。模板中的赋值为注释，直接拷贝不会覆盖 `askany/config.py`。
+只需取消注释需要改动的项；代码默认值指向本地 vLLM 端点和本地模型路径。
+
+## 数据库
+
+使用仓库提供的开发容器：
+
+```bash
+docker compose -f docker-compose.dev.yml up -d postgres
+```
+
+Compose 服务使用 PostgreSQL 17 + pgvector，凭据为 `root`/`123456`。而
+`askany/config.py` 的主机环境默认用户是 `wufei`，因此需要通过 `.env` 与
+容器凭据对齐，或在本机 PostgreSQL 中创建同名用户。详见
+[SETUP_POSTGRESQL.md](SETUP_POSTGRESQL.md) 和
+[dev_readme/docker-compose.md](dev_readme/docker-compose.md)。
+
+已有 PostgreSQL 时，使用与 `.env` 一致的用户创建数据库和扩展：
+
+```bash
 createdb askany
 psql -d askany -c "CREATE EXTENSION IF NOT EXISTS vector;"
 ```
 
-### 文档入库
+## 数据与入库
 
-AskAny 支持两种文档格式：
+运行时数据目录被 Git 忽略：
 
-**1. FAQ 格式 (JSON)**
+- `data/json/`：FAQ JSON；
+- `data/markdown/`：Markdown 文档；
+- `data/stopwords/`：可选分词资源。
 
-将 FAQ 文件放在 `data/json/` 目录下。每个 FAQ 条目应遵循以下结构：
+FAQ 可以是单个对象或对象列表，例如：
 
 ```json
 {
-  "question": "API 服务器的默认端口是多少？",
-  "answer": "默认端口是 8000。您可以通过在 config.py 中设置 api_port 或设置 API_PORT 环境变量来更改它。",
-  "metadata": {
-    "tag": "配置",
-    "category": "api"
-  }
+  "question": "API 默认端口是多少？",
+  "answer": "API 默认端口是 8000。",
+  "metadata": { "category": "configuration" }
 }
 ```
 
-**2. Markdown 格式**
-
-将文档文件放在 `data/markdown/` 目录下。支持标准 Markdown 文件
-
-**入库命令：**
+主入库命令：
 
 ```bash
-# 从 data/json 和 data/markdown 入库所有文档
-python -m askany.main --ingest
-
-# 检查入库数据
-python -m askany.main --check-db
+uv run --locked python -m askany.main --ingest
+uv run --locked python -m askany.main --check-db
+uv run --locked python -m askany.main --create-index
 ```
 
-### 启动服务器
+当前限制：`--ingest` 会解析 FAQ JSON，但
+`askany/ingest/ingest.py` 中的 FAQ 向量写入代码处于禁用状态；该命令当前
+真正写入的是 Markdown 文档节点。不能把它描述成完整的 FAQ+文档入库流程。
+FAQ 向量数据应在服务初始化 FAQ 存储后，通过 `POST /v1/update_faqs` 更新。
+
+LightRAG 使用独立的入库命令和存储路径：
 
 ```bash
-# 启动 API 服务器（默认：http://0.0.0.0:8000）
-python -m askany.main --serve
-
-# 服务器提供：
-# - OpenAI 兼容聊天端点：POST /v1/chat/completions（支持 stream: true 的 SSE 流式）
-# - OpenAPI 规范：GET /openapi.json
-# - FAQ 热更新：POST /v1/update_faqs
-# - 健康检查：GET /health
+uv sync --extra lightrag
+uv run --locked python -m askany.rag.lightrag_ingest \
+  --ingest-markdown --ingest-json
 ```
 
-### 测试查询
+## 启动 API
 
 ```bash
-# 直接查询测试
-python -m askany.main --query --query-text "你的问题" --query-type AUTO
-
-# 查询类型：AUTO（智能路由）、FAQ、DOCS
+uv run --locked python -m askany.main --serve
 ```
+
+默认监听 `0.0.0.0:8000`：
+
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/metrics
+curl http://localhost:8000/v1/models
+```
+
+仅当两个受支持的 workflow 全局对象都已就绪时，`/health` 才返回 HTTP 200
+和 `status: "ok"`；否则返回 HTTP 503 和 `status: "degraded"`。
+
+### API 接口
+
+| 方法   | 接口                   | 说明                                                         |
+| ------ | ---------------------- | ------------------------------------------------------------ |
+| `GET`  | `/health`              | 运行就绪检查，返回 `ok` 或 `degraded`。                      |
+| `GET`  | `/metrics`             | Prometheus 指标；没有 `enable_prometheus` 或自定义端口配置。 |
+| `GET`  | `/v1/models`           | 返回配置的模型，并尽可能追加 `-deepsearch` 变体。            |
+| `POST` | `/v1/chat/completions` | OpenAI 兼容聊天接口，`stream: true` 使用 SSE。               |
+| `POST` | `/v1/update_faqs`      | 接收 base64 编码的 JSON FAQ 并热更新，随后清理 QA 缓存。     |
+| `GET`  | `/v1/cache/stats`      | QA 缓存统计。                                                |
+| `POST` | `/v1/cache/clear`      | 清理 QA 缓存。                                               |
+| `GET`  | `/openapi.json`        | 集成使用的自定义 OpenAPI 文档。                              |
+
+聊天请求的模型名以 `-deepsearch` 结尾时选择手工 workflow，其他模型名选择
+自动 Agent。流式响应以 stop chunk 和 `data: [DONE]` 结束。
+
+直接查询：
+
+```bash
+uv run --locked python -m askany.main \
+  --query --query-text "你的问题" --query-type AUTO
+```
+
+查询类型为 `AUTO`、`FAQ`、`DOCS` 和 `CODE`；其中 `CODE` 当前明确返回未实现。
+
+## 重要配置默认值
+
+所有配置位于 `askany/config.py`，可用对应的大写环境变量覆盖：
+
+| 配置                               | 默认值                     |
+| ---------------------------------- | -------------------------- |
+| `language`                         | `cn`                       |
+| `postgres_host` / `postgres_port`  | `localhost` / `5432`       |
+| `postgres_user` / `postgres_db`    | `wufei` / `askany`         |
+| `openai_api_base`                  | `http://127.0.0.1:8081/v1` |
+| `embedding_model`                  | `BAAI/bge-m3`              |
+| `vector_dimension`                 | `1024`                     |
+| `reranker_model`                   | `BAAI/bge-reranker-v2-m3`  |
+| `enable_lightrag`                  | `True`                     |
+| `enable_mem0`                      | `False`                    |
+| `enable_langfuse` / `enable_ragas` | `False` / `False`          |
+| `enable_qa_cache`                  | `True`                     |
+| `using_docs_keyword_index`         | `False`                    |
+
+完整运行边界、派生默认值和验证限制见
+[docs/current-runtime.md](docs/current-runtime.md)。
 
 ## 项目结构
 
-```
+```text
 askany/
-├── api/                    # FastAPI 服务器和端点
-│   └── server.py          # 主 API 服务器（聊天 SSE 流式）
-├── config.py              # 集中配置管理
-├── ingest/                # 文档入库
-│   ├── vector_store.py    # PostgreSQL + pgvector 管理
-│   ├── json_parser.py     # FAQ JSON 入库
-│   └── markdown_parser.py # Markdown 文档解析
-├── memory/                 # 用户记忆（可选）
-│   └── mem0_adapter.py    # Mem0 持久化用户记忆
-├── observability/         # 追踪与评估（可选）
-│   ├── langfuse_setup.py  # Langfuse 追踪
-│   └── ragas_eval.py      # RAGAS RAG 指标
-├── prompts/               # 集中提示词管理
-│   ├── prompts_cn.py      # 中文提示词
-│   ├── prompts_en.py      # 英文提示词
-│   └── prompt_manager.py  # 语言感知提示词管理器
-├── rag/                   # RAG 组件
-│   ├── router.py          # 查询路由逻辑
-│   ├── faq_query_engine.py    # FAQ 混合检索
-│   ├── rag_query_engine.py    # 文档检索
-│   ├── lightrag_adapter.py    # LightRAG 知识图谱（可选）
-│   └── lightrag_ingest.py     # LightRAG 入库
-├── workflow/              # Agent 工作流
-│   ├── workflow_langgraph.py  # LangGraph 状态机
-│   ├── min_langchain_agent.py # LangChain agent
-│   ├── workflow_filter.py     # 简单查询预过滤
-│   └── ...                    # 支持模块
-└── main.py                # 入口点
+├── api/              # FastAPI 与 OpenAI 兼容接口
+├── config.py         # Pydantic 配置
+├── ingest/           # 解析器和 PostgreSQL/pgvector 存储
+├── memory/           # 可选 Mem0 集成
+├── metrics/          # Prometheus 埋点
+├── observability/    # 可选 Langfuse/RAGAS
+├── prompts/          # 中英文提示词
+├── rag/              # 路由、检索、重排序、LightRAG 适配器
+└── workflow/         # LangGraph 和 LangChain Agent
+archive/              # 非当前 Python 与文档资料
+askany_mcp/           # 独立 MCP 传输
+tool/                 # 独立运维工具
+test/                 # 单元测试和 opt-in 集成测试
 ```
 
-### 工具脚本和测试文件
+## MCP
 
-项目包含 `tool/` 目录下的工具脚本和 `test/` 目录下的测试文件：
+`askany_mcp/server.py` 是独立 stdio MCP 服务；HTTP/SSE 变体为
+`server_fastapi.py`、`server_sse.py` 和 `server_http.py`。它们复用主项目
+环境和配置，`askany_mcp/` 没有独立的 `pyproject.toml`。详见
+[mcp.md](mcp.md) 和 [askany_mcp/README.md](askany_mcp/README.md)。
 
-**工具脚本 (`tool/`):**
-- `export_vector_data.py` - 从 PostgreSQL 导出向量数据到文件（支持 pg_dump 自定义格式或分离的表结构/数据文件）
-- `import_vector_data.py` - 从文件导入向量数据到 PostgreSQL
-- `ingest_check.py` - 验证数据库中的入库数据
-- `query_test.py` - 直接测试查询
-- 其他用于数据迁移、关键词导出和 HNSW 索引检查的工具脚本
-
-**测试文件 (`test/`):**
-- `test/test_min_langchain_agent.py` - 无需外部服务的 LangChain agent 工具测试
-- `test/test_streaming.py` - 无需外部服务的 SSE 流式测试
-- 各种组件和集成的测试脚本
-
-**常用命令：**
-
-查看 `dev_readme/script.sh` 获取常用命令，包括：
-- 文档入库（带正确编码）
-- 服务器启动
-- 数据库数据检查
-- HNSW 索引检查
-- 向量数据导入/导出
-
-使用示例：
-```bash
-# 导出向量数据
-python tool/export_vector_data.py --output-dir vector_data --format full
-
-# 导入向量数据
-python tool/import_vector_data.py --input-dir vector_data --drop-existing
-
-# 检查入库数据
-python tool/ingest_check.py
-```
-
-## Configuration
-
-All settings can be configured in `askany/config.py` or via environment variables in `.env`.
-
-### Core Settings
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `language` | Prompt language (cn/en) | cn |
-| `device` | Compute device (cuda/cpu) | cuda |
-| `log_level` | Logging level | DEBUG |
-
-### LLM Settings
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `openai_api_base` | LLM API endpoint | dashscope.aliyuncs.com |
-| `openai_api_key` | API key (set in .env) | - |
-| `openai_model` | LLM model name | qwen-plus |
-| `temperature` | Generation temperature | 0.2 |
-| `top_p` | Top-p sampling | 0.8 |
-| `llm_max_tokens` | Max tokens for LLM | 40000 |
-| `llm_timeout` | LLM timeout (seconds) | 700 |
-
-### Database Settings
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `postgres_host` | PostgreSQL host | localhost |
-| `postgres_port` | PostgreSQL port | 5432 |
-| `postgres_user` | Database user | root |
-| `postgres_password` | Database password | 123456 |
-| `postgres_db` | Database name | askany |
-| `faq_vector_table_name` | FAQ vector table | askany_faq_vectors |
-| `docs_vector_table_name` | Docs vector table | askany3_docs_vectors |
-
-### Embedding & Reranker
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `embedding_model` | Embedding model | BAAI/bge-m3 |
-| `embedding_model_type` | Model type | sentence_transformer |
-| `embedding_local_files_only` | Offline mode | False |
-| `vector_dimension` | Vector dimension | 1024 |
-| `reranker_model` | Reranker model | BAAI/bge-reranker-v2-m3 |
-| `reranker_local_files_only` | Offline mode | False |
-
-### Retrieval Settings
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `faq_similarity_top_k` | FAQ top-k results | 3 |
-| `faq_rerank_candidate_k` | FAQ rerank candidates | 10 |
-| `faq_score_threshold` | FAQ score threshold | 0.75 |
-| `faq_ensemble_weights` | [keyword, vector] weights | [0.5, 0.5] |
-| `docs_similarity_top_k` | Docs top-k results | 5 |
-| `docs_rerank_candidate_k` | Docs rerank candidates | 10 |
-| `docs_similarity_threshold` | Docs score threshold | 0.6 |
-| `docs_ensemble_weights` | [keyword, vector] weights | [0.5, 0.5] |
-
-### HNSW Index Settings
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `enable_hnsw` | Enable HNSW index | True |
-| `hnsw_m` | Bi-directional links | 16 |
-| `hnsw_ef_construction` | Construction candidate list | 128 |
-| `hnsw_ef_search` | Search candidate list | 40 |
-| `hnsw_dist_method` | Distance method | vector_cosine_ops |
-
-### Agent Workflow Settings
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `agent_max_iterations` | Max workflow iterations | 3 |
-| `enable_web_search` | Enable web search | True |
-| `web_search_api_url` | Web search API endpoint URL | http://localhost:8800/search |
-| `query_rewrite_bool` | Enable query rewriting | True |
-| `expand_context_ratio` | Context expansion ratio | 1.0 |
-
-### Data Paths
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `json_dir` | FAQ JSON directory | data/json |
-| `markdown_dir` | Markdown docs directory | data/markdown |
-| `local_file_search_dir` | Local search directory | data/markdown |
-| `storage_dir` | Keyword index storage | key_word_storage |
-
-### 可选：LightRAG、Mem0、可观测性、缓存
-
-| 模块 | 配置（config.py 或 .env） | 说明 |
-|------|---------------------------|------|
-| **LightRAG** | `enable_lightrag=True`、`lightrag_working_dir`、`lightrag_query_mode` | 启用前需执行 `python -m askany.rag.lightrag_ingest --ingest-markdown --ingest-json` |
-| **Mem0** | `enable_mem0=True`、`mem0_collection_name`、`mem0_top_k` | 在 OpenWebUI 中设置 `ENABLE_FORWARD_USER_INFO_HEADERS=true` 以传递 `X-OpenWebUI-User-Id` |
-| **Langfuse** | `enable_langfuse=True`、`langfuse_public_key`、`langfuse_secret_key` | 安装：`uv sync --extra observability`（或 `uv sync --all-extras` 安装全部可选依赖） |
-| **RAGAS** | `enable_ragas=True`、`ragas_sample_rate`、`ragas_metrics` | 与 Langfuse 同时启用时会将分数写入 Langfuse |
-| **Prometheus** | `enable_prometheus=True`、`prometheus_port` | 在 `/metrics` 端点暴露指标；安装：`uv sync --extra observability` |
-| **QA 缓存** | `enable_qa_cache=True`、`qa_cache_similarity_threshold` | GPTCache + PGVector；FAQ 热更新时自动清除 |
-
-#### LightRAG 问题文件与验证边界
-
-LightRAG 检索集成读取的 JSON 文件格式必须严格为 `list[str]`。默认本地
-文件是 `test/fixtures/lightrag_questions.local.json`（已加入 gitignore）；
-本地使用时可复制并修改 `test/fixtures/lightrag_questions.example.json`。
-CI 或其他开发者可以通过 `ASKANY_LIGHTRAG_QUESTIONS_FILE` 注入不同文件。
-JSON 损坏、列表项不是字符串或问题为空都会报错。文件缺失或为空时会明确
-标记为 skip，不会被当作验证通过。
-
-`test/test_lightrag_retrieval.py` 是 opt-in 集成测试。只有设置
-`ASKANY_RUN_LIGHTRAG_INTEGRATION=1`，并具备 LightRAG 依赖、PostgreSQL 数据库/
-数据表、嵌入模型、LLM 端点和已入库数据时才运行；缺少前置条件会给出明确
-的 skip 原因。对比脚本 `test/test_lightrag_e2e_comparison.py` 仅供手动运行。
-没有问题文件时会打印 `SKIPPED` 并以成功状态退出，但不会把零问题结果宣称
-为对比验证。
-
-### 为知识库定制提示词
-
-`askany/prompts/prompts_cn.py`（中文）和 `askany/prompts/prompts_en.py`（英文）中的提示词包含 `TODO` 占位符，部署时需按知识库定制。
-
-## API 端点
-
-| 端点 | 方法 | 描述 |
-|------|------|------|
-| `/health` | GET | 健康检查 |
-| `/openapi.json` | GET | OpenAPI 规范 |
-| `/v1/chat/completions` | POST | OpenAI 兼容聊天（支持 `stream: true` 的 SSE 流式） |
-| `/v1/update_faqs` | POST | FAQ 热更新 |
-| `/v1/admin/cache/stats` | GET | QA 缓存统计（需启用 QA 缓存） |
-| `/v1/admin/cache/clear` | POST | 清除 QA 缓存（需启用 QA 缓存） |
-
-## 开发
-
-### 代码质量
+## 开发与验证
 
 ```bash
-# 检查受支持运行路径和测试的代码与格式
+uv lock --check
 uv run --locked ruff check askany test tool/keyword_utils.py tool/langdetect.py
 uv run --locked ruff format --check askany test tool/keyword_utils.py tool/langdetect.py
-
-# 类型检查受支持运行路径（包含可选集成）
 uv run --locked --all-extras pyright
-
-# 运行与提交前一致的本地 hooks
 uv run --locked pre-commit run --all-files
+uv run --locked pytest -q test -rs
 ```
 
-### 常用命令
+静态检查覆盖受支持运行路径、测试和两个共享工具模块；独立工具、
+`askany_mcp`、LightRAG 入库和可视化代码有独立边界。本地检查通过不代表
+真实 PostgreSQL、模型服务、LightRAG、Mem0、Langfuse、RAGAS 或 QA 缓存已经
+完成在线验证。
 
-常用命令请参考 `dev_readme/script.sh`。主要操作包括：
+## 相关文档
 
-```bash
-# 文档入库（带正确编码）
-PYTHONIOENCODING=utf-8 LC_ALL=en_US.UTF-8 NO_COLOR=1 TERM=dumb python -u -m askany.main --ingest > ingest.log 2>&1
-
-# 启动服务器
-PYTHONIOENCODING=utf-8 LC_ALL=en_US.UTF-8 NO_COLOR=1 TERM=dumb python -u -m askany.main --serve > serve.log 2>&1
-
-# 检查数据库数据量
-PGPASSWORD=123456 psql -h localhost -U root -d askany -c "SELECT 'data_askany_faq_vectors' as table_name, COUNT(*) as row_count FROM data_askany_faq_vectors UNION ALL SELECT 'data_askany_docs_vectors', COUNT(*) FROM data_askany_docs_vectors;"
-
-# 导出/导入向量数据
-python tool/export_vector_data.py --output-dir vector_data
-python tool/import_vector_data.py --input-dir vector_data --drop-existing
-```
-
-### 添加新文档类型
-
-1. 在 `askany/ingest/` 中创建解析器
-2. 更新 `askany/ingest/ingest.py` 中的 `ingest_documents()`
-3. 考虑用于过滤的元数据模式
-
-## 路线图
-
-查看 [roadmap.md](roadmap.md) 了解计划中的功能和改进。
-
-## 部署
-
-### OpenCode 集成（推荐）
-
-AskAny 可以与 OpenCode 集成，通过 MCP（Model Context Protocol）协议，在利用 OpenCode 原生 grep 和本地文件搜索能力的同时，使用 AskAny 的 RAG 功能。
-
-**核心特性：**
-- 通过 OpenCode 提供基于 GUI 的 Web 界面
-- 原生 grep 和本地文件搜索工具
-- MCP 集成以访问 AskAny RAG 能力
-- 文件夹级别的权限控制
-- **最推荐的解决方案** - 结合两者优势
-
-**设置步骤：**
-
-详细说明请参考 [mcp.md](mcp.md)。
-
-**快速开始：**
-
-1. 克隆 OpenCode 仓库：
-```bash
-git clone https://github.com/wufei-png/opencode.git
-cd opencode
-git checkout wf/dev
-```
-
-2. 构建并部署 OpenCode（使用您的网络 IP）：
-```bash
-# 终端 1: 启动服务器
-bun dev serve --hostname YOUR_IP --port 4096
-
-# 终端 2: 启动 Web 应用
-VITE_HOSTNAME=YOUR_IP bun run --cwd packages/app dev
-```
-
-3. 启动 AskAny MCP 服务器：
-```bash
-uv run python -m askany_mcp.server_fastapi
-```
-
-4. 配置 OpenCode：在 `~/.config/opencode/opencode.json` 中添加 MCP 服务器配置，并设置 `allowed_folders` 进行权限控制。
-
-5. 测试：使用 `askany_mcp/test_fastapi_client.py` 验证集成。
-
-### OpenWebUI 集成
-
-AskAny 可以与 OpenWebUI 集成，提供基于 Web 的聊天界面。
-
-**设置步骤：**
-
-1. 克隆 OpenWebUI 仓库：
-```bash
-git clone https://github.com/wufei-png/open-webui.git
-cd open-webui
-git checkout wf/dev  # 使用自定义分支
-```
-
-然后按照说明部署 OpenWebUI，参考 [OpenWebUI 开发文档](https://docs.openwebui.com/getting-started/development)。
-
-我的部署操作：
-- 前端：```npm run dev```
-- 后端（在 conda 或 uv 环境中）：```cd backend && ENABLE_OLLAMA_API=False BYPASS_EMBEDDING_AND_RETRIEVAL=true ./dev.sh```
-
-### Web 搜索服务
-
-AskAny 通过 [Proxyless LLM WebSearch](https://github.com/wufei-png/proxyless-llm-websearch/tree/wf/company) 服务支持网络搜索功能。
-
-**设置步骤：**
-
-1. 克隆 Web 搜索服务仓库：
-```bash
-git clone https://github.com/wufei-png/proxyless-llm-websearch.git
-cd proxyless-llm-websearch
-git checkout wf/company  # 使用自定义分支
-```
-
-2. 配置环境（如需要）：
-```bash
-cp .env.example .env
-# 编辑 .env 配置搜索引擎 API 密钥等
-```
-
-4. 启动 Web 搜索 API 服务器：
-```bash
-# 启动 API 服务器
-python agent/api_serve.py
-```
-
-服务默认在 `http://localhost:8800` 启动。搜索端点为 `http://localhost:8800/search`。
-
-6. 配置 AskAny 使用 Web 搜索服务：
-   - **默认**：Web 搜索 API URL 在 `askany/config.py` 中配置为 `web_search_api_url`（默认：`http://localhost:8800/search`）
-
-**注意**：确保在启动 AskAny 之前 Web 搜索服务已运行，否则网络搜索功能将不可用。
-
-## 相关资源
-
-- [OpenCode 集成指南](mcp.md) - 详细的 OpenCode MCP 集成说明
-- [Proxyless LLM WebSearch](https://github.com/wufei-png/proxyless-llm-websearch/tree/wf/company)
-- [OpenWebUI](https://github.com/wufei-png/open-webui/tree/wf/dev)
-- [OpenCode 仓库](https://github.com/wufei-png/opencode/tree/wf/dev)
-
-## 许可证
-
-MIT
+- [当前运行契约](docs/current-runtime.md)
+- [设置指南](SETUP.md)
+- [PostgreSQL 与 pgvector](SETUP_POSTGRESQL.md)
+- [UV 开发环境](UV_SETUP.md)
+- [LightRAG 集成](dev_readme/lightrag.md)
+- [向量数据操作](tool/README_vector_data.md)
+- [路线图](roadmap.md)

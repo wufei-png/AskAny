@@ -1,121 +1,146 @@
-# AskAny 设置指南
+# AskAny setup guide
 
-## 前置要求
+This guide describes the current repository setup. Use the code and
+[`docs/current-runtime.md`](docs/current-runtime.md) as the final authority
+when defaults change.
 
-1. **Python 3.11** (使用uv管理)
-2. **PostgreSQL** (需要安装pgvector扩展)
-3. **vLLM或OpenAI API** (用于LLM和embedding)
+## Prerequisites
 
-## 安装步骤
+- Python `>=3.11,<3.12`;
+- `uv`;
+- PostgreSQL with the `vector` extension;
+- an OpenAI-compatible LLM endpoint;
+- access to the configured embedding and reranker models.
 
-### 1. 安装Python依赖
+## Install
 
 ```bash
 uv python install 3.11
 uv python pin 3.11
 uv sync
-# 可选：安装全部可选依赖（LightRAG、可观测性等）：uv sync --all-extras
-```
-
-### 2. 配置PostgreSQL
-
-```bash
-# 创建数据库
-createdb askany
-
-# 连接到数据库并安装pgvector扩展
-psql -d askany -c "CREATE EXTENSION IF NOT EXISTS vector;"
-```
-
-### 3. 配置环境变量
-
-复制 `.env.example` 到 `.env` 并编辑：
-
-```bash
 cp .env.example .env
 ```
 
-编辑 `.env` 文件，配置：
-- PostgreSQL连接信息
-- OpenAI API密钥（或vLLM地址）
-- 其他配置项
+The example is commented so this copy does not override `askany/config.py`.
+Uncomment only values that should differ, using the field names from
+`askany/config.py` (`POSTGRES_USER`, `OPENAI_API_BASE`, `OPENAI_MODEL`,
+`EMBEDDING_MODEL`, `RERANKER_MODEL`). The repository defaults use PostgreSQL
+user `wufei`, a local vLLM endpoint at `http://127.0.0.1:8081/v1`, BAAI/bge-m3
+embeddings, and a local Qwen model path; those defaults are not a hosted
+service configuration.
 
-### 4. 准备数据
-
-确保以下目录存在并包含数据：
-- `data/json/` - FAQ JSON文件
-- `data/markdown/` - Markdown文档
-
-### 5. 文档入库
+Optional dependencies:
 
 ```bash
-python -m askany.main --ingest
+uv sync --extra lightrag
+uv sync --extra observability
+uv sync --all-extras
 ```
 
-这将：
-- 解析所有JSON FAQ文件
-- 解析所有Markdown文档
-- 生成embeddings并存储到PGVector
+## PostgreSQL
 
-### 6. 启动API服务器
+The repository development database can be started with:
 
 ```bash
-python -m askany.main --serve
+docker compose -f docker-compose.dev.yml up -d postgres
 ```
 
-服务器将在 `http://0.0.0.0:8000` 启动。
+The compose service uses `root`/`123456`. The host-side application defaults
+use `wufei`; set `POSTGRES_USER` and `POSTGRES_PASSWORD` in `.env` to match the
+database you actually use.
 
-### 7. 配置OpenWebUI
+For an existing PostgreSQL installation:
 
-1. 打开OpenWebUI设置
-2. 添加自定义后端：
-   - **URL**: `http://localhost:8000`
-   - **OpenAPI URL**: `http://localhost:8000/openapi.json`
-3. OpenWebUI会自动从 `/openapi.json` 获取API规范
+```bash
+createdb askany
+psql -d askany -c "CREATE EXTENSION IF NOT EXISTS vector;"
+```
 
-## 验证
+See [`SETUP_POSTGRESQL.md`](SETUP_POSTGRESQL.md) for host installation details
+and [`dev_readme/docker-compose.md`](dev_readme/docker-compose.md) for the
+development container.
 
-### 检查API健康状态
+## Prepare data
+
+Put Markdown documents in `data/markdown/`. FAQ JSON files belong in
+`data/json/`; each file may contain one object or a list of objects with
+`question` and `answer` fields.
+
+Run:
+
+```bash
+uv run --locked python -m askany.main --ingest
+uv run --locked python -m askany.main --check-db
+uv run --locked python -m askany.main --create-index
+```
+
+Important: the current `--ingest` implementation parses FAQ JSON but its FAQ
+vector insertion block is disabled. It inserts Markdown nodes into the docs
+vector store. FAQ vector data is updated through `POST /v1/update_faqs` after
+the server initializes the FAQ store.
+
+LightRAG ingestion is separate:
+
+```bash
+uv run --locked python -m askany.rag.lightrag_ingest \
+  --ingest-markdown --ingest-json
+```
+
+It requires the `lightrag` extra and a reachable configured LLM.
+
+## Start and verify the API
+
+```bash
+uv run --locked python -m askany.main --serve
+```
+
+The default address is `http://0.0.0.0:8000`. In another terminal:
 
 ```bash
 curl http://localhost:8000/health
+curl http://localhost:8000/metrics
+curl http://localhost:8000/v1/models
 ```
 
-### 检查OpenAPI规范
+`/health` returns HTTP 200 with `status: "ok"` only when both supported agent
+paths are ready. It returns HTTP 503 with `status: "degraded"` otherwise.
+
+For an OpenAI-compatible chat client, use `/v1/chat/completions`. A model name
+ending in `-deepsearch` selects the manual LangGraph workflow; other model names
+select the automatic LangChain agent. `stream: true` uses SSE.
+
+## OpenWebUI
+
+Configure an OpenAI-compatible connection pointing to the API base URL, for
+example `http://localhost:8000/v1`. The custom OpenAPI document is available at
+`http://localhost:8000/openapi.json` when an integration specifically needs it.
+
+## Troubleshooting
+
+### PostgreSQL connection failure
+
+Check that PostgreSQL is running, `POSTGRES_*` values match the server, and the
+`vector` extension exists:
 
 ```bash
-curl http://localhost:8000/openapi.json
+pg_isready
+psql -d askany -c "SELECT extname FROM pg_extension WHERE extname = 'vector';"
 ```
 
-### 测试聊天接口
+### Vector dimension mismatch
 
-```bash
-curl -X POST http://localhost:8000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-3.5-turbo",
-    "messages": [
-      {"role": "user", "content": "你好"}
-    ]
-  }'
-```
+The default embedding is `BAAI/bge-m3` with dimension `1024`. If you select a
+different embedding model, set `VECTOR_DIMENSION` to its output dimension and
+use a compatible vector table.
 
-## 故障排除
+### LightRAG is unavailable
 
-### PostgreSQL连接错误
+Install `uv sync --extra lightrag`, run the separate LightRAG ingestion command,
+and verify `ENABLE_LIGHTRAG=true`. If the optional package or data is missing,
+the main application falls back to the base LlamaIndex retrieval path.
 
-- 检查PostgreSQL是否运行：`pg_isready`
-- 验证 `.env` 中的数据库配置
-- 确保pgvector扩展已安装
+### FAQ results are empty after `--ingest`
 
-### 向量维度不匹配
-
-- 默认使用OpenAI text-embedding-ada-002 (1536维)
-- 如果使用其他embedding模型，需要在 `.env` 中设置 `VECTOR_DIMENSION`
-
-### API服务器无法启动
-
-- 检查端口8000是否被占用
-- 验证所有依赖已安装：`uv pip list`
-- 查看错误日志
-
+This is expected with the current main ingestion path because FAQ vector
+insertion is disabled. Use `/v1/update_faqs` or update the implementation before
+describing `--ingest` as a complete FAQ pipeline.

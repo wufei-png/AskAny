@@ -1,569 +1,275 @@
 # AskAny
 
-<p align="center">
-  <img src="images/cover/cover1.png" alt="AskAny Cover" width="100%">
-</p>
+![AskAny Cover](images/cover/cover1.png)
 
 [中文版](README_CN.md) | English
 
-A Chinese-optimized RAG (Retrieval-Augmented Generation) QA assistant for operations, development, and testing teams.
+AskAny is a Chinese-optimized RAG (Retrieval-Augmented Generation) assistant
+for operations, development, and testing teams. It combines LlamaIndex
+retrieval, LangGraph/LangChain agent workflows, PostgreSQL + pgvector, and an
+OpenAI-compatible FastAPI API.
 
-> 📖 **Blog Post**: [AskAny: An Intelligent Q&A Assistant for DevOps Teams](https://zhuanlan.zhihu.com/p/2004009140419310603) (Chinese) - Detailed introduction to project background, technology choices, and architecture design
+> The code is the source of truth. For the current runtime boundary, see
+> [docs/current-runtime.md](docs/current-runtime.md). Historical design notes
+> are retained under [archive/docs/](archive/docs/) and are not operational
+> documentation.
 
-## Architecture Overview
+## Current architecture
 
-### Manual Workflow Mode
+```text
+OpenWebUI or another OpenAI-compatible client
+                       |
+                       v
+FastAPI: /v1/chat/completions
+                       |
+       model name ends with -deepsearch?
+                 /                    \
+                yes                    no
+                 |                      |
+workflow_langgraph.py          min_langchain_agent.py
+  manual LangGraph path          automatic LangChain agent
+                 \                    /
+                  +-- RAG / web / local-file tools --+
+                                      |
+                         LlamaIndex FAQ/docs retrieval
+                         + optional LightRAG augmentation
+                                      |
+                         answer and source references
+```
 
-![Manual Workflow Architecture](images/workflow.png)
-
-**Example Response in OpenWebUI:**
-
-![Manual Workflow Example](images/quest2.png)
-
-### Automatic Agent Mode
-
-![Automatic Agent Architecture](images/general_agent.png)
-
-**Example Response in OpenWebUI:**
-
-![Automatic Agent Example](images/quest1.png)
-
-### Output Structure
-
-AskAny's responses in OpenWebUI consist of three core components:
-
-1. **Tool Call Flow**
-   - Displays the sequence of tool invocations during agent execution
-   - Shows the usage of each tool (RAG retrieval, web search, local file search, etc.)
-   - Helps users understand how the system progressively gathers information to answer questions
-
-2. **Summary Answer**
-   - The final answer generated based on retrieved information
-   - Integrates results from multiple retrieval rounds and tool calls
-   - Provides clear and accurate response content
-
-3. **Reference Documents**
-   - Lists the source documents used to generate the answer
-   - Includes metadata such as document titles and source paths
-   - Enables users to trace answer sources and verify information reliability
-
-This structured output format ensures traceability and transparency, allowing users to clearly understand how the system gathers information and generates answers.
+The `-deepsearch` suffix selects the manual LangGraph path. Other model names
+select the automatic agent. `WorkflowFilter` is part of the deepsearch
+single-user-message path; the automatic agent selects its tools directly.
 
 ## Features
 
-- **Workflow Agent**: LangGraph-based multi-stage agent workflow to reduce hallucination
-- **Hybrid Retrieval**: Combines keyword search and vector search with reranking
-- **Multi-modal Support**: Text + image support via OpenWebUI integration
-- **Chinese Optimization**: HanLP TF-IDF, zhparser for PostgreSQL
-- **Dual Workflow Modes**: Manual workflow (more stable and detailed, ~60s) and automatic agent (faster, ~30s)
-- **FAQ Tag Filtering**: Support for @tag metadata filtering
-- **vLLM Integration**: Fast inference with OpenAI-compatible API
-- **SSE Streaming**: Token-by-token streaming for `/v1/chat/completions` (AgentWorkflow and simple agent) with pre-validation
-- **LightRAG** (optional): Knowledge graph augmentation for docs/FAQ; configurable query modes (local/global/hybrid/mix)
-- **Mem0** (optional): Persistent cross-session user memory; user ID from `X-OpenWebUI-User-Id` when using OpenWebUI
-- **Observability** (optional): Langfuse tracing and RAGAS RAG metrics (faithfulness, response relevancy, context precision)
-- **QA Semantic Cache** (optional): GPTCache + PGVector-based response caching with configurable similarity threshold (0.9); auto-clears on FAQ hot-update
-- **Prometheus Metrics** (optional): Comprehensive monitoring for API, LLM, database, RAG retrieval, workflow, websearch, mem0, and system resources
-- **Provenance Tracking** (optional): Chunk-level lineage tracking with line range recovery for enhanced reference transparency
-- **OpenCode MCP Integration**: Model Context Protocol integration with OpenCode for native grep and local file search
+- FAQ and documentation retrieval backed by PostgreSQL + pgvector;
+- keyword/vector retrieval and reranking where configured;
+- LangGraph orchestration for deepsearch and LangChain automatic tool use;
+- local-file search, optional web search, and source/provenance metadata;
+- LightRAG knowledge-graph augmentation, enabled by default but dependent on
+  the optional package and separately ingested data;
+- optional Mem0 cross-session user memory;
+- optional Langfuse tracing and asynchronous RAGAS evaluation;
+- QA semantic cache and always-available Prometheus `/metrics` endpoint;
+- OpenAI-compatible non-streaming and SSE streaming chat responses;
+- standalone MCP servers in `askany_mcp/`.
 
-## Technology Stack
+## Requirements and installation
 
-| Component | Technology |
-|-----------|------------|
-| Workflow Engine | LangGraph (state machine for agent orchestration) |
-| RAG Framework | LlamaIndex (retrieval and query engines) |
-| API Layer | FastAPI + LangServe (OpenAI-compatible endpoints) |
-| Vector Store | PostgreSQL + pgvector with HNSW indexing |
-| Embedding | BAAI/bge-m3 (multilingual, 1024-dim) |
-| Reranker | BAAI/bge-reranker-v2-m3 (multilingual) |
-| LLM | vLLM-served models (default: Qwen) |
-| Frontend | OpenWebUI (chat interface) |
+- Python `>=3.11,<3.12`;
+- PostgreSQL with the `vector` extension;
+- an OpenAI-compatible LLM endpoint;
+- a SentenceTransformers embedding model and reranker, unless API/local
+  alternatives are configured.
 
-## Architecture
-
-```
-User Query (OpenWebUI)
-    ↓
-FastAPI Server (askany/api/server.py)
-    ↓
-┌─────────────────────────────────────────────────────┐
-│  Workflow Mode Selection                            │
-│  ├── min_langchain_agent.py (LangChain Agent)      │
-│  └── workflow_langgraph.py (LangGraph State Machine)│
-└─────────────────────────────────────────────────────┘
-    ↓
-WorkflowFilter (workflow_filter.py) - Pre-filters simple queries
-    ↓
-QueryRouter (rag/router.py) - Routes to FAQ/DOCS engines
-    ↓
-┌─────────────────────────────────────────────────────┐
-│  RAG Engines                                        │
-│  ├── FAQQueryEngine (hybrid: keyword + vector)     │
-│  └── RAGQueryEngine (documentation retrieval)      │
-└─────────────────────────────────────────────────────┘
-    ↓
-VectorStoreManager (PostgreSQL + pgvector)
-    ↓
-Response with References
-```
-
-### Workflow Modes
-
-**1. Manual Workflow (`workflow_langgraph.py`)**
-- Manually designed LangGraph state machine with explicit orchestration
-- Iterative context expansion with controlled retrieval rounds
-- Sub-problem decomposition for complex queries
-- More stable and detailed responses (~60s average)
-- Best for: Complex queries requiring thorough analysis and multiple retrieval rounds
-
-**2. Automatic Agent (`min_langchain_agent.py`)**
-- LangChain agent with automatic tool selection (RAG, web search, local file search)
-- Flexible and adaptive tool usage based on query needs
-- Faster response time (~30s average)
-- Best for: Queries requiring diverse information sources and quick responses
-
-## Quick Start
-
-### Installation
+Install the locked core environment:
 
 ```bash
-# Install Python 3.11 and dependencies
 uv python install 3.11
 uv python pin 3.11
 uv sync
-
-# Configure environment
 cp .env.example .env
-# Edit .env with database credentials and API endpoints
-
-# Optional: `uv sync` is core deps only. Install everything (LightRAG + Langfuse/RAGAS),
-# which is required for the supported-runtime Pyright command:
-#   uv sync --all-extras
-# Or observability only: uv sync --extra observability
 ```
 
-### Database Setup
+Install optional integrations only when needed:
 
 ```bash
-# Quick setup (recommended)
-sudo bash setup_postgresql.sh
+uv sync --extra lightrag
+uv sync --extra observability
+uv sync --all-extras
+```
 
-# Or manual setup
+`.env.example` uses the actual `Settings` field names, such as
+`OPENAI_API_BASE`, `OPENAI_MODEL`, `POSTGRES_USER`, `EMBEDDING_MODEL`, and
+`RERANKER_MODEL`. Assignments in the template are commented, so copying it
+does not override `askany/config.py`. Uncomment only the values that should
+differ; the repository defaults point at a local vLLM endpoint and the local
+model path in `askany/config.py`.
+
+## Database setup
+
+For the repository's development container:
+
+```bash
+docker compose -f docker-compose.dev.yml up -d postgres
+```
+
+The compose service uses PostgreSQL 17 with pgvector and the credentials
+`root`/`123456`. The host-side defaults in `askany/config.py` use user `wufei`,
+so either configure the service through `.env` or use the same credentials in
+your local PostgreSQL installation. See
+[SETUP_POSTGRESQL.md](SETUP_POSTGRESQL.md) and
+[dev_readme/docker-compose.md](dev_readme/docker-compose.md) for the two setup
+styles.
+
+For an existing PostgreSQL installation, create the database and extension
+with a user that matches `.env`:
+
+```bash
 createdb askany
 psql -d askany -c "CREATE EXTENSION IF NOT EXISTS vector;"
 ```
 
-### Document Ingestion
+## Data and ingestion
 
-AskAny supports two document formats:
+Runtime data directories are ignored by Git:
 
-**1. FAQ Format (JSON)**
+- `data/json/`: FAQ JSON files;
+- `data/markdown/`: Markdown documentation;
+- `data/stopwords/`: optional tokenizer resources.
 
-Place FAQ files in `data/json/`. Each FAQ entry should follow this structure:
+FAQ entries can be a single object or a list of objects, for example:
 
 ```json
 {
-  "question": "What is the default port for the API server?",
-  "answer": "The default port is 8000. You can change it by setting api_port in config.py or the API_PORT environment variable.",
-  "metadata": {
-    "tag": "configuration",
-    "category": "api"
-  }
+  "question": "What is the default API port?",
+  "answer": "The default API port is 8000.",
+  "metadata": { "category": "configuration" }
 }
 ```
 
-**2. Markdown Format**
-
-Place documentation files in `data/markdown/`. Standard markdown files are supported.
-
-**Ingestion Commands:**
+Run the main ingestion command with:
 
 ```bash
-# Ingest all documents from data/json and data/markdown
-python -m askany.main --ingest
-
-# Check ingested data
-python -m askany.main --check-db
+uv run --locked python -m askany.main --ingest
+uv run --locked python -m askany.main --check-db
+uv run --locked python -m askany.main --create-index
 ```
 
-### Running the Server
+Current limitation: `--ingest` parses FAQ JSON but the FAQ vector insertion
+block in `askany/ingest/ingest.py` is disabled. The command currently inserts
+Markdown nodes into the docs vector store; it must not be described as a
+complete FAQ-plus-docs ingestion pipeline. FAQ vector data is updated through
+`POST /v1/update_faqs` after the server initializes the FAQ store.
+
+LightRAG uses a separate ingestion command and storage path:
 
 ```bash
-# Start API server (default: http://0.0.0.0:8000)
-python -m askany.main --serve
-
-# Server provides:
-# - OpenAI-compatible chat endpoint: POST /v1/chat/completions (supports stream: true for SSE)
-# - OpenAPI schema: GET /openapi.json
-# - FAQ hot update: POST /v1/update_faqs
-# - Health check: GET /health
+uv sync --extra lightrag
+uv run --locked python -m askany.rag.lightrag_ingest \
+  --ingest-markdown --ingest-json
 ```
 
-### Testing Queries
+## Run the API
 
 ```bash
-# Direct query test
-python -m askany.main --query --query-text "your question" --query-type AUTO
-
-# Query types: AUTO (smart routing), FAQ, DOCS
+uv run --locked python -m askany.main --serve
 ```
 
-## Project Structure
+The default bind address is `0.0.0.0:8000`. Useful checks:
 
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/metrics
+curl http://localhost:8000/v1/models
 ```
+
+The health response is `status: "ok"` with HTTP 200 only when both supported
+workflow globals are ready. Otherwise it returns `status: "degraded"` with
+HTTP 503.
+
+### API endpoints
+
+| Method | Endpoint               | Description                                                          |
+| ------ | ---------------------- | -------------------------------------------------------------------- |
+| `GET`  | `/health`              | Runtime readiness check; returns `ok` or `degraded`.                 |
+| `GET`  | `/metrics`             | Prometheus metrics. No feature-toggle or custom port setting exists. |
+| `GET`  | `/v1/models`           | Configured models plus `-deepsearch` variants when available.        |
+| `POST` | `/v1/chat/completions` | OpenAI-compatible chat; `stream: true` uses SSE.                     |
+| `POST` | `/v1/update_faqs`      | Base64-encoded JSON FAQ hot update. Clears the QA cache afterward.   |
+| `GET`  | `/v1/cache/stats`      | QA-cache statistics.                                                 |
+| `POST` | `/v1/cache/clear`      | Clear the QA cache.                                                  |
+| `GET`  | `/openapi.json`        | Custom OpenAPI document used by the integration.                     |
+
+For chat requests, a model ending in `-deepsearch` selects the manual workflow;
+all other model names select the automatic agent. Streaming ends with a stop
+chunk and `data: [DONE]`.
+
+Direct query testing is also available:
+
+```bash
+uv run --locked python -m askany.main \
+  --query --query-text "your question" --query-type AUTO
+```
+
+The accepted query types are `AUTO`, `FAQ`, `DOCS`, and `CODE`. `CODE` is
+currently an explicit not-implemented route.
+
+## Configuration highlights
+
+All settings live in `askany/config.py` and can be overridden by matching
+uppercase environment variables. Important defaults are:
+
+| Setting                            | Default                    |
+| ---------------------------------- | -------------------------- |
+| `language`                         | `cn`                       |
+| `postgres_host` / `postgres_port`  | `localhost` / `5432`       |
+| `postgres_user` / `postgres_db`    | `wufei` / `askany`         |
+| `openai_api_base`                  | `http://127.0.0.1:8081/v1` |
+| `embedding_model`                  | `BAAI/bge-m3`              |
+| `vector_dimension`                 | `1024`                     |
+| `reranker_model`                   | `BAAI/bge-reranker-v2-m3`  |
+| `enable_lightrag`                  | `True`                     |
+| `enable_mem0`                      | `False`                    |
+| `enable_langfuse` / `enable_ragas` | `False` / `False`          |
+| `enable_qa_cache`                  | `True`                     |
+| `using_docs_keyword_index`         | `False`                    |
+
+The full runtime boundary, derived defaults, and validation limitations are in
+[docs/current-runtime.md](docs/current-runtime.md).
+
+## Project structure
+
+```text
 askany/
-├── api/                    # FastAPI server and endpoints
-│   └── server.py          # Main API server (SSE streaming for chat)
-├── config.py              # Centralized configuration
-├── ingest/                # Document ingestion
-│   ├── vector_store.py    # PostgreSQL + pgvector management
-│   ├── json_parser.py     # FAQ JSON ingestion
-│   └── markdown_parser.py # Markdown document parsing
-├── memory/                 # User memory (optional)
-│   └── mem0_adapter.py    # Mem0 persistent user memory
-├── observability/         # Tracing and evaluation (optional)
-│   ├── langfuse_setup.py  # Langfuse tracing
-│   └── ragas_eval.py      # RAGAS RAG metrics
-├── prompts/               # Centralized prompt management
-│   ├── prompts_cn.py      # Chinese prompts
-│   ├── prompts_en.py      # English prompts
-│   └── prompt_manager.py  # Language-aware prompt manager
-├── rag/                   # RAG components
-│   ├── router.py          # Query routing logic
-│   ├── faq_query_engine.py    # FAQ hybrid retrieval
-│   ├── rag_query_engine.py    # Documentation retrieval
-│   ├── lightrag_adapter.py    # LightRAG knowledge graph (optional)
-│   └── lightrag_ingest.py     # LightRAG ingestion
-├── workflow/              # Agent workflows
-│   ├── workflow_langgraph.py  # LangGraph state machine
-│   ├── min_langchain_agent.py # LangChain agent
-│   ├── workflow_filter.py     # Pre-filter for simple queries
-│   └── ...                    # Supporting modules
-└── main.py                # Entry point
+├── api/              # FastAPI application and OpenAI-compatible endpoints
+├── config.py         # Pydantic settings
+├── ingest/           # Parsers and PostgreSQL/pgvector storage
+├── memory/           # Optional Mem0 integration
+├── metrics/          # Prometheus instrumentation
+├── observability/    # Optional Langfuse and RAGAS integration
+├── prompts/          # Chinese/English prompt management
+├── rag/              # Routing, retrieval, reranking, and LightRAG adapter
+└── workflow/         # LangGraph and LangChain agent paths
+archive/              # Non-current Python and documentation material
+askany_mcp/           # Standalone MCP transports
+tool/                 # Independent operational tools
+test/                 # Unit and opt-in integration tests
 ```
 
-### Utilities and Scripts
+## MCP
 
-The project includes utility scripts in `tool/` and test files in `test/`:
+`askany_mcp/server.py` is a standalone stdio MCP server. The HTTP/SSE variants
+are `server_fastapi.py`, `server_sse.py`, and `server_http.py`. They reuse the
+main project's environment and configuration; there is no separate
+`askany_mcp/pyproject.toml`. See [mcp.md](mcp.md) and
+[askany_mcp/README.md](askany_mcp/README.md) for current transport-specific
+commands.
 
-**Tool Scripts (`tool/`):**
-- `export_vector_data.py` - Export vector data from PostgreSQL to files (supports pg_dump custom format or separate schema/data files)
-- `import_vector_data.py` - Import vector data from files back to PostgreSQL
-- `ingest_check.py` - Verify ingested data in the database
-- `query_test.py` - Test queries directly
-- Other utility scripts for data migration, keyword export, and HNSW index inspection
-
-**Test Files (`test/`):**
-- `test/test_min_langchain_agent.py` - Offline LangChain-agent utility tests
-- `test/test_streaming.py` - Offline SSE streaming tests
-- Various test scripts for components and integrations
-
-**Common Commands:**
-
-See `dev_readme/script.sh` for commonly used commands including:
-- Document ingestion with proper encoding
-- Server startup
-- Database data checks
-- HNSW index inspection
-- Vector data export/import
-
-Example usage:
-```bash
-# Export vector data
-python tool/export_vector_data.py --output-dir vector_data --format full
-
-# Import vector data
-python tool/import_vector_data.py --input-dir vector_data --drop-existing
-
-# Check ingested data
-python tool/ingest_check.py
-```
-
-## Configuration
-
-All settings can be configured in `askany/config.py` or via environment variables in `.env`.
-
-### Core Settings
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `language` | Prompt language (cn/en) | cn |
-| `device` | Compute device (cuda/cpu) | cuda |
-| `log_level` | Logging level | DEBUG |
-
-### LLM Settings
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `openai_api_base` | LLM API endpoint | dashscope.aliyuncs.com |
-| `openai_api_key` | API key (set in .env) | - |
-| `openai_model` | LLM model name | qwen-plus |
-| `temperature` | Generation temperature | 0.2 |
-| `top_p` | Top-p sampling | 0.8 |
-| `llm_max_tokens` | Max tokens for LLM | 40000 |
-| `llm_timeout` | LLM timeout (seconds) | 700 |
-
-### Database Settings
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `postgres_host` | PostgreSQL host | localhost |
-| `postgres_port` | PostgreSQL port | 5432 |
-| `postgres_user` | Database user | root |
-| `postgres_password` | Database password | 123456 |
-| `postgres_db` | Database name | askany |
-| `faq_vector_table_name` | FAQ vector table | askany_faq_vectors |
-| `docs_vector_table_name` | Docs vector table | askany3_docs_vectors |
-
-### Embedding & Reranker
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `embedding_model` | Embedding model | BAAI/bge-m3 |
-| `embedding_model_type` | Model type | sentence_transformer |
-| `embedding_local_files_only` | Offline mode | False |
-| `vector_dimension` | Vector dimension | 1024 |
-| `reranker_model` | Reranker model | BAAI/bge-reranker-v2-m3 |
-| `reranker_local_files_only` | Offline mode | False |
-
-### Retrieval Settings
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `faq_similarity_top_k` | FAQ top-k results | 3 |
-| `faq_rerank_candidate_k` | FAQ rerank candidates | 10 |
-| `faq_score_threshold` | FAQ score threshold | 0.75 |
-| `faq_ensemble_weights` | [keyword, vector] weights | [0.5, 0.5] |
-| `docs_similarity_top_k` | Docs top-k results | 5 |
-| `docs_rerank_candidate_k` | Docs rerank candidates | 10 |
-| `docs_similarity_threshold` | Docs score threshold | 0.6 |
-| `docs_ensemble_weights` | [keyword, vector] weights | [0.5, 0.5] |
-
-### HNSW Index Settings
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `enable_hnsw` | Enable HNSW index | True |
-| `hnsw_m` | Bi-directional links | 16 |
-| `hnsw_ef_construction` | Construction candidate list | 128 |
-| `hnsw_ef_search` | Search candidate list | 40 |
-| `hnsw_dist_method` | Distance method | vector_cosine_ops |
-
-### Agent Workflow Settings
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `agent_max_iterations` | Max workflow iterations | 3 |
-| `enable_web_search` | Enable web search | True |
-| `web_search_api_url` | Web search API endpoint URL | http://localhost:8800/search |
-| `query_rewrite_bool` | Enable query rewriting | True |
-| `expand_context_ratio` | Context expansion ratio | 1.0 |
-
-### Data Paths
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `json_dir` | FAQ JSON directory | data/json |
-| `markdown_dir` | Markdown docs directory | data/markdown |
-| `local_file_search_dir` | Local search directory | data/markdown |
-| `storage_dir` | Keyword index storage | key_word_storage |
-
-### Optional: LightRAG, Mem0, Observability, Cache
-
-| Area | Config (in `config.py` or `.env`) | Notes |
-|------|-----------------------------------|-------|
-| **LightRAG** | `enable_lightrag=True`, `lightrag_working_dir`, `lightrag_query_mode` | Run `python -m askany.rag.lightrag_ingest --ingest-markdown --ingest-json` before enabling |
-| **Mem0** | `enable_mem0=True`, `mem0_collection_name`, `mem0_top_k` | Set `ENABLE_FORWARD_USER_INFO_HEADERS=true` in OpenWebUI so `X-OpenWebUI-User-Id` is sent |
-| **Langfuse** | `enable_langfuse=True`, `langfuse_public_key`, `langfuse_secret_key` | Install: `uv sync --extra observability` (or `uv sync --all-extras` for all optional deps) |
-| **RAGAS** | `enable_ragas=True`, `ragas_sample_rate`, `ragas_metrics` | Pushes scores into Langfuse when both enabled |
-| **Prometheus** | `enable_prometheus=True`, `prometheus_port` | Exposes metrics at `/metrics` endpoint; install: `uv sync --extra observability` |
-| **QA Cache** | `enable_qa_cache=True`, `qa_cache_similarity_threshold` | GPTCache + PGVector; auto-clears on FAQ hot-update |
-
-#### LightRAG question files and validation boundaries
-
-The LightRAG retrieval integration reads a JSON file containing exactly a
-`list[str]`. The default local file is
-`test/fixtures/lightrag_questions.local.json` (gitignored); copy and adapt
-`test/fixtures/lightrag_questions.example.json` for local use. CI or another
-developer fixture can be injected with `ASKANY_LIGHTRAG_QUESTIONS_FILE`.
-Malformed JSON, non-string items, and blank questions are errors. A missing or
-empty file is an explicit skip condition, not a validation pass.
-
-`test/test_lightrag_retrieval.py` is an opt-in integration test. Run it only
-with `ASKANY_RUN_LIGHTRAG_INTEGRATION=1` and the required LightRAG dependency,
-PostgreSQL database/tables, embedding model, LLM endpoint, and ingested data;
-missing prerequisites are reported as precise skips. The comparison script
-`test/test_lightrag_e2e_comparison.py` is manual-only. Without a question file
-it prints a `SKIPPED` message and exits successfully without claiming a
-zero-question comparison.
-
-### Customizing Prompts for Your Knowledge Base
-
-The prompts in `askany/prompts/prompts_cn.py` (Chinese) and `askany/prompts/prompts_en.py` (English) contain `TODO` placeholders that should be customized for each knowledge base deployment.
-
-## API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check |
-| `/openapi.json` | GET | OpenAPI specification |
-| `/v1/chat/completions` | POST | OpenAI-compatible chat (supports `stream: true` for SSE) |
-| `/v1/update_faqs` | POST | Hot update FAQ entries |
-| `/v1/admin/cache/stats` | GET | QA cache statistics (requires QA cache enabled) |
-| `/v1/admin/cache/clear` | POST | Clear QA cache (requires QA cache enabled) |
-
-## Development
-
-### Code Quality
+## Development and validation
 
 ```bash
-# Lint and verify formatting for the supported runtime and tests
+uv lock --check
 uv run --locked ruff check askany test tool/keyword_utils.py tool/langdetect.py
 uv run --locked ruff format --check askany test tool/keyword_utils.py tool/langdetect.py
-
-# Type-check the supported runtime, including optional integrations
 uv run --locked --all-extras pyright
-
-# Run the same local hooks used before commits
 uv run --locked pre-commit run --all-files
+uv run --locked pytest -q test -rs
 ```
 
-### Common Commands
+The static gate covers the supported runtime, tests, and the two shared helper
+modules. Standalone tools, `askany_mcp`, LightRAG ingestion, and visualization
+code have separate boundaries. Passing local checks does not prove live
+PostgreSQL, model-provider, LightRAG, Mem0, Langfuse, RAGAS, or QA-cache
+behavior.
 
-For frequently used commands, see `dev_readme/script.sh`. Key operations include:
+## Further documentation
 
-```bash
-# Document ingestion (with proper encoding)
-PYTHONIOENCODING=utf-8 LC_ALL=en_US.UTF-8 NO_COLOR=1 TERM=dumb python -u -m askany.main --ingest > ingest.log 2>&1
-
-# Start server
-PYTHONIOENCODING=utf-8 LC_ALL=en_US.UTF-8 NO_COLOR=1 TERM=dumb python -u -m askany.main --serve > serve.log 2>&1
-
-# Check database data counts
-PGPASSWORD=123456 psql -h localhost -U root -d askany -c "SELECT 'data_askany_faq_vectors' as table_name, COUNT(*) as row_count FROM data_askany_faq_vectors UNION ALL SELECT 'data_askany_docs_vectors', COUNT(*) FROM data_askany_docs_vectors;"
-
-# Export/import vector data
-python tool/export_vector_data.py --output-dir vector_data
-python tool/import_vector_data.py --input-dir vector_data --drop-existing
-```
-
-### Adding New Document Types
-
-1. Create parser in `askany/ingest/`
-2. Update `ingest_documents()` in `askany/ingest/ingest.py`
-3. Consider metadata schema for filtering
-
-## Roadmap
-
-See [roadmap.md](roadmap.md) for planned features and improvements.
-
-## Deployment
-
-### OpenCode Integration (Recommended)
-
-AskAny can be integrated with OpenCode to leverage OpenCode's native grep and local file search capabilities alongside AskAny's RAG functionality through MCP (Model Context Protocol).
-
-**Key Features:**
-- GUI-based web interface via OpenCode
-- Native grep and local file search tools
-- MCP integration for AskAny RAG capabilities
-- Folder-level permission control
-- **Most recommended solution** - combines best of both worlds
-
-**Setup Steps:**
-
-See [mcp.md](mcp.md) for detailed OpenCode integration instructions.
-
-**Quick Start:**
-
-1. Clone OpenCode repository:
-```bash
-git clone https://github.com/wufei-png/opencode.git
-cd opencode
-git checkout wf/dev
-```
-
-2. Build and deploy OpenCode (use your network IP):
-```bash
-# Terminal 1: Start server
-bun dev serve --hostname YOUR_IP --port 4096
-
-# Terminal 2: Start web app
-VITE_HOSTNAME=YOUR_IP bun run --cwd packages/app dev
-```
-
-3. Start AskAny MCP server:
-```bash
-uv run python -m askany_mcp.server_fastapi
-```
-
-4. Configure OpenCode: Add MCP server to `~/.config/opencode/opencode.json` and set `allowed_folders` for permission control.
-
-5. Test: Use `askany_mcp/test_fastapi_client.py` to verify the integration.
-
-### OpenWebUI Integration
-
-AskAny can be integrated with OpenWebUI for a web-based chat interface.
-
-**Setup Steps:**
-
-1. Clone the OpenWebUI repository:
-```bash
-git clone https://github.com/wufei-png/open-webui.git
-cd open-webui
-git checkout wf/dev  # Use the custom branch
-```
-
-Then follow the instructions to deploy OpenWebUI, refer to the [OpenWebUI Development Documentation](https://docs.openwebui.com/getting-started/development).
-
-My deployment operations are:
-- the frontend: ```npm run dev```
-- the backend(in conda or uv env): ```cd backend && ENABLE_OLLAMA_API=False BYPASS_EMBEDDING_AND_RETRIEVAL=true ./dev.sh```
-
-### Web Search Service
-
-AskAny supports web search functionality via the [Proxyless LLM WebSearch](https://github.com/wufei-png/proxyless-llm-websearch/tree/wf/company) service.
-
-**Setup Steps:**
-
-1. Clone the web search service repository:
-```bash
-git clone https://github.com/wufei-png/proxyless-llm-websearch.git
-cd proxyless-llm-websearch
-git checkout wf/company  # Use the custom branch
-```
-
-2. Configure environment (if needed):
-```bash
-cp .env.example .env
-# Edit .env to configure search engine API keys, etc.
-```
-
-4. Start the web search API server:
-```bash
-# Start the API server
-python agent/api_serve.py
-```
-
-The service will start on `http://localhost:8800` by default. The search endpoint is available at `http://localhost:8800/search`.
-
-6. Configure AskAny to use the web search service:
-   - **Default**: The web search API URL is configured in `askany/config.py` as `web_search_api_url` (default: `http://localhost:8800/search`)
-
-**Note**: Make sure the web search service is running before starting AskAny, or web search functionality will be unavailable.
-
-## Related Resources
-
-- [OpenCode Integration Guide](mcp.md) - Detailed OpenCode MCP integration instructions
-- [Proxyless LLM WebSearch](https://github.com/wufei-png/proxyless-llm-websearch/tree/wf/company)
-- [OpenWebUI](https://github.com/wufei-png/open-webui/tree/wf/dev)
-- [OpenCode Repository](https://github.com/wufei-png/opencode/tree/wf/dev)
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=wufei-png/AskAny&type=Date)](https://star-history.com/#wufei-png/AskAny&Date)
-
-## License
-
-MIT
+- [Current runtime contract](docs/current-runtime.md)
+- [Setup guide](SETUP.md)
+- [PostgreSQL and pgvector setup](SETUP_POSTGRESQL.md)
+- [UV development setup](UV_SETUP.md)
+- [LightRAG integration](dev_readme/lightrag.md)
+- [Vector data operations](tool/README_vector_data.md)
+- [Roadmap](roadmap.md)

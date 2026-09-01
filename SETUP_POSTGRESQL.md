@@ -1,281 +1,121 @@
-# PostgreSQL 安装和配置指南
+# PostgreSQL and pgvector setup
 
-## 系统要求
+AskAny requires PostgreSQL with the `vector` extension. Choose either the
+repository development container or an existing host installation. Configure
+the application with the `POSTGRES_*` variables in `.env`.
 
-- Ubuntu/Debian (WSL2 或其他 Linux 发行版)
-- 或 macOS
-- 或 Windows (通过 WSL2)
+## Option A: development container
 
-## 安装步骤
-
-### 1. 安装 PostgreSQL
-
-#### Ubuntu/Debian (WSL2)
+From the repository root:
 
 ```bash
-# 更新包列表
-sudo apt update
-
-# 安装 PostgreSQL 和常用工具
-sudo apt install -y postgresql postgresql-contrib
-
-# 安装 PostgreSQL 开发包（用于编译 pgvector）
-sudo apt install -y postgresql-server-dev-all
-
-# 启动 PostgreSQL 服务
-sudo service postgresql start
-
-# 设置 PostgreSQL 开机自启
-sudo systemctl enable postgresql
+docker compose -f docker-compose.dev.yml up -d postgres
+docker compose -f docker-compose.dev.yml exec -T postgres \
+  psql -U root -d askany \
+  -c "CREATE EXTENSION IF NOT EXISTS vector;"
 ```
 
-#### macOS (使用 Homebrew)
+The compose service uses `pgvector/pgvector:pg17-bookworm`, publishes port
+`5432`, and persists data in the `postgres_data` volume. Its configured
+credentials are:
+
+```text
+POSTGRES_HOST=localhost       # from the host; use postgres inside dev
+POSTGRES_PORT=5432
+POSTGRES_USER=root
+POSTGRES_PASSWORD=123456
+POSTGRES_DB=askany
+```
+
+If the API runs inside the `dev` service, use `POSTGRES_HOST=postgres`. If it
+runs on the host, use `POSTGRES_HOST=localhost`. The application defaults use
+user `wufei`, so set the values explicitly when using this compose database.
+
+Start the optional development container with:
 
 ```bash
-# 安装 PostgreSQL
-brew install postgresql@15
-
-# 启动 PostgreSQL 服务
-brew services start postgresql@15
+make build_dev_image
+docker compose -f docker-compose.dev.yml up -d dev
+docker compose -f docker-compose.dev.yml exec dev bash
 ```
 
-#### Windows (WSL2)
+The `dev` service requests NVIDIA GPU resources. Run only the `postgres`
+service when GPU container support is not available.
 
-在 WSL2 中按照 Ubuntu/Debian 的步骤安装。
+## Option B: existing host PostgreSQL
 
-### 2. 配置 PostgreSQL 用户
+Install PostgreSQL and the pgvector extension using your operating system's
+package manager or the official pgvector instructions. Match the major
+PostgreSQL version and extension package installed on the host.
+
+For macOS with Homebrew, for example:
 
 ```bash
-# 切换到 postgres 用户
-sudo -u postgres psql
-
-# 在 PostgreSQL 命令行中执行：
-# 创建用户（如果不存在）
-CREATE USER root WITH PASSWORD '123456';
-
-# 授予创建数据库权限
-ALTER USER root CREATEDB;
-
-# 授予超级用户权限（可选，用于创建扩展）
-ALTER USER root WITH SUPERUSER;
-
-# 退出
-\q
+brew install postgresql@17
+brew services start postgresql@17
 ```
 
-或者使用命令行：
+For Debian/Ubuntu, install PostgreSQL and the pgvector package corresponding to
+the installed PostgreSQL major version, then start the service with the normal
+system service manager.
+
+Create a database and application user as an administrator. Do not grant
+superuser privileges unless your local policy requires them:
+
+```sql
+CREATE USER wufei WITH PASSWORD 'replace-with-a-local-password';
+ALTER USER wufei CREATEDB;
+CREATE DATABASE askany OWNER wufei;
+```
+
+Then enable the extension:
 
 ```bash
-# 创建用户
-sudo -u postgres createuser -s root
-
-# 设置密码
-sudo -u postgres psql -c "ALTER USER root WITH PASSWORD '123456';"
+psql -h localhost -U wufei -d askany \
+  -c "CREATE EXTENSION IF NOT EXISTS vector;"
 ```
 
-### 3. 安装 pgvector 扩展
+Set matching values in `.env`:
 
-#### 方法 1: 使用 apt (推荐，如果可用)
+```text
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_USER=wufei
+POSTGRES_PASSWORD=replace-with-a-local-password
+POSTGRES_DB=askany
+```
+
+## Verify the connection
 
 ```bash
-# Ubuntu 22.04+ 可能包含 pgvector 包
-sudo apt install -y postgresql-15-pgvector
-# 注意：版本号可能不同，根据你的 PostgreSQL 版本调整
+pg_isready -h localhost -p 5432
+psql -h localhost -U wufei -d askany \
+  -c "SELECT version();"
+psql -h localhost -U wufei -d askany \
+  -c "SELECT extname FROM pg_extension WHERE extname = 'vector';"
 ```
 
-#### 方法 2: 从源码编译安装
+After the database is available, run the application checks:
 
 ```bash
-# 安装 git 和构建工具
-sudo apt install -y git build-essential
-
-# 克隆 pgvector 仓库
-cd /tmp
-git clone --branch v0.8.1 https://github.com/pgvector/pgvector.git
-cd pgvector
-
-# 编译和安装
-make
-sudo make install
-
-# 清理
-cd ..
-rm -rf pgvector
+uv run --locked python -m askany.main --check-db
+uv run --locked python -m askany.main --create-index
 ```
 
-#### 方法 3: 使用 Docker (如果使用 Docker PostgreSQL)
+## Cleanup
+
+To stop the compose services without removing data:
 
 ```bash
-# 使用包含 pgvector 的 PostgreSQL 镜像
-docker run -d \
-  --name postgres \
-  -e POSTGRES_USER=root \
-  -e POSTGRES_PASSWORD=123456 \
-  -e POSTGRES_DB=askany \
-  -p 5432:5432 \
-  pgvector/pgvector:pg15
+docker compose -f docker-compose.dev.yml stop
 ```
 
-### 4. 创建数据库和启用扩展
+To remove the compose containers and their named volumes, only after confirming
+that the data is disposable:
 
 ```bash
-# 创建数据库
-createdb -h localhost -U root askany
-
-# 或者使用 postgres 用户创建
-sudo -u postgres createdb askany
-
-# 连接到数据库并启用 pgvector 扩展
-psql -h localhost -U root -d askany -c "CREATE EXTENSION IF NOT EXISTS vector;"
-
-# 验证扩展是否安装成功
-psql -h localhost -U root -d askany -c "\dx"
+docker compose -f docker-compose.dev.yml down -v
 ```
 
-### 5. 配置 PostgreSQL 允许本地连接
-
-编辑 PostgreSQL 配置文件：
-
-```bash
-# 找到配置文件位置
-sudo -u postgres psql -c "SHOW config_file;"
-
-# 编辑 pg_hba.conf（通常在 /etc/postgresql/15/main/pg_hba.conf）
-sudo nano /etc/postgresql/15/main/pg_hba.conf
-```
-
-确保有以下行（允许本地连接）：
-
-```
-# IPv4 local connections:
-host    all             all             127.0.0.1/32            md5
-host    all             all             ::1/128                 md5
-```
-
-重启 PostgreSQL：
-
-```bash
-sudo service postgresql restart
-```
-
-### 6. 验证安装
-
-```bash
-# 测试连接
-psql -h localhost -U root -d askany -c "SELECT version();"
-
-# 检查 pgvector 扩展
-psql -h localhost -U root -d askany -c "SELECT * FROM pg_extension WHERE extname = 'vector';"
-```
-
-## 故障排除
-
-### 问题 1: 无法连接到数据库
-
-**错误**: `psql: error: connection to server at "localhost" (127.0.0.1), port 5432 failed`
-
-**解决方案**:
-```bash
-# 检查 PostgreSQL 是否运行
-sudo service postgresql status
-
-# 如果未运行，启动它
-sudo service postgresql start
-
-# 检查端口是否监听
-sudo netstat -tlnp | grep 5432
-```
-
-### 问题 2: 认证失败
-
-**错误**: `password authentication failed for user "root"`
-
-**解决方案**:
-```bash
-# 重置密码
-sudo -u postgres psql -c "ALTER USER root WITH PASSWORD '123456';"
-
-# 或者使用 postgres 用户连接
-sudo -u postgres psql -d askany
-```
-
-### 问题 3: pgvector 扩展未找到
-
-**错误**: `ERROR: could not open extension control file`
-
-**解决方案**:
-```bash
-# 检查扩展文件是否存在
-sudo find /usr -name "vector.control" 2>/dev/null
-
-# 如果不存在，需要安装 pgvector（见步骤 3）
-# 安装后重启 PostgreSQL
-sudo service postgresql restart
-```
-
-### 问题 4: 权限不足
-
-**错误**: `ERROR: permission denied to create extension`
-
-**解决方案**:
-```bash
-# 授予超级用户权限
-sudo -u postgres psql -c "ALTER USER root WITH SUPERUSER;"
-```
-
-## 快速安装脚本
-
-如果你使用的是 Ubuntu/Debian，可以运行以下脚本：
-
-```bash
-#!/bin/bash
-set -e
-
-echo "Installing PostgreSQL..."
-sudo apt update
-sudo apt install -y postgresql postgresql-contrib postgresql-server-dev-all
-
-echo "Starting PostgreSQL..."
-sudo service postgresql start
-sudo systemctl enable postgresql
-
-echo "Creating user and database..."
-sudo -u postgres createuser -s root || true
-sudo -u postgres psql -c "ALTER USER root WITH PASSWORD '123456';" || true
-sudo -u postgres createdb askany || true
-
-echo "Installing pgvector..."
-cd /tmp
-git clone --branch v0.8.1 https://github.com/pgvector/pgvector.git
-cd pgvector
-make
-sudo make install
-cd ..
-rm -rf pgvector
-
-echo "Enabling pgvector extension..."
-sudo -u postgres psql -d askany -c "CREATE EXTENSION IF NOT EXISTS vector;"
-
-echo "✅ PostgreSQL setup completed!"
-echo "Test connection: psql -h localhost -U root -d askany"
-```
-
-保存为 `setup_postgresql.sh`，然后运行：
-
-```bash
-chmod +x setup_postgresql.sh
-./setup_postgresql.sh
-```
-
-## 下一步
-
-安装完成后，运行：
-
-```bash
-# 验证连接
-psql -h localhost -U root -d askany -c "SELECT version();"
-
-# 运行 ingest
-python -m askany.main --ingest
-```
-
+There is no repository `setup_postgresql.sh`; do not rely on an old command
+that refers to that file.

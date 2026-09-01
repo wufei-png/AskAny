@@ -1,103 +1,93 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working in this repository.
 
-## Project Overview
+## Project overview
 
-AskAny is a Chinese-optimized RAG (Retrieval-Augmented Generation) Q&A assistant combining keyword search and vector search with reranking. It uses LangGraph for workflow orchestration and LlamaIndex for retrieval.
+AskAny is a Chinese-optimized RAG assistant using LlamaIndex for retrieval,
+LangGraph and LangChain for the supported agent paths, and PostgreSQL +
+pgvector for vector storage. The implementation and
+[`docs/current-runtime.md`](docs/current-runtime.md) are authoritative.
 
-## Commands
+## Setup
 
-### Setup
 ```bash
-uv python install 3.11 && uv python pin 3.11
+uv python install 3.11
+uv python pin 3.11
 uv sync
-cp .env.example .env  # Configure database and API credentials
-# `uv sync` installs core dependencies only. For all optional extras (LightRAG + observability):
-#   uv sync --all-extras
-# Or install individually: uv sync --extra observability (Langfuse/RAGAS), uv sync --extra lightrag
-# HanLP tokenizer uses PyTorch by default.
+cp .env.example .env
 ```
 
-### Database
+Install optional integrations as needed:
+
 ```bash
-sudo bash setup_postgresql.sh  # Quick setup
-# Or manual: createdb askany && psql -d askany -c "CREATE EXTENSION IF NOT EXISTS vector;"
+uv sync --extra lightrag
+uv sync --extra observability
+uv sync --all-extras
 ```
 
-### Running
+PostgreSQL requires the `vector` extension. Start the repository development
+database with:
+
 ```bash
-python -m askany.main --serve              # Start API server (port 8000)
-python -m askany.main --ingest             # Ingest documents from data/json and data/markdown
-python -m askany.main --check-db           # Verify ingested data
-python -m askany.main --query --query-text "question" --query-type AUTO
+docker compose -f docker-compose.dev.yml up -d postgres
 ```
 
-### Code Quality
+There is no `setup_postgresql.sh`; see `SETUP_POSTGRESQL.md` for host setup.
+
+## Supported commands
+
 ```bash
-uv run --locked ruff format askany test tool/keyword_utils.py tool/langdetect.py        # Format supported code
-uv run --locked ruff check askany test tool/keyword_utils.py tool/langdetect.py         # Lint supported code
-uv run --locked ruff check --fix askany test tool/keyword_utils.py tool/langdetect.py   # Auto-fix supported code
-uv run --locked --all-extras pyright                                                     # Type check supported code
+uv run --locked python -m askany.main --serve
+uv run --locked python -m askany.main --ingest
+uv run --locked python -m askany.main --check-db
+uv run --locked python -m askany.main --create-index
+uv run --locked python -m askany.main \
+  --query --query-text "question" --query-type AUTO
 ```
 
-### Testing
+The main `--ingest` command currently writes Markdown nodes to the docs vector
+store. It parses FAQ JSON, but FAQ vector insertion is disabled in
+`askany/ingest/ingest.py`; FAQ updates use `POST /v1/update_faqs`.
+
+## Quality and tests
+
 ```bash
-uv run --locked pytest -q test/test_min_langchain_agent.py                # Offline agent utility tests
-uv run --locked pytest -q test/test_streaming.py                          # Offline SSE tests
-uv run --locked pytest -q test --cov=askany --cov-report=html             # With coverage
+uv lock --check
+uv run --locked ruff check askany test tool/keyword_utils.py tool/langdetect.py
+uv run --locked ruff format --check askany test tool/keyword_utils.py tool/langdetect.py
+uv run --locked --all-extras pyright
+uv run --locked pre-commit run --all-files
+uv run --locked pytest -q test -rs
 ```
 
-## Architecture
+The supported static surface is the reachable API runtime, tests, and the
+shared helpers `tool/keyword_utils.py` and `tool/langdetect.py`. Standalone
+tools, `askany_mcp`, LightRAG ingestion, visualization code, and archived
+Python are outside this gate.
 
-```
-User Query → FastAPI Server → Workflow Mode Selection → QueryRouter → RAG Engines → Response
-                                    ↓
-              ┌─────────────────────┴─────────────────────┐
-              │                                           │
-    workflow_langgraph.py                      min_langchain_agent.py
-    (Manual LangGraph state machine)           (LangChain auto agent)
-    - Explicit orchestration                   - Auto tool selection
-    - Iterative context expansion              - Faster (~30s)
-    - More stable (~60s)
-```
+## Runtime routing
 
-### Key Components
+- A requested model name ending in `-deepsearch` selects
+  `askany/workflow/workflow_langgraph.py`.
+- All other model names select `askany/workflow/min_langchain_agent.py`.
+- `WorkflowFilter` is used by the deepsearch single-user-message path; the
+  automatic agent selects its tools directly.
+- LightRAG augmentation defaults to enabled, but its optional dependency and
+  separately ingested data are required for it to contribute results.
 
-| Directory | Purpose |
-|-----------|---------|
-| `askany/workflow/` | LangGraph state machine (`workflow_langgraph.py`) and LangChain agent (`min_langchain_agent.py`) |
-| `askany/rag/` | Query routing (`router.py`), FAQ hybrid retrieval (`faq_query_engine.py`), docs retrieval (`rag_query_engine.py`) |
-| `askany/ingest/` | Document ingestion, vector store management (`vector_store.py`), keyword extraction |
-| `askany/prompts/` | Language-aware prompts (`prompts_cn.py`, `prompts_en.py`, `prompt_manager.py`) |
-| `askany/api/server.py` | FastAPI server with OpenAI-compatible endpoints |
-| `askany/config.py` | Centralized settings (Settings class with env var support) |
+## API endpoints
 
-### Data Flow
+- `GET /health`: HTTP 200 with `ok` when both workflows are ready; otherwise
+  HTTP 503 with `degraded`.
+- `GET /metrics`: Prometheus registry; no enable flag or custom port setting.
+- `GET /v1/models`: configured models and possible `-deepsearch` variants.
+- `POST /v1/chat/completions`: OpenAI-compatible chat and SSE streaming.
+- `POST /v1/update_faqs`: base64-encoded JSON FAQ hot update.
+- `GET /v1/cache/stats` and `POST /v1/cache/clear`: QA-cache operations.
 
-1. **Ingestion**: JSON FAQs (`data/json/`) and Markdown docs (`data/markdown/`) → Vector embeddings (BAAI/bge-m3) → PostgreSQL + pgvector
-2. **Query**: User query → WorkflowFilter → QueryRouter (FAQ/DOCS/AUTO) → Hybrid retrieval (keyword + vector) → Reranking (BAAI/bge-reranker-v2-m3) → LLM response
+## Documentation policy
 
-### Query Types (rag/router.py)
-
-- `FAQ`: Routes to FAQ-specific hybrid retrieval
-- `DOCS`: Routes to documentation retrieval
-- `AUTO`: Smart routing based on query analysis
-
-## Configuration
-
-All settings in `askany/config.py` can be overridden via `.env`:
-- `openai_api_base`, `openai_api_key`, `openai_model` - LLM configuration
-- `postgres_*` - Database connection
-- `embedding_model`, `reranker_model` - Model selection
-- `faq_similarity_top_k`, `docs_similarity_top_k` - Retrieval parameters
-- `enable_lightrag` - Master switch for LightRAG KG augmentation (default: False)
-- `lightrag_query_mode` - Query mode: local/global/hybrid/naive/mix/bypass
-- `lightrag_working_dir` - Working directory for LightRAG cache/temp files
-- `lightrag_*` - LLM, embedding, chunking, and extraction overrides (see config.py)
-
-## API Endpoints
-
-- `POST /v1/chat/completions` - OpenAI-compatible chat
-- `POST /v1/update_faqs` - Hot update FAQ entries
-- `GET /health` - Health check
+Current root documentation and code are normative. `archive/docs/` and
+`dev_readme/ai_chats/` contain historical material only and must not be used
+to infer current defaults or commands.

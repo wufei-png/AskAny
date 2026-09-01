@@ -1,162 +1,106 @@
-# OpenCode Integration Mode
+# MCP integration
 
-This document describes how to integrate AskAny with OpenCode using MCP (Model Context Protocol) to leverage OpenCode's native grep and local file search capabilities alongside AskAny's RAG functionality.
-
-## Overview
-
-OpenCode integration mode provides a GUI-based interface through OpenCode's web interface, combining:
-- **OpenCode's native capabilities**: Powerful grep and local file search tools
-- **AskAny's RAG capabilities**: Via MCP server integration using `@.mcp.json` and `@askany_mcp`
-
-This mode has been tested and proven to be the **most recommended solution** compared to existing deployment methods, as it:
-- Retains MCP capabilities through the MCP server
-- Leverages OpenCode's powerful native grep and tool call features
-- Provides excellent compatibility and functionality as OpenCode is a popular open-source agent
+AskAny exposes its direct RAG search as an MCP tool through the standalone
+servers in `askany_mcp/`. This integration is independent of the main FastAPI
+chat server and reuses the repository's Python environment and settings.
 
 ## Prerequisites
 
-1. **OpenCode Repository**: Clone the custom OpenCode fork
-2. **AskAny MCP Server**: The `askany_mcp` module must be properly configured
-3. **Network Access**: Both services need to be accessible on your local network
-
-## Setup Instructions
-
-### 1. Clone OpenCode Repository
+From the repository root:
 
 ```bash
-git clone https://github.com/wufei-png/opencode.git
-cd opencode
-git checkout wf/dev  # Use the custom branch
+uv sync
+uv run --locked python -m askany.main --check-db
 ```
 
-### 2. Build and Deploy OpenCode
+The configured PostgreSQL vector stores, embedding model, and LLM endpoint must
+be available. The MCP servers do not ingest data themselves.
 
-OpenCode needs to be built and deployed on your local network. Use two terminals:
+## Supported transports
 
-**Terminal 1: Start the server** (listening on your network IP)
+| Transport | Command | Default endpoint |
+|---|---|---|
+| Local stdio | `uv run --locked python -m askany_mcp.server` | launched process stdin/stdout |
+| Remote MCP SSE | `uv run --locked python -m askany_mcp.server_fastapi` | `http://localhost:38081/sse` |
+| Alternate SSE | `uv run --locked python -m askany_mcp.server_sse` | `http://localhost:8001/sse` |
+| Alternate SSE | `uv run --locked python -m askany_mcp.server_http` | `http://localhost:8001/sse` |
 
-```bash
-# Replace 10.202.47.43 with your actual network IP address
-bun dev serve --hostname 10.202.47.43 --port 4096
-```
+The `server_fastapi.py` entry point is the one used by
+`askany_mcp/test_fastapi_client.py` and is the recommended remote entry point.
+It exposes `GET /health`, `GET /sse`, and `POST /messages`. The two alternate
+servers expose the same MCP paths and return plain-text `OK` from `/health`.
 
-**Terminal 2: Start the web app** (listening on your network IP)
+## Local stdio client configuration
 
-```bash
-# Replace 10.202.47.43 with your actual network IP address
-VITE_HOSTNAME=10.202.47.43 bun run --cwd packages/app dev
-```
-
-This will build and deploy OpenCode on your local network, making it accessible via the web interface.
-
-### 3. Configure Folder Permissions
-
-OpenCode's local startup has permission issues that may expose all files in the root directory. To restrict access:
-
-Edit `~/.config/opencode/opencode.json` and add:
+Use a client-specific MCP configuration with this command and replace the
+directory with the actual absolute repository path:
 
 ```json
 {
-  "allowed_folders": [
-    "/path/to/your/allowed/folder1",
-    "/path/to/your/allowed/folder2"
+  "command": "uv",
+  "args": [
+    "--directory",
+    "/absolute/path/to/AskAny",
+    "run",
+    "python",
+    "-m",
+    "askany_mcp.server"
   ]
 }
 ```
 
-This restricts OpenCode to only access specified folders, improving security.
+The server exposes one tool:
 
-### 4. Start AskAny MCP Server
+```text
+rag_search(query: string)
+```
 
-Start the AskAny MCP FastAPI server:
+The MCP schema exposes only `query`. Automatic FAQ/docs fallback happens inside
+the server. The helper function's optional `query_type` argument is not a
+client-visible MCP parameter.
+
+## Remote SSE client configuration
+
+Start the recommended remote server:
 
 ```bash
-cd /path/to/AskAny
-uv run python -m askany_mcp.server_fastapi
+uv run --locked python -m askany_mcp.server_fastapi \
+  --host 0.0.0.0 --port 38081
 ```
 
-The server will start and be ready to accept MCP connections.
+Configure the MCP client with:
 
-### 5. Configure OpenCode MCP Integration
-
-Add the AskAny MCP server to OpenCode's configuration file `~/.config/opencode/opencode.json`:
-
-```json
-{
-  "mcpServers": {
-    "askany_mcp": {
-      "type": "remote",
-      "url": "http://your-server-ip:port/sse",
-      "enabled": true
-    }
-  },
-  "allowed_folders": [
-    "/path/to/your/allowed/folders"
-  ]
-}
+```text
+http://localhost:38081/sse
 ```
 
-Replace `your-server-ip:port` with the actual IP and port where `askany_mcp.server_fastapi` is running.
-
-### 6. Test the Integration
-
-Use the test client to verify the MCP server is working:
+Verify it with:
 
 ```bash
-cd /path/to/AskAny
-python askany_mcp/test_fastapi_client.py
+curl http://localhost:38081/health
+uv run --locked python askany_mcp/test_fastapi_client.py
 ```
 
-## Usage
+## Repository JSON examples
 
-Once configured, you can:
+- `.mcp.json` currently contains `http://ip:38081/sse`, which is a placeholder
+  and is not ready to use without editing;
+- `.mcp_sse.json` points to the port-8001 alternate SSE server;
+- `.mcp_web.json` labels a port-8001 HTTP transport, but the current Python
+  implementations expose MCP SSE endpoints rather than a REST tool route.
 
-1. **Access OpenCode Web Interface**: Open your browser and navigate to the OpenCode web interface (typically `http://your-ip:port`)
+These files are examples/placeholders. Client configuration schemas vary, so a
+file's presence does not prove that a particular client accepts it.
 
-2. **Use OpenCode Native Tools**: Leverage OpenCode's powerful grep and local file search capabilities directly in the GUI
+## OpenCode
 
-3. **Use AskAny RAG via MCP**: Reference `@.mcp.json` and `@askany_mcp` in your queries to access AskAny's RAG search capabilities
+This repository does not pin or ship an OpenCode fork, web application, or
+authentication layer. If OpenCode is used, configure its MCP integration with
+one of the current stdio/SSE endpoints above and follow the OpenCode version's
+own configuration schema. Do not rely on old custom-branch instructions.
 
-4. **Combined Workflow**: Use both OpenCode's native tools and AskAny's RAG in the same session for comprehensive code and documentation search
+## Security
 
-## Advantages
-
-This integration mode offers several advantages:
-
-- ✅ **Best of Both Worlds**: Combines OpenCode's native grep/tool capabilities with AskAny's RAG
-- ✅ **GUI Interface**: Web-based interface for easier interaction
-- ✅ **MCP Protocol**: Standardized protocol ensures compatibility
-- ✅ **Permission Control**: Folder-level access control for security
-- ✅ **Tested Solution**: Proven to work reliably in production environments
-- ✅ **Open Source**: Both OpenCode and AskAny are open source
-
-## Troubleshooting
-
-### MCP Server Not Connecting
-
-- Verify the MCP server is running: `uv run python -m askany_mcp.server_fastapi`
-- Check the URL in `~/.config/opencode/opencode.json` matches the server address
-- Ensure network connectivity between OpenCode and the MCP server
-
-### Permission Issues
-
-- Check `allowed_folders` in `~/.config/opencode/opencode.json`
-- Ensure paths are absolute and accessible
-- Restart OpenCode after configuration changes
-
-### Build Issues
-
-- Ensure Node.js and Bun are properly installed
-- Check network IP addresses are correct
-- Verify ports are not already in use
-
-## Related Files
-
-- `askany_mcp/server_fastapi.py` - FastAPI MCP server implementation
-- `askany_mcp/test_fastapi_client.py` - Test client for MCP server
-- `.mcp.json` - Project-level MCP configuration (for reference)
-
-## References
-
-- [OpenCode Repository](https://github.com/wufei-png/opencode/tree/wf/dev)
-- [AskAny MCP Documentation](askany_mcp/README.md)
+Remote servers bind to `0.0.0.0` by default and the implementation has no
+authentication. Keep the service on a trusted network or place it behind an
+authenticated, access-controlled proxy.

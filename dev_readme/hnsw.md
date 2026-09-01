@@ -1,26 +1,35 @@
-| 参数                     | 默认/常用值                                    | 作用                      | 建议                                        |
-| ---------------------- | ----------------------------------------- | ----------------------- | ----------------------------------------- |
-| `hnsw_m`               | 16（你贴的）                                   | 每个节点的双向连接数，影响索引稠密度和搜索精度 | 16~64，数据量大可以适当调大，提高召回率，但索引构建慢，内存占用增加      |
-| `hnsw_ef_construction` | 64                                        | 构建索引时候的候选列表大小，影响索引质量    | 100~200 对大数据集更稳，64 对小数据量够用                |
-| `hnsw_ef_search`       | 40                                        | 搜索时候的候选列表大小，影响召回率和速度    | 10~200 可调，值越大召回率越高，搜索越慢                   |
-| `hnsw_dist_method`     | `"vector_cosine_ops"` 或 `"vector_l2_ops"` | 距离计算方式：cosine 或 L2      | 文本 embedding 常用 cosine；图像 embedding 可用 L2 |
+# HNSW 索引
 
+AskAny 使用 PostgreSQL + pgvector 存储 embedding。HNSW 默认启用，索引参数
+来自 `askany/config.py`：
 
-## 表结构：
-id | bigint | | not null | nextval('data_askany_faq_vectors_id_seq'::regclass)
+| 配置 | 默认值 | 作用 |
+|---|---:|---|
+| `enable_hnsw` | `True` | 是否使用 HNSW 索引 |
+| `hnsw_m` | `16` | 每个节点的连接数；越大通常越占内存、构建越慢 |
+| `hnsw_ef_construction` | `128` | 构建索引时的候选数量 |
+| `hnsw_ef_search` | `40` | 查询时的候选数量 |
+| `hnsw_dist_method` | `vector_cosine_ops` | 默认使用 cosine 距离操作符 |
 
-text | character varying | | not null |
+当前使用两个主要向量表：
 
-metadata_ | json | | |
+- 配置名 `askany_faq_vectors`，FAQ 物理表通常带 LlamaIndex 的 `data_` 前缀；
+- 配置名 `askany3_docs_vectors`，文档物理表通常带同样的 `data_` 前缀。
 
-node_id | character varying | | |
+实际表名、索引是否已经创建以及行数都取决于当前数据库，不能从本文件
+推断。使用代码提供的命令创建索引：
 
-embedding | vector(1024) | | |
+```bash
+uv run --locked python -m askany.main --create-index
+```
 
-Indexes:
+检查当前数据库结构可使用：
 
-"data_askany_faq_vectors_pkey" PRIMARY KEY, btree (id)
+```bash
+uv run --locked python tool/query_hnsw_structure.py \
+  --table data_askany3_docs_vectors
+```
 
-"askany_faq_vectors_idx_1" btree ((metadata_ ->> 'ref_doc_id'::text))
-
-"data_askany_faq_vectors_embedding_idx" hnsw (embedding vector_cosine_ops) WITH (m='16', ef_construction='64')
+如果表名或参数已通过 `.env` 覆盖，请以实际配置和数据库查询结果为准。批量
+写入时，`VectorStoreManager.add_docs_nodes()` 默认不会自动创建索引，除非调用
+方明确启用 `auto_create_index=True`；主 CLI 的 `--create-index` 用于显式创建。

@@ -1,73 +1,57 @@
-# AskAny RAG MCP Server - Quick Start
+# AskAny MCP quick start
 
-## What Changed
+Run these commands from the repository root. MCP uses the main AskAny
+environment; do not run `uv sync` inside `askany_mcp/`.
 
-✅ **Uses main project's uv environment** (no separate dependencies)
-✅ **Project-level MCP config** (`.mcp.json` in repo root)
-✅ **Part of the repo** (askany_mcp/ module)
-
-## Quick Start
-
-### 1. Install Dependencies
+## Local stdio
 
 ```bash
-cd /home/wufei/github.com/wufei-png/AskAny
 uv sync
+uv run --locked python -m askany.main --check-db
+uv run --locked python -m askany_mcp.server
 ```
 
-### 2. Test the Server
-
-```bash
-uv run python -m askany_mcp.test_server
-```
-
-Expected output:
-```
-Initializing RAG components...
-✓ RAG components initialized
-
-Query: What is AskAny? (type: auto)
-------------------------------------------------------------
-[Result 1]
-Score: 0.856
-File: README.md
-Lines: 1-20
-Content: AskAny is a Chinese-optimized RAG...
-```
-
-### 3. Use with Claude Code
-
-The MCP server is already configured in `.mcp.json`:
-
-```bash
-cd /home/wufei/github.com/wufei-png/AskAny
-claude
-```
-
-Then ask questions:
-```
-You: What is AskAny?
-Claude: [Automatically calls rag_search tool]
-```
-
-## Configuration
-
-**File:** `/home/wufei/github.com/wufei-png/AskAny/.mcp.json`
+Register the last command in your MCP client as a local stdio server. Replace
+`/absolute/path/to/AskAny` with the actual repository path:
 
 ```json
 {
-  "mcpServers": {
-    "askany-rag": {
-      "command": "uv",
-      "args": [
-        "--directory",
-        "/home/wufei/github.com/wufei-png/AskAny",
-        "run",
-        "python",
-        "-m",
-        "askany_mcp.server"
-      ]
-    }
-  }
+  "command": "uv",
+  "args": [
+    "--directory",
+    "/absolute/path/to/AskAny",
+    "run",
+    "python",
+    "-m",
+    "askany_mcp.server"
+  ]
 }
 ```
+
+## Remote SSE
+
+Start the FastAPI/SSE implementation:
+
+```bash
+uv run --locked python -m askany_mcp.server_fastapi \
+  --host 0.0.0.0 --port 38081
+```
+
+Configure the client with the server's SSE URL:
+
+```text
+http://localhost:38081/sse
+```
+
+The repository test client checks the same URL:
+
+```bash
+uv run --locked python askany_mcp/test_fastapi_client.py
+```
+
+The MCP tool is `rag_search` with one required argument, `query`. It performs
+automatic FAQ/docs fallback; `query_type` is not an exposed MCP argument.
+
+The root `.mcp.json` currently contains a placeholder host (`ip`) and is not
+ready to use without editing. See [`README.md`](README.md) for the full
+transport and security notes.

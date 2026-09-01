@@ -1,30 +1,44 @@
 # Roadmap
 
-- **English Keyword Translation**
-- **Front-End Stop Button Logic Support**
-- **Improved Question-Answering Capabilities such as return the question instead of the incorrect answer**
-- **Long-Term Memory Support**
-- **Create Agent: SummarizationMiddleware Tool Auto-Deletion of Irrelevant Messages**
-- **Markdown Optimization**: Use an alternative parser for files over a certain size without headers `#`
-- **Markdown Optimization**: Support parsing of link jumps `@` [GitHub Link](https://github.com/PromtEngineer/agentic-file-search)
-- RefineDocumentsChain MapRerankDocumentsChain
-- **Deep Search for FAQ**: Implement cascading search for `faq.md` [dev_readme/faq.md](dev_readme/faq.md#faq)
-- **Support for Mode Switching**: Auto/FAQ/Docs/Code mode toggle
-<!-- - **Stream Mode Support** done -->
-- **Human-in-the-Loop Integration**
-- **Support for Multiple Document Formats**: docs, docx, pdf, html, yaml (ragflow is good)
-- **Hybrid Search (BM25 + Vector Search)**
-- **PGVector Support for Chinese and zhparser**: PGVectorStore hybrid_search, text_search_config configuration
-- **LlamaIndex Proposition Parser Support**: Integration with [arxiv.org paper](https://arxiv.org/pdf/2312.06648), LlamaIndex Tutorial [Levels of Text Splitting](https://github.com/FullStackRetrieval-com/RetrievalTutorials/blob/a4570f3c4883eb9b835b0ee18990e62298f518ef/tutorials/LevelsOfTextSplitting/5_Levels_Of_Text_Splitting.ipynb)
-- **Test Set Construction**: Question Generation (Based on LlamaIndex evaluation framework) [Usage Pattern](https://developers.llamaindex.ai/python/framework/module_guides/evaluating/usage_pattern#question-generation)
-- **Keyword Extraction**: Deep learning-based sequence labeling (Paddle Mode / BiGRU-CRF, etc.)
-<!-- - **Metrics Addition** Done, use langfuse and ragas -->
-- **Support for @Mention Users**: Allow referencing users' personal knowledge bases, with fallback to human intervention if the knowledge base does not exist. Integrate with WeChat API.
-- **FAQ Iteration Process**: Mark all Q&A as "Unprocessed" for manual review. If the response is unsatisfactory, mark it as "Completely Incorrect" or "Partially Incorrect." For completely incorrect answers, manually input the correct response. For partially incorrect answers, highlight errors and have a large model summarize the correct answer. Upon approval, the response is added to the knowledge base, and the document is switched to edit mode.
-- **Metadata Filter Optimization**: Use `SQLTableRetrieverQueryEngine` for optimized metadata queries. Metadata indexed. [HNSW Table Structure](dev_readme/hnsw.md)
-- **Support for Pulling from Internal GitLab** (now opencode is supported)
-- **Dynamic Agent Launch**: Launch multiple agents in parallel and dynamically decide when to do so.
-- use the topk layers hnfs keywords to decide whether in the certain field of faq or docs
-<!-- - memory bank, not only rag similarity search, but also memory bank for long term memory, short term memory, context memory, etc. Done, use mem0 -->
-- fastmcp to simplify the code and make it more readable and maintainable.
-- use funccall instead of the rewrite logic when doing the rag search.
+This list contains work that is not currently complete in the implementation.
+It is intentionally short; completed capabilities belong in the current
+documentation, not on this list.
+
+## Data and retrieval
+
+- Complete the main FAQ ingestion path so `python -m askany.main --ingest`
+  writes FAQ vectors as well as Markdown document vectors, with regression
+  tests for both stores.
+- Implement the `CODE` query route and document its tool/index contract.
+- Decide whether the docs keyword index should become the default, based on
+  measured retrieval quality and latency.
+- Add parsers and ingestion contracts for additional formats such as PDF,
+  DOCX, HTML, and YAML when a concrete source requires them.
+- Implement safe document update/deletion. `MarkdownParser.delete_file_documents`
+  currently raises `NotImplementedError`.
+
+## Evaluation and operations
+
+- Add opt-in end-to-end evaluation against real PostgreSQL, model providers,
+  and LightRAG data, while preserving the existing skip/fail boundary.
+- Add an operator-facing summary for RAGAS and Prometheus data if aggregated
+  metrics are needed beyond `/metrics`.
+- Define an explicit FAQ review/feedback workflow before adding human-in-the-
+  loop state or answer correction storage.
+- Standardize client-facing mode selection beyond the current `-deepsearch`
+  model-name convention.
+
+## Deferred ideas
+
+- Investigate a single ingestion fan-out that reuses LlamaIndex chunks for
+  LightRAG only after measuring entity extraction quality against the current
+  separate pipeline.
+- Reassess the standalone MCP transport implementations and consolidate them
+  only if a supported client requires it.
+
+## Not roadmap items
+
+The following are already implemented and should not be re-added as planned
+work: the two supported agent paths, SSE chat streaming, PostgreSQL/pgvector
+storage with HNSW configuration, Mem0 integration, LightRAG adapter support,
+Langfuse/RAGAS lifecycle hooks, and Prometheus instrumentation.
