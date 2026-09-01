@@ -36,6 +36,7 @@ def normalize_text(text: str) -> str:
 
 
 def hash_text(text: str) -> str:
+    """Return the MD5 hex digest of normalized text for stable content identity."""
     return hashlib.md5(
         normalize_text(text).encode("utf-8"), usedforsecurity=False
     ).hexdigest()
@@ -58,6 +59,7 @@ def canonicalize_path(file_path: str) -> str:
 
 
 def compute_source_doc_id(file_path: str) -> str:
+    """Return a stable document ID derived from the canonical file path."""
     canonical_path = canonicalize_path(file_path)
     return hashlib.md5(
         canonical_path.encode("utf-8"), usedforsecurity=False
@@ -73,6 +75,7 @@ def compute_source_unit_id(
     end_line: int | None,
     text_hash: str,
 ) -> str:
+    """Return a stable ID for a retrieved unit and its source location."""
     payload = "|".join(
         [
             retrieval_origin,
@@ -430,6 +433,7 @@ def build_provenance_record(
     end_line: int | None = None,
     hint_start_line: int = 1,
 ) -> ProvenanceRecord:
+    """Build provenance metadata, recovering line bounds when they are absent."""
     canonical_path = canonicalize_path(file_path)
     if start_line is None or end_line is None:
         start_line, end_line = recover_line_range(
@@ -464,6 +468,7 @@ def enrich_nodes_with_provenance(
     retrieval_origin: str = "llamaindex",
     source_kind: str = "docs_chunk",
 ) -> list[NodeWithScore]:
+    """Fill missing node provenance from the persisted sidecar records."""
     if not nodes:
         return nodes
 

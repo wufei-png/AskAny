@@ -19,7 +19,7 @@ class SafeReranker(BaseNodePostprocessor):
     """Safe wrapper for reranker that prevents node loss.
 
     This wrapper:
-    1. Checks if input node count is less than reranker's top_n before reranking
+    1. Skips unnecessary work when no reranker is configured or top_n covers the inputs
     2. Falls back to original nodes if reranker returns empty results
     3. Provides detailed logging for debugging
     4. Inherits from BaseNodePostprocessor to be compatible with RetrieverQueryEngine
@@ -72,9 +72,8 @@ class SafeReranker(BaseNodePostprocessor):
 
         input_node_count = len(nodes)
 
-        # Check if we should skip reranking
-        # If reranker's top_n is set and input nodes are fewer, skip reranking
-        # This prevents reranker from filtering out all nodes when top_n > input_count
+        # Skip when top_n is negative or already covers all input nodes.
+        # This avoids unnecessary work and preserves the complete input set.
         if (self.rerank_top_n is not None and self.rerank_top_n < 0) or (
             self.rerank_top_n is not None
             and self.rerank_top_n > 0

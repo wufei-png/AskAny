@@ -419,14 +419,14 @@ class VectorStoreManager:
                 opclass=sql.SQL(opclass),
                 m=sql.Literal(hnsw_kwargs.get("hnsw_m", 16)),
                 ef_construction=sql.Literal(
-                    hnsw_kwargs.get("hnsw_ef_construction", 64)
+                    hnsw_kwargs.get("hnsw_ef_construction", 128)
                 ),
             )
 
             logger.info(
                 f"Creating HNSW index '{index_name}' for table '{table_name}' "
                 f"with m={hnsw_kwargs.get('hnsw_m', 16)}, "
-                f"ef_construction={hnsw_kwargs.get('hnsw_ef_construction', 64)}, "
+                f"ef_construction={hnsw_kwargs.get('hnsw_ef_construction', 128)}, "
                 f"maintenance_work_mem={maintenance_work_mem}..."
             )
             create_start = time.perf_counter()

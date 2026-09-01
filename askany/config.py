@@ -152,7 +152,7 @@ class Settings(BaseSettings):
     # that significantly speeds up vector similarity search in PostgreSQL
     # Recommended values:
     # - hnsw_m: 16 (default, good balance between speed and accuracy)
-    # - hnsw_ef_construction: 64 (default, higher = better quality but slower build)
+    # - hnsw_ef_construction: 128 (default, higher = better quality but slower build)
     # - hnsw_ef_search: 40 (default, higher = better recall but slower queries)
     # - hnsw_dist_method: "vector_cosine_ops" (for cosine similarity, default)
     #                     or "vector_l2_ops" (for L2 distance)

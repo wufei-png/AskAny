@@ -40,6 +40,8 @@ class WorkflowFilterResult:
 
         Args:
             have_result: Whether a result was generated
+            need_web_search: Whether downstream processing should use web search
+            need_rag_search: Whether downstream processing should use RAG retrieval
             result: The generated answer if have_result is True
         """
         self.have_result = have_result

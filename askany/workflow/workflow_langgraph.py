@@ -1701,7 +1701,7 @@ class AgentWorkflow:
                 else:
                     logger.debug("替换节点 - 扩展节点数: %d", len(expanded_nodes))
                     nodes = expanded_nodes
-            # TODO here truncate nodes by tokens
+            # Keep the expanded retrieval context within the configured LLM token budget.
             nodes, _total_tokens, _was_truncated = truncate_nodes_by_tokens(
                 nodes, settings.llm_max_tokens
             )
@@ -2186,7 +2186,7 @@ class AgentWorkflow:
                         "keyword": keyword,
                     },
                 )
-                # TODO score 0.8?
+                # Local keyword matches use a synthetic starting score before reranking.
                 nodes.append(NodeWithScore(node=node, score=0.8))
 
         logger.debug("搜索结果转换完成 - 总节点数: %d", len(nodes))

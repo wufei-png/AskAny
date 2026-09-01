@@ -601,14 +601,10 @@ class LocalFileSearchTool:
         Returns:
             Dict[str, List[Dict[str, any]]]: 最长窗口的搜索结果，如果没找到返回None
         """
-        # if len(tokens) < 2:
-        #     return None
-
-        # 生成所有窗口大小>=2的滑动窗口，并记录每个keyword字符串对应的最大窗口大小
         all_keywords = []  # 所有窗口的keywords列表（用于一次性搜索）
         keyword_to_max_window = {}  # keyword_str -> max_window_size
 
-        # 窗口大小从2到len(tokens)
+        # 窗口大小从1到len(tokens)
         for window_size in range(1, len(tokens) + 1):
             # 步长为1，尝试所有可能的滑动窗口位置
             for start_idx in range(len(tokens) - window_size + 1):

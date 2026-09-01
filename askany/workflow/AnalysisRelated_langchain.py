@@ -262,23 +262,9 @@ class RelevanceAnalyzer:
 
         logger = logging.getLogger(__name__)
 
-        # Truncate nodes to fit within token limit
-        # Reserve tokens for prompt template (query, keywords, system message, etc.)
-        # truncated_nodes, node_tokens, nodes_truncated = truncate_nodes_by_tokens(
-        #     nodes,
-        #     max_tokens=settings.llm_max_tokens,
-        #     reserve_for_prompt=2000,  # Reserve for query, keywords, system message
-        # )
-        # TODO 更精准的预估，这个可能估不准
-        # Start with all nodes, will be truncated if token limit exceeded
+        # Truncate the formatted messages first; provider token errors retry with half
+        # the current node set.
         current_nodes = nodes
-        # if nodes_truncated:
-        #     logger.warning(
-        #         "Nodes truncated in analyze_relevance_and_completeness: "
-        #         "original=%d nodes, kept=%d nodes",
-        #         len(nodes),
-        #         len(truncated_nodes),
-        #     )
 
         # Call LLM with structured output using LangChain
         # Retry with half nodes if token limit exceeded

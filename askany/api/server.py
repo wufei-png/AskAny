@@ -719,8 +719,8 @@ def create_app(
                     "X-Accel-Buffering": "no",
                 },
             )
-        if use_deepsearch and len(user_messages) == 1:  # 二次问答直接给simple agent
-            # Use complex workflow (AgentWorkflow)
+        if use_deepsearch and len(user_messages) == 1:
+            # Deepsearch single-query path uses the complex AgentWorkflow.
             if agent_workflow_global is None:
                 raise HTTPException(
                     status_code=500, detail="AgentWorkflow not initialized"
@@ -1094,7 +1094,6 @@ async def process_query_with_subproblems(
 
     _mem0_ctx = mem0_qa_context or []
 
-    # TODO 二轮问答这里跳过filter处理.
     filter_result = workflow_filter.process(user_query)
     if filter_result.have_result:
         logger.debug("工作流过滤器成功生成答案，直接返回")

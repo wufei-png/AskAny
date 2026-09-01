@@ -19,12 +19,6 @@ from askany.rag.provenance import build_provenance_record
 
 logger = logging.getLogger(__name__)
 
-# Disable the "> Adding chunk:" debug messages from llama_index.core.node_parser.node_utils
-# These messages are printed via logger.debug() and can cause encoding issues
-# We disable them at the module level to prevent encoding problems
-# _llama_node_utils_logger = logging.getLogger("llama_index.core.node_parser.node_utils")
-# _llama_node_utils_logger.setLevel(logging.INFO)  # Only show INFO and above, not DEBUG
-
 
 def _ensure_utf8_encoding():
     """Ensure stdout/stderr use UTF-8 encoding.
@@ -538,35 +532,12 @@ class MarkdownParser:
     def delete_file_documents(
         self, file_path: Path, vector_store_manager
     ) -> dict[str, Any]:
-        """Delete all documents associated with a Markdown file from vector store.
+        """Reserve deletion of documents associated with a Markdown file.
 
-        This method identifies all document IDs that were generated from the given file
-        and deletes them from the vector store. Since a file may be split into multiple
-        nodes (with IDs like {base_id}_0, {base_id}_1, etc.), this method needs to
-        delete all related documents.
-
-        Args:
-            file_path: Path to Markdown file whose documents should be deleted
-            vector_store_manager: VectorStoreManager instance for deleting documents
-
-        Returns:
-            Dictionary with keys:
-                - deleted_count: Number of documents deleted
-                - errors: List of error messages (if any)
-
-        TODO:
-            - Implement ID generation logic to match parse_file() behavior
-            - Query vector store to find all documents with matching base_id pattern
-            - Delete documents using vector_store_manager.docs_index.delete_ref_doc()
-            - Handle edge cases (file not found, no documents to delete, etc.)
-            - Add logging for deletion operations
-            - Consider batch deletion for performance
+        The operation is not implemented and currently raises NotImplementedError.
+        TODO: Define how parsed node IDs, missing files, and batch failures should be
+        handled before implementing vector-store deletion.
         """
-        # TODO: Implement deletion logic
-        # 1. Generate base_id from file_path (same logic as parse_file)
-        # 2. Query vector store to find all documents with IDs matching {base_id}_*
-        # 3. Delete each document using vector_store_manager.docs_index.delete_ref_doc()
-        # 4. Return deletion results
 
         raise NotImplementedError(
             "delete_file_documents() is not yet implemented. "

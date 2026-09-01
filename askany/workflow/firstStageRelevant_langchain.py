@@ -63,7 +63,7 @@ class WebOrRagAnswer(BaseModel):
 
 
 class DirectAnswerGenerator:
-    """Generator for decomposing user queries into sub-problems."""
+    """Check whether a query can be answered without external retrieval."""
 
     def __init__(
         self,
@@ -176,7 +176,7 @@ class DirectAnswerGenerator:
 
 
 class WebOrRagAnswerGenerator:
-    """Generator for decomposing user queries into sub-problems."""
+    """Decide whether a query needs web search, RAG retrieval, or both."""
 
     def __init__(
         self,

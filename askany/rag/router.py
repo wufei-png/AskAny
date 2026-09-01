@@ -89,7 +89,7 @@ class QueryRouter:
             # Parse filters from query (will be passed to engines)
             cleaned_query, metadata_filters = parse_query_filters(query)
 
-            # Cache lookup for explicit query types
+            # Check the route-level cache before dispatching, including AUTO.
             if settings.enable_qa_cache:
                 from askany.rag import get_qa_cache_manager
 
@@ -107,13 +107,12 @@ class QueryRouter:
             elif query_type == QueryType.DOCS:
                 result = self.docs_query_engine.query(cleaned_query, metadata_filters)
             elif query_type == QueryType.CODE:
-                # TODO: Implement code search
                 result = "Code search not yet implemented"
             else:
                 # Fallback to docs
                 result = self.docs_query_engine.query(cleaned_query, metadata_filters)
 
-            # Cache set for explicit query types
+            # Store the response under the selected route's cache key.
             if settings.enable_qa_cache:
                 from askany.rag import get_qa_cache_manager
 
@@ -160,7 +159,6 @@ class QueryRouter:
 
         # Step 1: Check if it's code-related
         if self._is_code_query(query):
-            # TODO: Implement code search
             return "Code search not yet implemented"
 
         # Step 2: Try FAQ retrieval
@@ -319,30 +317,6 @@ class QueryRouter:
         code_keywords = ["代码", "code", "函数", "function", "类", "class", "import"]
         query_lower = query.lower()
         return any(keyword in query_lower for keyword in code_keywords)
-
-    # def _detect_query_type(self, query: str) -> QueryType:
-    #     """Detect query type from query string.
-
-    #     Args:
-    #         query: User query
-
-    #     Returns:
-    #         Detected query type
-    #     """
-    #     # Simple keyword-based detection
-    #     # TODO: Implement BERT-based classification as mentioned in README
-    #     if self._is_code_query(query):
-    #         return QueryType.CODE
-
-    #     # TODO may be we need llm or classifier to detect the query type.
-    #     query_lower = query.lower()
-    #     # FAQ-related keywords
-    #     faq_keywords = ["如何", "怎么", "为什么", "what", "how", "why", "error", "错误"]
-    #     if any(keyword in query_lower for keyword in faq_keywords):
-    #         return QueryType.FAQ
-
-    #     # Default to docs
-    #     return QueryType.DOCS
 
 
 def create_query_router(

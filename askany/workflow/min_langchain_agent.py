@@ -261,7 +261,7 @@ def create_rag_tool(
             except Exception as e:
                 logger.warning("LightRAG retrieval failed, skipping: %s", e)
 
-        # Extract keywords and search local files (synchronized with workflow_langgraph.py:755-789)
+        # Extract keywords and search local files using the shared keyword-search path.
         try:
             # Use the pre-initialized keyword_extractor
             if keyword_extractor is not None:
@@ -335,7 +335,7 @@ def _search_results_to_nodes(
     search_results: dict[str, list[dict[str, Any]]],
     local_file_search: LocalFileSearchTool,
 ) -> list[NodeWithScore]:
-    """Convert search results to nodes (synchronized with workflow_langgraph.py:1773-1800)."""
+    """Convert local keyword-search results into scored nodes with shared metadata."""
     nodes = []
     logger.debug("开始转换搜索结果为节点 - 关键词数: %d", len(search_results))
 
@@ -355,7 +355,7 @@ def _search_results_to_nodes(
                     "keyword": keyword,
                 },
             )
-            # TODO score 0.8?
+            # In this simple-agent path, local keyword matches use a synthetic score.
             nodes.append(NodeWithScore(node=node, score=0.8))
 
     logger.debug("搜索结果转换完成 - 总节点数: %d", len(nodes))
@@ -367,7 +367,7 @@ def _merge_nodes(
     new_nodes: list[NodeWithScore],
     local_file_search: LocalFileSearchTool,
 ) -> list[NodeWithScore]:
-    """Merge nodes with strict overlap checking (simplified version of workflow_langgraph.py:1802-1951).
+    """Merge nodes with strict overlap checking.
 
     Merge logic:
     1. Extract file_name from file_path
