@@ -1,3 +1,6 @@
+> 历史评审记录（2026 年 3 月）。仅用于追溯，不是当前 SSE 实现规范；当前
+> 行为以 `askany/api/server.py` 和 `docs/current-runtime.md` 为准。
+
 # SSE Streaming 改进建议
 
 ## 1. 代码审查总结

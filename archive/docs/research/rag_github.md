@@ -1,3 +1,6 @@
+> 历史方案调研。第三方产品能力和推荐结论可能随版本变化，不是当前
+> AskAny 的运行或选型规范。
+
 比较LightRAG RAGFlow GraphRAG，对于企业级计算机领域技术和开发文档的rag
 针对企业级计算机领域技术和开发文档（如API文档、源码注释、架构设计书、故障排查手册等）的RAG场景，这三种方案（LightRAG, RAGFlow, GraphRAG）各有侧重。
 

@@ -1,3 +1,6 @@
+> Historical snapshot from March 2026. This file is archived for provenance;
+> its findings and line references are not the current implementation contract.
+
 # Metrics/Observability Improvement Suggestions
 
 ## Current Implementation Overview

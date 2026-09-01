@@ -1,3 +1,6 @@
+> Historical snapshot from March 2026. This file is archived for provenance;
+> use `docs/current-runtime.md` for current observability behavior.
+
 # Langfuse & RAGAS Improvements
 
 ## Current Status

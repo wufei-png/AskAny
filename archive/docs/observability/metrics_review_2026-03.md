@@ -1,3 +1,6 @@
+> Historical snapshot from March 2026. This file is archived for provenance;
+> its findings, test counts, and line references are not current.
+
 # Metrics Observability - Review & Improvement Suggestions
 
 ## Current Implementation Overview

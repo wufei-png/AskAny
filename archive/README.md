@@ -1,9 +1,17 @@
-# Archived Python material
+# Archived material
 
-This directory preserves Python files that are not part of AskAny's supported
-runtime or validation surface. Archived files are reference material only: they
-are excluded from Ruff, Pyright, pytest collection, packaging, and documented
-run commands.
+Everything under `archive/` is reference material, not part of the current
+AskAny contract. Read the current root documentation and the code first. Do
+not use archived commands, defaults, endpoint names, or performance claims as
+operational instructions.
+
+`docs/` contains historical design reviews, research notes, and environment
+snapshots. These files are retained for provenance only and are intentionally
+outside the normal documentation path.
+
+The Python subdirectories preserve files that are not part of AskAny's
+supported runtime or validation surface. Archived Python files are excluded
+from Ruff, Pyright, pytest collection, packaging, and documented run commands.
 
 `legacy_workflows/` contains the superseded LlamaIndex workflow/client/server
 chain and its diagnostic test. The chain is no longer reachable from

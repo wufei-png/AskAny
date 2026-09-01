@@ -138,7 +138,7 @@ def test_workflow_server():
 
     endpoints_to_test = [
         ("/health", "Health check"),
-        ("/workflows", "List workflows"),  # Note: no trailing slash per deployment.md
+        ("/workflows", "List workflows"),  # The legacy endpoint has no trailing slash.
     ]
 
     for endpoint, description in endpoints_to_test:
