@@ -97,41 +97,7 @@ class WorkflowFilter:
         url_pattern = r"https?://[^\s]+"
         if re.search(url_pattern, query):
             logger.debug("检测到查询中包含URL链接，直接执行网络搜索")
-            if self.web_search_tool is None:
-                logger.warning("网络搜索工具不可用，无法搜索")
-                return WorkflowFilterResult(
-                    have_result=False, need_web_search=True, need_rag_search=False
-                )
-
-            web_nodes = self.web_search_tool.search(query)
-            logger.debug("网络搜索完成 - 结果数: %d", len(web_nodes))
-
-            # Use reranker if available
-            if web_nodes and self.reranker:
-                query_bundle = QueryBundle(query)
-                web_nodes = self.reranker.postprocess_nodes(web_nodes, query_bundle)
-                logger.debug("Reranker重排序完成 - 节点数: %d", len(web_nodes))
-
-            # Check if we have nodes before generating answer
-            if not web_nodes:
-                logger.warning("网络搜索未返回任何结果")
-                return WorkflowFilterResult(
-                    have_result=False, need_web_search=True, need_rag_search=False
-                )
-
-            # Generate answer from web search results
-            answer, reasoning = self.final_answer_generator.generate_final_answer(
-                query, web_nodes
-            )
-            logger.debug("网络搜索答案生成完成")
-            reasoning_str = reasoning if reasoning else ""
-            result_text = answer + "\n\n" + reasoning_str
-            return WorkflowFilterResult(
-                have_result=True,
-                need_web_search=True,
-                need_rag_search=False,
-                result=result_text,
-            )
+            return self._search_and_generate(query)
 
         # Step 1: Check if query can be answered directly
         logger.debug("步骤1: 检查是否可以直接回答")
@@ -171,41 +137,7 @@ class WorkflowFilter:
         # Step 3: If web search is needed and RAG is not needed, perform web search
         if need_web and not need_rag:
             logger.debug("仅需要网络搜索，执行网络搜索")
-            if self.web_search_tool is None:
-                logger.warning("网络搜索工具不可用，无法搜索")
-                return WorkflowFilterResult(
-                    have_result=False, need_web_search=True, need_rag_search=False
-                )
-
-            web_nodes = self.web_search_tool.search(query)
-            logger.debug("网络搜索完成 - 结果数: %d", len(web_nodes))
-
-            # Use reranker if available
-            if web_nodes and self.reranker:
-                query_bundle = QueryBundle(query)
-                web_nodes = self.reranker.postprocess_nodes(web_nodes, query_bundle)
-                logger.debug("Reranker重排序完成 - 节点数: %d", len(web_nodes))
-
-            # Check if we have nodes before generating answer
-            if not web_nodes:
-                logger.warning("网络搜索未返回任何结果")
-                return WorkflowFilterResult(
-                    have_result=False, need_web_search=True, need_rag_search=False
-                )
-
-            # Generate answer from web search results
-            answer, reasoning = self.final_answer_generator.generate_final_answer(
-                query, web_nodes
-            )
-            logger.debug("网络搜索答案生成完成")
-            reasoning_str = reasoning if reasoning else ""
-            result_text = answer + "\n\n" + reasoning_str
-            return WorkflowFilterResult(
-                have_result=True,
-                need_web_search=True,
-                need_rag_search=False,
-                result=result_text,
-            )
+            return self._search_and_generate(query)
 
         # Step 4: If RAG is needed or both are false, return have_result=False
         # This will trigger sub-problem extraction in server.py
@@ -214,6 +146,40 @@ class WorkflowFilter:
         )
         return WorkflowFilterResult(
             have_result=False, need_web_search=need_web, need_rag_search=need_rag
+        )
+
+    def _search_and_generate(self, query: str) -> WorkflowFilterResult:
+        """Search the web, optionally rerank results, and generate an answer."""
+        if self.web_search_tool is None:
+            logger.warning("网络搜索工具不可用，无法搜索")
+            return WorkflowFilterResult(
+                have_result=False, need_web_search=True, need_rag_search=False
+            )
+
+        web_nodes = self.web_search_tool.search(query)
+        logger.debug("网络搜索完成 - 结果数: %d", len(web_nodes))
+
+        if web_nodes and self.reranker:
+            query_bundle = QueryBundle(query)
+            web_nodes = self.reranker.postprocess_nodes(web_nodes, query_bundle)
+            logger.debug("Reranker重排序完成 - 节点数: %d", len(web_nodes))
+
+        if not web_nodes:
+            logger.warning("网络搜索未返回任何结果")
+            return WorkflowFilterResult(
+                have_result=False, need_web_search=True, need_rag_search=False
+            )
+
+        answer, reasoning = self.final_answer_generator.generate_final_answer(
+            query, web_nodes
+        )
+        logger.debug("网络搜索答案生成完成")
+        result_text = answer + "\n\n" + (reasoning if reasoning else "")
+        return WorkflowFilterResult(
+            have_result=True,
+            need_web_search=True,
+            need_rag_search=False,
+            result=result_text,
         )
 
 

@@ -6,7 +6,7 @@ from enum import StrEnum
 from logging import getLogger
 from typing import Any
 
-from llama_index.core.schema import NodeWithScore, TextNode
+from llama_index.core.schema import NodeWithScore
 
 from askany.config import settings
 from askany.ingest.vector_store import VectorStoreManager
@@ -260,20 +260,12 @@ class QueryRouter:
             marked_node = deepcopy(faq_node)
 
             # Add reliability warning prefix to the node content
-            if isinstance(marked_node.node, TextNode):
-                original_text = marked_node.node.get_content()
-                reliability_prefix = (
-                    f"[FAQ-低相关性:分数={score:.2f},阈值={settings.faq_score_threshold:.2f}] "
-                    f"以下内容来自FAQ库，相关性较低，请谨慎参考：\n\n"
-                )
-                marked_node.node.set_content(reliability_prefix + original_text)
-            else:
-                original_text = marked_node.node.get_content()
-                reliability_prefix = (
-                    f"[FAQ-低相关性:分数={score:.2f},阈值={settings.faq_score_threshold:.2f}] "
-                    f"以下内容来自FAQ库，相关性较低，请谨慎参考：\n\n"
-                )
-                marked_node.node.set_content(reliability_prefix + original_text)
+            original_text = marked_node.node.get_content()
+            reliability_prefix = (
+                f"[FAQ-低相关性:分数={score:.2f},阈值={settings.faq_score_threshold:.2f}] "
+                f"以下内容来自FAQ库，相关性较低，请谨慎参考：\n\n"
+            )
+            marked_node.node.set_content(reliability_prefix + original_text)
 
             # Apply penalty to score
             if marked_node.score is not None:
