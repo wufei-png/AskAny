@@ -1,4 +1,4 @@
-"""SubProblemGenerator for decomposing user queries into sub-problems (LangChain version)."""
+"""Direct-answer eligibility and Web/RAG routing decisions (LangChain version)."""
 
 try:
     from askany.observability.langfuse_setup import get_langfuse_callback_handler
@@ -59,7 +59,6 @@ class WebOrRagAnswer(BaseModel):
         description="判断问题是否需要通过rag知识库检索找到答案,知识库的内容为: 对图片视频用ai模型分析, 特征数据库存储检索, 大数据聚类归档的业务数据知识库.",
         default=False,
     )
-    # reasoning: str = Field(description="简要解释你的依据。")
 
 
 class DirectAnswerGenerator:
@@ -116,7 +115,7 @@ class DirectAnswerGenerator:
         )
 
     def generate(self, query: str) -> DirectAnswerResult:
-        """Generate first stage relevant result from user query.
+        """Determine whether the query can be answered without retrieval.
 
         Args:
             query: User query string
@@ -143,7 +142,7 @@ class DirectAnswerGenerator:
         # recheck can_direct_answer
         if result.can_direct_answer:
             keywords = self.keyword_extractor.extract_keywords_set(query)
-            # TODO 需要优化word_freq.txt 再使用
+            # 命中领域词会否决直接回答，交由后续 Web/RAG 路由判断。
             if keywords and len(keywords) > 0:
                 for keyword in keywords:
                     frequency = self.keyword_extractor.get_frequency_in_freqfile(
@@ -163,7 +162,7 @@ class DirectAnswerGenerator:
         return result
 
     def _format_prompt(self, query: str) -> str:
-        """Format prompt for sub-problem generation.
+        """Format the direct-answer eligibility prompt.
 
         Args:
             query: User query string

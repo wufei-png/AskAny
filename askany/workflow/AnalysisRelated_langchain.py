@@ -28,14 +28,14 @@ from askany.workflow.token_control import (
     check_and_truncate_messages,
 )
 
-# Linux 文件系统中最基础的禁止字符
+# 这里只匹配 NUL；空白路径在校验函数中拒绝，不做目录访问授权检查。
 FORBIDDEN_CHARS_PATTERN = re.compile(r"[\x00]")
 
 
 class RelevantResult(BaseModel):
     """分析结果的数据结构。"""
 
-    relevant_file_paths: list[str] = Field(  # TODO maybe return score？
+    relevant_file_paths: list[str] = Field(
         description="与用户问题相关的文件路径列表。如果没有任何内容相关，请返回空列表。",
         default_factory=list,
     )
@@ -51,13 +51,13 @@ class RelevantResult(BaseModel):
     @field_validator("relevant_file_paths", mode="after")
     @classmethod
     def validate_and_check_existence(cls, paths: list[str]) -> list[str]:
-        """校验路径是否符合语法，并检查文件在机器上是否真实存在。"""
+        """拒绝 NUL 和空白路径；缺失的本地路径仅告警并原样保留，避免中断回答。"""
         existing_paths = []
         non_existing_paths = []
         special_identifiers = []
 
         for path in paths:
-            # 1. 语法校验（防止注入或截断）
+            # 1. 拒绝 NUL 字符和空白路径
             if FORBIDDEN_CHARS_PATTERN.search(path):
                 raise ValueError(f"路径包含非法字符 (Null Byte): {path}")
             if not path.strip():
@@ -79,14 +79,13 @@ class RelevantResult(BaseModel):
             else:
                 non_existing_paths.append(path)
 
-        # 4. 报错逻辑：如果存在任何一个不存在的路径（非特殊标识符），则报错
+        # 4. 缺失的本地路径仅告警；保留原列表，不中断整次回答
         if non_existing_paths:
             error_message = (
                 f"以下 {len(non_existing_paths)} 个文件路径不存在于文件系统中，验证失败: {non_existing_paths}. "
                 f"【注意】已检查到有效的路径有: {existing_paths}。"
                 f"【注意】特殊标识符（无需验证）: {special_identifiers}。"
             )
-            # raise ValueError(error_message)//不raise 只是打印，避免整个问题失败
             logger.warning("Validation failed for paths: %s", error_message)
         return paths
 
@@ -110,10 +109,6 @@ class NoRelevantResult(BaseModel):
         default="",
     )
 
-    # reasoning: str = Field(
-    #     description="简要解释为什么没有任何文档相关，以及为什么生成这些关键词、子问题或假想答案（思维链）。"
-    # )
-
 
 class NoRelevantResultWithoutSubQueries(BaseModel):
     """处理没有任何相关文档的情况时的分析结果（不包含子问题，用于子问题workflow中）。"""
@@ -127,10 +122,6 @@ class NoRelevantResultWithoutSubQueries(BaseModel):
         description="生成一个假想答案，用于向量相似度检索。",
         default="",
     )
-
-    # reasoning: str = Field(
-    #     description="简要解释为什么没有任何文档相关，以及为什么生成这些关键词或假想答案（思维链）。"
-    # )
 
 
 class GenerateKeywords(BaseModel):
