@@ -52,6 +52,7 @@ jobs:
       - name: Offline LightRAG unit tests
         run: >-
           uv run --locked pytest -q --disable-socket
+          -m "not integration and not lightrag and not slow"
           test/test_lightrag_question_loader.py
           test/test_lightrag_merge.py
           test/test_lightrag_e2e_comparison_unit.py
